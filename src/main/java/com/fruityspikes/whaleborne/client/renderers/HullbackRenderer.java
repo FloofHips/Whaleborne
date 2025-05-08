@@ -8,12 +8,14 @@ import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<HullbackEntity, HullbackModel<HullbackEntity>> {
@@ -26,13 +28,34 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     @Override
     public void render(HullbackEntity pEntity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         super.render(pEntity, entityYaw, partialTicks, poseStack, buffer, packedLight);
-        Vec3 entityPos = pEntity.position();
 
-        Vec3 flukeOffset = new Vec3(0, 1, 0);
-        Vec3 tailOffset = new Vec3(0, 2, 0);
+        poseStack.pushPose();
+//
+//        // Draw the box
+//        LevelRenderer.renderLineBox(
+//                poseStack,
+//                buffer.getBuffer(RenderType.lines()),
+//                new AABB(-0.1, -0.1, -0.1, 0.1, 10, 0.1),
+//                1, 0, 0, 1
+//        );
+//
+        poseStack.translate(pEntity.head.getX() - pEntity.getX(),pEntity.head.getY() - pEntity.getY(),pEntity.head.getZ() - pEntity.getZ() );
+//
+        LevelRenderer.renderLineBox(
+                poseStack,
+                buffer.getBuffer(RenderType.lines()),
+                new AABB(-0.1, -0.1, -0.1, 0.1, 10, 0.1),
+                0, 1, 0, 1
+        );
 
-        renderModelPart(poseStack, buffer, packedLight, entityPos, this.model.getFluke(), partialTicks, pEntity, pEntity.fluke, flukeOffset);
-        renderModelPart(poseStack, buffer, packedLight, entityPos, this.model.getTail(), partialTicks, pEntity, pEntity.tail, tailOffset);
+        poseStack.popPose();
+//        Vec3 entityPos = pEntity.position();
+//
+//        Vec3 flukeOffset = new Vec3(0, 1, 0);
+//        Vec3 tailOffset = new Vec3(0, 2, 0);
+//
+//        renderModelPart(poseStack, buffer, packedLight, entityPos, this.model.getFluke(), partialTicks, pEntity, pEntity.fluke, flukeOffset);
+//        renderModelPart(poseStack, buffer, packedLight, entityPos, this.model.getTail(), partialTicks, pEntity, pEntity.tail, tailOffset);
 
     }
 

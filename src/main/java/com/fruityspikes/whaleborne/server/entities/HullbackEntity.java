@@ -37,6 +37,8 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     private final HullbackPartEntity[] subEntities;
     private final float[] partDragFactors;
     private final Vec3[] prevPartPositions;
+    private float mouthOpenProgress;
+    private boolean isOpening;
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
@@ -44,17 +46,18 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         //this.moveControl = new HullbackMoveControl(this);
         this.lookControl = new SmoothSwimmingLookControl(this, 180);
 
-        this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F);
-        this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F);
-        this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F);
-        this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F);
-        this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 1F);
+        this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F, new Vec3(0, 0, 6));
+        this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F, new Vec3(0, 0, 2.5));
+        this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F, new Vec3(0, 0, -3));
+        this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F, new Vec3(0, 0, -8));
+        this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 1F, new Vec3(0, 0, -11));
 
-        this.subEntities = new HullbackPartEntity[]{this.head, this.nose, this.body, this.tail, this.fluke};
+        this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
         this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
 
         this.partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.1f, 0.07f};
         this.prevPartPositions = new Vec3[5];
+        this.mouthOpenProgress = 0.0f;
     }
     public static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 10.0).add(Attributes.MOVEMENT_SPEED, 1.2000000476837158).add(Attributes.ATTACK_DAMAGE, 3.0);
@@ -121,42 +124,58 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     public void tick() {
         super.tick();
         updatePartPositions();
+        updateMouthOpening();
     }
+
+    private void updateMouthOpening() {
+        if(isOpening){
+            mouthOpenProgress+= 0.1f;
+            if(mouthOpenProgress>=1)
+                isOpening=false;
+        }
+        else{
+            mouthOpenProgress-= 0.05f;
+            if(mouthOpenProgress<=0)
+                isOpening=true;
+        }
+    }
+
+    public float getMouthOpenProgress() {
+        return mouthOpenProgress;
+    }
+
     private void updatePartPositions() {
-        // Base offsets (local space - z=forward, y=up)
+
+        //TODO Make the parts rotate : )
+
         Vec3[] targetOffsets = {
-                new Vec3(0, 0, 6),   // Nose (leading part)
+                new Vec3(0, 0, 6),   // Nose
                 new Vec3(0, 0, 2.5), // Head
                 new Vec3(0, 0, -3),  // Body
                 new Vec3(0, 0, -8),  // Tail
-                new Vec3(0, 0, -11) // Fluke (slightly lower)
+                new Vec3(0, 0, -11) // Fluke
         };
 
-        // Initialize previous positions if needed
         if (prevPartPositions[0] == null) {
             for (int i = 0; i < prevPartPositions.length; i++) {
                 prevPartPositions[i] = position();
             }
         }
 
-        // Apply rotation to offsets
         float yawRad = -this.getYRot() * Mth.DEG_TO_RAD;
         float pitchRad = this.getXRot() * Mth.DEG_TO_RAD;
 
         for (int i = 0; i < targetOffsets.length; i++) {
-            // Rotate first by yaw (horizontal) then pitch (vertical)
             targetOffsets[i] = targetOffsets[i]
                     .yRot(yawRad)
                     .xRot(pitchRad);
 
-            // Add main entity position
             targetOffsets[i] = new Vec3(
                     this.getX() + targetOffsets[i].x,
                     this.getY() + targetOffsets[i].y,
                     this.getZ() + targetOffsets[i].z
             );
 
-            // Apply drag/smoothing (except nose which leads precisely)
             if (i > 0) {
                 targetOffsets[i] = new Vec3(
                         Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetOffsets[i].x),
@@ -165,24 +184,45 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
                 );
             }
 
-            // Store current position for next frame
             prevPartPositions[i] = targetOffsets[i];
         }
 
-        float swimCycle = (float) ((float)Math.sin(this.tickCount * 0.08f) * this.getDeltaMovement().length());// * 0.1f;
-        // Apply positions to parts
+        float swimCycle = (float) ((float)Math.sin(this.tickCount * 0.08f) * this.getDeltaMovement().length());
+
         this.nose.moveTo(targetOffsets[0].x, targetOffsets[0].y, targetOffsets[0].z,
-                this.getYRot(), this.getXRot());
+                calculateYaw(targetOffsets[0], targetOffsets[1]),
+                calculatePitch(targetOffsets[0], targetOffsets[1]));
+
         this.head.moveTo(targetOffsets[1].x, targetOffsets[1].y, targetOffsets[1].z,
-                this.getYRot(), this.getXRot());
-        this.body.moveTo(targetOffsets[2].x, targetOffsets[2].y, targetOffsets[2].z,
-                this.getYRot(), this.getXRot());
+                calculateYaw(targetOffsets[1], targetOffsets[2]),
+                calculatePitch(targetOffsets[1], targetOffsets[2]));
+
+        this.body.moveTo(targetOffsets[2].x, targetOffsets[2].y + swimCycle * 2, targetOffsets[2].z,
+                calculateYaw(targetOffsets[2], targetOffsets[3]),
+                calculatePitch(targetOffsets[2], targetOffsets[3]));
+
         this.tail.moveTo(targetOffsets[3].x, targetOffsets[3].y + swimCycle * 7, targetOffsets[3].z,
-                this.getYRot(), this.getXRot());
+                calculateYaw(targetOffsets[3], targetOffsets[4]),
+                calculatePitch(targetOffsets[3], targetOffsets[4]) * 3f - swimCycle * 20f);
+
         this.fluke.moveTo(targetOffsets[4].x, targetOffsets[4].y * 1.01 + swimCycle * 10, targetOffsets[4].z,
-                this.getYRot(), this.getXRot());
+                calculateYaw(targetOffsets[3], targetOffsets[4]),
+                calculatePitch(targetOffsets[3], targetOffsets[4]) * 4f - swimCycle * 100f);
+
+    }
+    private float calculateYaw(Vec3 from, Vec3 to) {
+        double dx = to.x - from.x;
+        double dz = to.z - from.z;
+        return (float)(Mth.atan2(dz, dx) * (180F / Math.PI)) + 90F;
     }
 
+    private float calculatePitch(Vec3 from, Vec3 to) {
+        double dx = to.x - from.x;
+        double dy = to.y - from.y;
+        double dz = to.z - from.z;
+        double horizontalDistance = Math.sqrt(dx * dx + dz * dz);
+        return -(float)(Mth.atan2(dy, horizontalDistance) * (180F / Math.PI));
+    }
 //    @Override
 //    public void openCustomInventoryScreen(Player player) {
 //
