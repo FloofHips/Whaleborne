@@ -25,6 +25,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.entity.PartEntity;
 
 import javax.annotation.Nullable;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.UUID;
 
@@ -37,7 +38,7 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     public final HullbackPartEntity fluke;
     private final HullbackPartEntity[] subEntities;
     private final float[] partDragFactors;
-    private final Vec3[] prevPartPositions;
+    private Vec3[] prevPartPositions;
     private float mouthOpenProgress;
     private boolean isOpening;
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
@@ -56,7 +57,7 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
         this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
 
-        this.partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.1f, 0.01f};
+        this.partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.1f, 0.07f};
         this.prevPartPositions = new Vec3[5];
         this.mouthOpenProgress = 0.0f;
     }
@@ -147,68 +148,87 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     }
 
     private void updatePartPositions() {
-
-        Vec3[] targetOffsets = {
+        Vec3[] baseOffsets = {
                 new Vec3(0, 0, 6),   // Nose
                 new Vec3(0, 0, 2.5), // Head
                 new Vec3(0, 0, -3),  // Body
-                new Vec3(0, 0, -7),  // Tail
-                new Vec3(0, 0, -11) // Fluke
+                new Vec3(0, 0, -7),  // Tail base
+                new Vec3(0, 0, -11)  // Fluke tip
         };
 
         if (prevPartPositions[0] == null) {
-            for (int i = 0; i < prevPartPositions.length; i++) {
-                prevPartPositions[i] = position();
-            }
+            prevPartPositions = Arrays.copyOf(baseOffsets, baseOffsets.length);
         }
 
+        float swimCycle = (float) (Mth.sin(this.tickCount * 0.1f) * this.getDeltaMovement().length());
         float yawRad = -this.getYRot() * Mth.DEG_TO_RAD;
         float pitchRad = this.getXRot() * Mth.DEG_TO_RAD;
 
-        for (int i = 0; i < targetOffsets.length; i++) {
-            targetOffsets[i] = targetOffsets[i]
+        // Calculate world positions with entity rotation
+        for (int i = 0; i < baseOffsets.length; i++) {
+            Vec3 rotatedOffset = baseOffsets[i]
                     .yRot(yawRad)
                     .xRot(pitchRad);
 
-            targetOffsets[i] = new Vec3(
-                    this.getX() + targetOffsets[i].x,
-                    this.getY() + targetOffsets[i].y,
-                    this.getZ() + targetOffsets[i].z
-            );
+            Vec3 targetPos = this.position().add(rotatedOffset);
 
+            // Apply smooth movement with part-specific drag factors
             if (i > 0) {
-                targetOffsets[i] = new Vec3(
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetOffsets[i].x),
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].y, targetOffsets[i].y),
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].z, targetOffsets[i].z)
+                prevPartPositions[i] = new Vec3(
+                        Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetPos.x),
+                        Mth.lerp(partDragFactors[i], prevPartPositions[i].y, targetPos.y),
+                        Mth.lerp(partDragFactors[i], prevPartPositions[i].z, targetPos.z)
                 );
+            } else {
+                prevPartPositions[i] = targetPos;
             }
-
-            prevPartPositions[i] = targetOffsets[i];
         }
 
-        float swimCycle = (float) ((float)Math.sin(this.tickCount * 0.08f) * this.getDeltaMovement().length());
+        // Nose and Head - basic following
+        this.nose.moveTo(prevPartPositions[0].x, prevPartPositions[0].y, prevPartPositions[0].z,
+                //getYRot(),
+                //getXRot());
+                calculateYaw(prevPartPositions[0], prevPartPositions[1]),
+                calculatePitch(prevPartPositions[0], prevPartPositions[1]));
 
-        this.nose.moveTo(targetOffsets[0].x, targetOffsets[0].y, targetOffsets[0].z,
-                calculateYaw(targetOffsets[0], targetOffsets[1]),
-                calculatePitch(targetOffsets[0], targetOffsets[1]));
+        this.head.moveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z,
+                calculateYaw(prevPartPositions[0], prevPartPositions[1]),
+                calculatePitch(prevPartPositions[0], prevPartPositions[1]));
 
-        this.head.moveTo(targetOffsets[1].x, targetOffsets[1].y, targetOffsets[1].z,
-                calculateYaw(targetOffsets[1], targetOffsets[2]),
-                calculatePitch(targetOffsets[1], targetOffsets[2]));
+        // Body - subtle undulation
+        this.body.moveTo(prevPartPositions[2].x,
+                prevPartPositions[2].y + swimCycle * 2,
+                prevPartPositions[2].z,
+                calculateYaw(prevPartPositions[1], prevPartPositions[2]),
+                calculatePitch(prevPartPositions[1], prevPartPositions[2]));
 
-        this.body.moveTo(targetOffsets[2].x, targetOffsets[2].y + swimCycle * 2, targetOffsets[2].z,
-                calculateYaw(targetOffsets[2], targetOffsets[3]),
-                calculatePitch(targetOffsets[2], targetOffsets[3]));
+        this.tail.moveTo(prevPartPositions[3].x,
+                prevPartPositions[3].y + swimCycle * 8,
+                prevPartPositions[3].z,
+                calculateYaw(prevPartPositions[2], prevPartPositions[3]),
+                calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 3f - swimCycle * 20f);
 
-        this.tail.moveTo(targetOffsets[3].x, targetOffsets[3].y + swimCycle * 7, targetOffsets[3].z,
-                calculateYaw(targetOffsets[3], targetOffsets[4]),
-                calculatePitch(targetOffsets[3], targetOffsets[4]) * 3f - swimCycle * 20f);
+        float flukeDistance = 4.0f;
+        Vec3 flukeOffset = new Vec3(0, 0, -flukeDistance)
+                .yRot(-tail.getYRot() * Mth.DEG_TO_RAD)
+                .xRot(tail.getXRot() * Mth.DEG_TO_RAD);
 
-        this.fluke.moveTo(targetOffsets[4].x, targetOffsets[4].y * 1.01 + swimCycle * 10, targetOffsets[4].z,
-                calculateYaw(targetOffsets[3], targetOffsets[4]),
-                calculatePitch(targetOffsets[3], targetOffsets[4]) * 4f - swimCycle * 100f);
+        Vec3 flukeTarget = new Vec3(
+                tail.getX() + flukeOffset.x,
+                tail.getY() + flukeOffset.y + swimCycle * 10,
+                tail.getZ() + flukeOffset.z
+        );
 
+        float flukeYaw = calculateYaw(tail.position(), flukeTarget);
+        float flukePitch = calculatePitch(tail.position(), flukeTarget);
+
+        this.fluke.moveTo(
+                flukeTarget.x,
+                flukeTarget.y,
+                flukeTarget.z,
+                flukeYaw,
+                (flukePitch * 1.5f + swimCycle * 30f)
+        );
     }
     private float calculateYaw(Vec3 from, Vec3 to) {
         double dx = to.x - from.x;
