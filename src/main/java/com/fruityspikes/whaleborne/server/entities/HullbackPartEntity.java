@@ -3,6 +3,7 @@ package com.fruityspikes.whaleborne.server.entities;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -17,6 +18,7 @@ import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.entity.PartEntity;
@@ -76,21 +78,55 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     }
 
     public void render(PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, int packedOverlay, ModelPart part) {
-
         poseStack.pushPose();
-        if(name.equals("tail"))
-            poseStack.translate(0, 0, -2);
-        if(name.equals("head"))
-            poseStack.translate(0, 0, 5.5);
-        poseStack.translate(0, 0, -size.width / 2);
+
+        Vec3 partOffset = this.position().subtract(parent.position());
 
         poseStack.mulPose(Axis.YP.rotationDegrees(-parent.getYRot()));
-        poseStack.translate(this.getX() - parent.getX(), -(this.getY() - parent.getY()), -(this.getZ() - parent.getZ()) );
+
+        poseStack.translate(partOffset.x, -partOffset.y, -partOffset.z);
 
         poseStack.mulPose(Axis.YP.rotationDegrees(this.getYRot()));
         poseStack.mulPose(Axis.XP.rotationDegrees(-this.getXRot()));
 
+        float xPivot = 0;
+        float yPivot = -size.height / 2;
+        float zPivot = -size.width / 2;
+
+        poseStack.translate(xPivot, yPivot, zPivot);
+
         part.render(poseStack, vertexConsumer, packedLight, packedOverlay);
+
+        poseStack.popPose();
+    }
+    public void render(PoseStack poseStack, MultiBufferSource buffer, int packedLight, ModelPart part) {
+        poseStack.pushPose();
+        part.resetPose();
+        part.setPos(0,0,0);
+        poseStack.scale(1, -1, 1);
+        Vec3 partOffset = this.position().subtract(parent.position());
+
+        poseStack.translate(partOffset.x, -partOffset.y, partOffset.z);
+
+        poseStack.mulPose(Axis.YP.rotationDegrees(this.getYRot()));
+        poseStack.mulPose(Axis.XP.rotationDegrees(this.getXRot()));
+
+        part.render(poseStack, buffer.getBuffer(RenderType.LINE_STRIP), packedLight, OverlayTexture.NO_OVERLAY);
+
+        poseStack.popPose();
+    }
+    public void renderDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
+        poseStack.pushPose();
+
+        Vec3 partOffset = this.position().subtract(parent.position());
+
+        //poseStack.mulPose(Axis.YP.rotationDegrees(-this.getYRot()));
+        //poseStack.mulPose(Axis.XP.rotationDegrees(-this.getXRot()));
+
+        poseStack.translate(partOffset.x, partOffset.y, partOffset.z);
+
+        //poseStack.translate(0, this.size.height, 0);
+        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.DARK_OAK_PLANKS.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
 
         poseStack.popPose();
     }

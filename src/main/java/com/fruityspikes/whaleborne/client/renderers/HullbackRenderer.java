@@ -7,6 +7,7 @@ import com.fruityspikes.whaleborne.server.entities.HullbackPartEntity;
 import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -15,6 +16,7 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -29,33 +31,37 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     public void render(HullbackEntity pEntity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         super.render(pEntity, entityYaw, partialTicks, poseStack, buffer, packedLight);
 
-        poseStack.pushPose();
-//
-//        // Draw the box
+//        pEntity.head.render(poseStack, buffer, packedLight, this.model.getHead());
+//        pEntity.body.render(poseStack, buffer, packedLight, this.model.getBody());
+//        pEntity.tail.render(poseStack, buffer, packedLight, this.model.getTail());
+//        pEntity.fluke.render(poseStack, buffer, packedLight, this.model.getFluke());
+
+
+        pEntity.head.renderDirt(poseStack, buffer, packedLight);
+        pEntity.body.renderDirt(poseStack, buffer, packedLight);
+        pEntity.tail.renderDirt(poseStack, buffer, packedLight);
+        pEntity.fluke.renderDirt(poseStack, buffer, packedLight);
+
+//        poseStack.translate(pEntity.head.getX() - pEntity.getX(),pEntity.head.getY() - pEntity.getY(),pEntity.head.getZ() - pEntity.getZ() );
 //        LevelRenderer.renderLineBox(
 //                poseStack,
 //                buffer.getBuffer(RenderType.lines()),
 //                new AABB(-0.1, -0.1, -0.1, 0.1, 10, 0.1),
-//                1, 0, 0, 1
+//                0, 1, 0, 1
 //        );
-//
-        poseStack.translate(pEntity.head.getX() - pEntity.getX(),pEntity.head.getY() - pEntity.getY(),pEntity.head.getZ() - pEntity.getZ() );
-//
-        LevelRenderer.renderLineBox(
-                poseStack,
-                buffer.getBuffer(RenderType.lines()),
-                new AABB(-0.1, -0.1, -0.1, 0.1, 10, 0.1),
-                0, 1, 0, 1
-        );
 
-        poseStack.popPose();
-//        Vec3 entityPos = pEntity.position();
-//
-//        Vec3 flukeOffset = new Vec3(0, 1, 0);
-//        Vec3 tailOffset = new Vec3(0, 2, 0);
-//
-//        renderModelPart(poseStack, buffer, packedLight, entityPos, this.model.getFluke(), partialTicks, pEntity, pEntity.fluke, flukeOffset);
-//        renderModelPart(poseStack, buffer, packedLight, entityPos, this.model.getTail(), partialTicks, pEntity, pEntity.tail, tailOffset);
+        //poseStack.mulPose(Axis.YP.rotationDegrees(-pEntity.head.getYRot()));
+        //poseStack.mulPose(Axis.XP.rotationDegrees(-pEntity.head.getXRot()));
+
+//        poseStack.translate(-2, 5,0);
+//        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
+//        poseStack.translate(1, 0,4);
+//        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
+//        poseStack.translate(1, 0,-3);
+//        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
+//        poseStack.translate(1, 0,3);
+//        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
+//        poseStack.popPose();
 
     }
 

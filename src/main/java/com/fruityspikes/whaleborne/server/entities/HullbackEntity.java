@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
@@ -49,13 +50,13 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F, new Vec3(0, 0, 6));
         this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F, new Vec3(0, 0, 2.5));
         this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F, new Vec3(0, 0, -3));
-        this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F, new Vec3(0, 0, -8));
+        this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F, new Vec3(0, 0, -7));
         this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 1F, new Vec3(0, 0, -11));
 
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
         this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
 
-        this.partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.1f, 0.07f};
+        this.partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.1f, 0.01f};
         this.prevPartPositions = new Vec3[5];
         this.mouthOpenProgress = 0.0f;
     }
@@ -70,6 +71,7 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     public void setLeftEyeYaw(float yaw) { this.leftEyeYaw = Mth.wrapDegrees(yaw); }
     public void setRightEyeYaw(float yaw) { this.rightEyeYaw = Mth.wrapDegrees(yaw); }
     public void setEyePitch(float pitch) { this.eyePitch = Mth.wrapDegrees(pitch); }
+
     public void setId(int p_20235_) {
         super.setId(p_20235_);
 
@@ -146,13 +148,11 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
 
     private void updatePartPositions() {
 
-        //TODO Make the parts rotate : )
-
         Vec3[] targetOffsets = {
                 new Vec3(0, 0, 6),   // Nose
                 new Vec3(0, 0, 2.5), // Head
                 new Vec3(0, 0, -3),  // Body
-                new Vec3(0, 0, -8),  // Tail
+                new Vec3(0, 0, -7),  // Tail
                 new Vec3(0, 0, -11) // Fluke
         };
 
