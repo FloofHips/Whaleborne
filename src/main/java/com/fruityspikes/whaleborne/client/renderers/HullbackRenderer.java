@@ -31,16 +31,16 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     public void render(HullbackEntity pEntity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         super.render(pEntity, entityYaw, partialTicks, poseStack, buffer, packedLight);
 
-//        pEntity.nose.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE)), packedLight, this.model.getHead());
-//        pEntity.body.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE)), packedLight, this.model.getBody());
-//        pEntity.tail.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE)), packedLight, this.model.getTail());
-//        pEntity.fluke.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE)), packedLight, this.model.getFluke());
+        pEntity.nose.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getHead());
+        pEntity.body.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getBody());
+        pEntity.tail.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getTail());
+        pEntity.fluke.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getFluke());
 
 
-        pEntity.head.renderDirt(poseStack, buffer, packedLight);
-        pEntity.body.renderDirt(poseStack, buffer, packedLight);
-        pEntity.tail.renderDirt(poseStack, buffer, packedLight);
-        pEntity.fluke.renderDirt(poseStack, buffer, packedLight);
+//        pEntity.nose.renderDirt(poseStack, buffer, packedLight);
+//        pEntity.body.renderDirt(poseStack, buffer, packedLight);
+//        pEntity.tail.renderDirt(poseStack, buffer, packedLight);
+//        pEntity.fluke.renderDirt(poseStack, buffer, packedLight);
 
 //        poseStack.translate(pEntity.head.getX() - pEntity.getX(),pEntity.head.getY() - pEntity.getY(),pEntity.head.getZ() - pEntity.getZ() );
 //        LevelRenderer.renderLineBox(

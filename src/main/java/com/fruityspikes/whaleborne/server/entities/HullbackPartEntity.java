@@ -8,11 +8,14 @@ import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
@@ -34,6 +37,10 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     public final String name;
     private final EntityDimensions size;
     public final Vec3 restingOffset;
+
+    private Vec3 prevPos;
+    private float prevYRot;
+    private float prevXRot;
     public HullbackPartEntity(HullbackEntity parent, String name, float width, float height, Vec3 restingOffset) {
         super(parent);
         this.size = EntityDimensions.scalable(width, height);
@@ -42,7 +49,11 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
         this.name = name;
         this.restingOffset = restingOffset;
     }
-
+    public void tick() {
+        this.prevPos = this.position();
+        this.prevYRot = this.getYRot();
+        this.prevXRot = this.getXRot();
+    }
     protected void defineSynchedData() {
     }
 
@@ -68,7 +79,14 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     public boolean is(Entity entity) {
         return this == entity || this.parent == entity;
     }
+    public boolean isPushable() {
+        return false;
+    }
 
+    @Override
+    public boolean canBeCollidedWith() {
+        return true;
+    }
     public Packet<ClientGamePacketListener> getAddEntityPacket() {
         throw new UnsupportedOperationException();
     }
@@ -83,43 +101,77 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
 
     public void render(PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, int packedOverlay, ModelPart part) {
         poseStack.pushPose();
+
         Vec3 partOffset = this.position().subtract(parent.position());
+
         poseStack.mulPose(Axis.YP.rotationDegrees(-parent.getYRot()));
+
         poseStack.translate(partOffset.x, -partOffset.y, -partOffset.z);
+
         poseStack.mulPose(Axis.YP.rotationDegrees(this.getYRot()));
         poseStack.mulPose(Axis.XP.rotationDegrees(-this.getXRot()));
+
         float xPivot = 0;
         float yPivot = -size.height / 2;
         float zPivot = -size.width / 2;
+
         poseStack.translate(xPivot, yPivot, zPivot);
+
         part.render(poseStack, vertexConsumer, packedLight, packedOverlay);
+
         poseStack.popPose();
     }
-
-    public void render(PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, ModelPart part) {
+    public void render(PoseStack poseStack, MultiBufferSource buffer, float partialTicks, ResourceLocation texture, int packedLight, ModelPart part) {
         poseStack.pushPose();
-        Vec3 partOffset = this.position().subtract(parent.position());
-        poseStack.scale(-1, -1, -1);
-        poseStack.translate(-partOffset.x, -partOffset.y, -partOffset.z);
 
-        poseStack.mulPose(Axis.YP.rotationDegrees(-this.getYRot()));
-        poseStack.mulPose(Axis.XP.rotationDegrees(-this.getXRot()));
+        float X = (float) position().x;
+        float Y = (float) position().y;
+        float Z= (float) position().z;
+        if(prevPos!=null) {
+            X = (float) Mth.lerp(partialTicks, prevPos.x, position().x);
+            Y = (float) Mth.lerp(partialTicks, prevPos.y, position().y);
+            Z = (float) Mth.lerp(partialTicks, prevPos.z, position().z);
+        }
 
-        poseStack.translate(0, -this.size.height, -this.size.width);
-        //poseStack.translate(0, this.size.height/2, 0);
-        part.render(poseStack, vertexConsumer, packedLight, OverlayTexture.NO_OVERLAY);
+        float lerpedYRot = Mth.lerp(partialTicks, prevYRot, this.getYRot());
+        float lerpedXRot = Mth.lerp(partialTicks, prevXRot, this.getXRot());
+
+
+        part.resetPose();
+        part.setPos(0,0,0);
+
+        poseStack.mulPose(Axis.XP.rotationDegrees(180));
+        poseStack.translate(X - parent.getX(), - (Y - parent.getY()), -(Z - parent.getZ()));
+
+
+        poseStack.mulPose(Axis.YP.rotationDegrees(lerpedYRot));
+        poseStack.mulPose(Axis.XP.rotationDegrees(-lerpedXRot));
+        poseStack.translate(0, -size.height/2, -size.width/2);
+
+        boolean flag = parent.hurtTime > 0;
+        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(texture)), packedLight, OverlayTexture.pack(0.0F, flag));
+        poseStack.translate(0, size.height/2, size.width/2);
+        renderDirt(poseStack, buffer, packedLight);
+        poseStack.translate(0, -size.height-1, 0);
+        renderDirt(poseStack, buffer, packedLight);
         poseStack.popPose();
     }
-
     public void renderDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
-        poseStack.pushPose();
-        Vec3 partOffset = this.position().subtract(parent.position());
-        poseStack.translate(0.5, 0, 0.5);
-        poseStack.translate(partOffset.x, partOffset.y, partOffset.z);
-        poseStack.mulPose(Axis.YP.rotationDegrees(-this.getYRot()));
-        poseStack.mulPose(Axis.XP.rotationDegrees(-this.getXRot()));
-        poseStack.translate(0, this.size.height, 0);
-        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.DARK_OAK_PLANKS.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
-        poseStack.popPose();
+//        Vec3 renderPos = this.position();
+//        poseStack.translate(renderPos.x - parent.getX(), - (renderPos.y - parent.getY()), -(renderPos.z - parent.getZ()));
+//
+//        poseStack.mulPose(Axis.XP.rotationDegrees(-this.getXRot()));
+//        poseStack.mulPose(Axis.YP.rotationDegrees(-this.getYRot()));
+        if(Minecraft.getInstance().getEntityRenderDispatcher().shouldRenderHitBoxes()) {
+            LevelRenderer.renderLineBox(
+                    poseStack,
+                    buffer.getBuffer(RenderType.lines()),
+                    new AABB(-0.1, -0.1, -0.1, 0.1, 10, 0.1),
+                    1, 0, 0, 1
+            );
+        }
+
+        boolean flag = parent.hurtTime > 0;
+        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.DARK_OAK_PLANKS.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
     }
 }

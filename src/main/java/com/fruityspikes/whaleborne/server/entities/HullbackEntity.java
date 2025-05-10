@@ -52,7 +52,7 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F, new Vec3(0, 0, 2.5));
         this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F, new Vec3(0, 0, -3));
         this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F, new Vec3(0, 0, -7));
-        this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 1F, new Vec3(0, 0, -11));
+        this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F, new Vec3(0, 0, -11));
 
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
         this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
@@ -128,6 +128,10 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         super.tick();
         updatePartPositions();
         updateMouthOpening();
+        for ( HullbackPartEntity part : getSubEntities()
+             ) {
+            part.tick();
+        }
     }
 
     private void updateMouthOpening() {
@@ -164,7 +168,6 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         float yawRad = -this.getYRot() * Mth.DEG_TO_RAD;
         float pitchRad = this.getXRot() * Mth.DEG_TO_RAD;
 
-        // Calculate world positions with entity rotation
         for (int i = 0; i < baseOffsets.length; i++) {
             Vec3 rotatedOffset = baseOffsets[i]
                     .yRot(yawRad)
@@ -172,7 +175,6 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
 
             Vec3 targetPos = this.position().add(rotatedOffset);
 
-            // Apply smooth movement with part-specific drag factors
             if (i > 0) {
                 prevPartPositions[i] = new Vec3(
                         Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetPos.x),
@@ -184,7 +186,6 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
             }
         }
 
-        // Nose and Head - basic following
         this.nose.moveTo(prevPartPositions[0].x, prevPartPositions[0].y, prevPartPositions[0].z,
                 //getYRot(),
                 //getXRot());
@@ -195,7 +196,6 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
                 calculateYaw(prevPartPositions[0], prevPartPositions[1]),
                 calculatePitch(prevPartPositions[0], prevPartPositions[1]));
 
-        // Body - subtle undulation
         this.body.moveTo(prevPartPositions[2].x,
                 prevPartPositions[2].y + swimCycle * 2,
                 prevPartPositions[2].z,
@@ -206,7 +206,7 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
                 prevPartPositions[3].y + swimCycle * 8,
                 prevPartPositions[3].z,
                 calculateYaw(prevPartPositions[2], prevPartPositions[3]),
-                calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 3f - swimCycle * 20f);
+                (calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 1.5f - swimCycle * 20f));
 
         float flukeDistance = 4.0f;
         Vec3 flukeOffset = new Vec3(0, 0, -flukeDistance)
@@ -307,10 +307,10 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     }
 
     class HullbackMoveControl extends MoveControl {
-        private static final float WHALE_TURN_SPEED = 1.5F; // Degrees per tick (much slower than default)
-        private static final float WHALE_PITCH_SPEED = 0.8F; // Degrees per tick
-        private static final float MAX_PITCH_ANGLE = 30.0F; // Maximum dive/ascend angle
-        private static final float BUOYANCY_FORCE = 0.002F; // Gentle upward force
+        private static final float WHALE_TURN_SPEED = 1.5F;
+        private static final float WHALE_PITCH_SPEED = 0.8F;
+        private static final float MAX_PITCH_ANGLE = 30.0F;
+        private static final float BUOYANCY_FORCE = 0.002F;
 
         private final HullbackEntity whale;
         private float targetYaw;
@@ -325,55 +325,45 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
 
         @Override
         public void tick() {
-            // Apply gentle buoyancy constantly
             if (whale.isInWater()) {
                 whale.setDeltaMovement(whale.getDeltaMovement().add(0, BUOYANCY_FORCE, 0));
             }
 
             if (this.operation == Operation.MOVE_TO) {
-                // Calculate direction to target
                 double dx = this.wantedX - whale.getX();
                 double dy = this.wantedY - whale.getY();
                 double dz = this.wantedZ - whale.getZ();
                 double distance = Math.sqrt(dx * dx + dz * dz);
 
-                if (distance > 0.1) { // Only adjust if we have meaningful distance
-                    // Calculate desired angles
+                if (distance > 0.1) {
                     this.targetYaw = (float)(Mth.atan2(dz, dx) * (180F / (float)Math.PI) - 90F);
                     this.targetPitch = (float)(-Mth.atan2(dy, distance) * (180F / (float)Math.PI));
                     this.targetPitch = Mth.clamp(this.targetPitch, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
 
-                    // Apply extremely gradual rotation
                     whale.setYRot(this.newrotlerp(whale.getYRot(), targetYaw, WHALE_TURN_SPEED));
                     whale.setXRot(this.newrotlerp(whale.getXRot(), targetPitch, WHALE_PITCH_SPEED));
 
-                    // Calculate movement direction
                     float speed = (float)(this.speedModifier * whale.getAttributeValue(Attributes.MOVEMENT_SPEED));
-                    float adjustedSpeed = speed * 0.1F; // Reduce speed for more whale-like movement
+                    float adjustedSpeed = speed * 0.1F;
 
-                    // Apply movement in facing direction
                     float f4 = Mth.cos(whale.getXRot() * ((float)Math.PI / 180F));
                     float f5 = Mth.sin(whale.getXRot() * ((float)Math.PI / 180F));
                     whale.zza = f4 * adjustedSpeed;
                     whale.yya = -f5 * adjustedSpeed;
 
-                    // Gentle side-to-side sway for more natural movement
                     whale.xxa = Mth.sin(whale.tickCount * 0.1F) * 0.05F * adjustedSpeed;
                 } else {
-                    // Arrived at destination - gentle drift
                     whale.setSpeed(0);
                     whale.setZza(0);
                     whale.setYya(0);
                     whale.setXxa(0);
                 }
             } else {
-                // Idle floating behavior
                 whale.setSpeed(0);
                 whale.setZza(0);
                 whale.setYya(0);
                 whale.setXxa(0);
 
-                // Gentle swaying while idle
                 if (whale.tickCount % 40 == 0) {
                     this.targetYaw += (whale.getRandom().nextFloat() - 0.5F) * 30F;
                     this.targetPitch += (whale.getRandom().nextFloat() - 0.5F) * 10F;
@@ -385,11 +375,10 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
             }
         }
 
-        // Custom rotation interpolation that's even smoother than vanilla
         float newrotlerp(float current, float target, float maxStep) {
             float delta = Mth.wrapDegrees(target - current);
             delta = Mth.clamp(delta, -maxStep, maxStep);
-            return current + delta * 0.2F; // Additional smoothing factor
+            return current + delta * 0.2F;
         }
     }
 
@@ -515,36 +504,28 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         public void tick() {
             if (this.targetPlayer == null) return;
 
-            // 1. Calculate ideal position (perpendicular to player's view)
             Vec3 playerLook = this.targetPlayer.getViewVector(1.0f);
             Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
 
-            // Flip offset side based on approach direction
             Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
             Vec3 targetPos = this.targetPlayer.position()
                     .add(sideOffset)
                     .add(playerLook.scale(-APPROACH_DISTANCE));
 
-            // 2. Move to position
             this.whale.getNavigation().moveTo(targetPos.x, targetPos.y, targetPos.z, this.speedModifier);
 
-            // 3. Smooth rotation toward ideal angle
             Vec3 toPlayer = this.targetPlayer.position().subtract(this.whale.position());
             float desiredYaw = (float)Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
 
-            // Calculate which side we want the player on (left or right)
             float angleToPlayer = Mth.wrapDegrees(desiredYaw - this.whale.getYRot());
             boolean shouldBeOnRight = angleToPlayer > 0;
 
-            // Adjust desired yaw to put player at 90° to our side
             float sideAwareYaw = desiredYaw + (approachFromRight ? -90f : 90f);
 
-            // Gradual rotation
             float newYRot = Mth.rotLerp(0.05f, this.whale.getYRot(), sideAwareYaw);
             this.whale.setYRot(newYRot);
-            this.whale.yBodyRot = newYRot; // Sync body rotation
+            this.whale.yBodyRot = newYRot;
 
-            // 4. Eye tracking
             float eyeBaseAngle = approachFromRight ? 90f : -90f;
             float eyeFollowAmount = Mth.clamp(Math.abs(angleToPlayer) * 0.5f, 0, 45f);
 
@@ -556,7 +537,6 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
                 this.whale.setRightEyeYaw(90f);
             }
 
-            // Vertical eye tracking
             double yDiff = this.targetPlayer.getEyeY() - this.whale.getEyeY();
             double horizontalDist = new Vec3(toPlayer.x, 0, toPlayer.z).length();
             float pitch = (float)-Math.toDegrees(Math.atan2(yDiff, horizontalDist));

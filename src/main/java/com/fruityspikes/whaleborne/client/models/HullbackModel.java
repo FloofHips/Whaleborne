@@ -155,10 +155,10 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
         HullbackPartEntity tailPart = entity.tail;
         HullbackPartEntity flukePart = entity.fluke;
 
-        nosePart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.head);
-        bodyPart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.body);
-        tailPart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.tail);
-        flukePart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.fluke);
+//        nosePart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.head);
+//        bodyPart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.body);
+//        tailPart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.tail);
+//        flukePart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.fluke);
 
 //        this.tail.y = -(float) tailPart.position().subtract(entity.position()).scale(20).y;
 //        this.tail.x = -(float) tailPart.position().subtract(entity.position()).x;
