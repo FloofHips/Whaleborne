@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.registries;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
+import com.fruityspikes.whaleborne.server.entities.HullbackPartEntity;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -21,6 +22,13 @@ public class WBEntityRegistry {
                             .sized(2F, 2F)
                             .clientTrackingRange(20)
                             .build(new ResourceLocation(Whaleborne.MODID, "hullback").toString())
+    );
+    public static final RegistryObject<EntityType<HullbackPartEntity>> HULLBACK_PART = ENTITY_TYPES.register(
+            "hullback_part", () ->
+                    EntityType.Builder.<HullbackPartEntity>of(HullbackPartEntity::new, MobCategory.MISC)
+                            .sized(2F, 2F)
+                            .clientTrackingRange(20)
+                            .build(new ResourceLocation(Whaleborne.MODID, "hullback_part").toString())
     );
     @SubscribeEvent
     public static void entityAttributes(EntityAttributeCreationEvent event) {

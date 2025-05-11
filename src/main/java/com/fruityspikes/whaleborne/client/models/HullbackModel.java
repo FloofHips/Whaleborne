@@ -105,10 +105,6 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
     }
     @Override
     public void setupAnim(T entity, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch) {
-        float leftEyeYaw = entity.getLeftEyeYaw();
-        float rightEyeYaw = entity.getRightEyeYaw();
-        float eyePitch = entity.getEyePitch();
-
         float swimCycle = (float) ((float)Math.sin(ageInTicks * 0.08f) * entity.getDeltaMovement().length());
 
         this.body.resetPose();
@@ -133,13 +129,8 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
         this.right_upper_eyelid.y=Mth.lerp(entity.getMouthOpenProgress(), this.right_upper_eyelid.getInitialPose().y, this.right_upper_eyelid.getInitialPose().y+2.25f);
 
         this.left_pupil.z=Mth.lerp(entity.getMouthOpenProgress(), this.left_pupil.getInitialPose().z-2, this.left_pupil.getInitialPose().z+2.25f);
-
         this.right_pupil.z=Mth.lerp(entity.getMouthOpenProgress(), this.right_pupil.getInitialPose().z-2, this.right_pupil.getInitialPose().z+2.25f);
 
-        //this.body.xRot = entity.body.getXRot();
-        //this.body.yRot = entity.body.getYRot();
-
-        //float finMovement = Mth.sin(ageInTicks * 0.1f) * 0.2f;
         left_fin.zRot = swimCycle;
         right_fin.zRot = -swimCycle;
 
@@ -147,30 +138,7 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
 
     @Override
     public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {
-        //body.render(poseStack, vertexConsumer, packedLight, packedOverlay, red, green, blue, alpha);
 
-        HullbackPartEntity nosePart = entity.nose;
-        HullbackPartEntity headPart = entity.head;
-        HullbackPartEntity bodyPart = entity.body;
-        HullbackPartEntity tailPart = entity.tail;
-        HullbackPartEntity flukePart = entity.fluke;
-
-//        nosePart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.head);
-//        bodyPart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.body);
-//        tailPart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.tail);
-//        flukePart.render(poseStack, vertexConsumer, packedLight, packedOverlay, this.fluke);
-
-//        this.tail.y = -(float) tailPart.position().subtract(entity.position()).scale(20).y;
-//        this.tail.x = -(float) tailPart.position().subtract(entity.position()).x;
-//        this.tail.z = (float) tailPart.position().subtract(entity.position()).z;
-//
-//        tail.render(poseStack, vertexConsumer, packedLight, packedOverlay, red, green, blue, alpha);
-//
-//        this.fluke.y = -(float) flukePart.position().subtract(entity.position()).subtract(0,1,0).scale(20).y;
-//        this.fluke.x = -(float) flukePart.position().subtract(entity.position()).x;
-//
-//        fluke.render(poseStack, vertexConsumer, packedLight, packedOverlay, red, green, blue, alpha);
-        //this.tail.x = tailPart.;
     }
 
     public ModelPart getHead() {

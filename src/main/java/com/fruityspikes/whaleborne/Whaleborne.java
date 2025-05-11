@@ -1,10 +1,12 @@
 package com.fruityspikes.whaleborne;
 
 import com.fruityspikes.whaleborne.client.models.HullbackModel;
+import com.fruityspikes.whaleborne.client.renderers.HullbackPartRenderer;
 import com.fruityspikes.whaleborne.client.renderers.HullbackRenderer;
 import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
 import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.Registries;
@@ -42,7 +44,7 @@ public class Whaleborne
     // Define mod id in a common place for everything to reference
     public static final String MODID = "whaleborne";
     private static final Logger LOGGER = LogUtils.getLogger();
-    public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MODID);
+    //public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MODID);
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
 
 //    public static final RegistryObject<Block> EXAMPLE_BLOCK = BLOCKS.register("example_block", () -> new Block(BlockBehaviour.Properties.of().mapColor(MapColor.STONE)));
@@ -50,15 +52,15 @@ public class Whaleborne
 //    public static final RegistryObject<Item> EXAMPLE_BLOCK_ITEM = ITEMS.register("example_block", () -> new BlockItem(EXAMPLE_BLOCK.get(), new Item.Properties()));
 //
 //    // Creates a new food item with the id "examplemod:example_id", nutrition 1 and saturation 2
-    public static final RegistryObject<Item> EXAMPLE_ITEM = ITEMS.register("example_item", () -> new Item(new Item.Properties().food(new FoodProperties.Builder()
-            .alwaysEat().nutrition(1).saturationMod(2f).build())));
+    //public static final RegistryObject<Item> EXAMPLE_ITEM = ITEMS.register("example_item", () -> new Item(new Item.Properties().food(new FoodProperties.Builder()
+    //        .alwaysEat().nutrition(1).saturationMod(2f).build())));
 
     // Creates a creative tab with the id "examplemod:example_tab" for the example item, that is placed after the combat tab
     public static final RegistryObject<CreativeModeTab> WHALEBORNE = CREATIVE_MODE_TABS.register("whaleborne", () -> CreativeModeTab.builder()
             .withTabsBefore(CreativeModeTabs.COMBAT)
-            .icon(() -> EXAMPLE_ITEM.get().getDefaultInstance())
+            .icon(() -> WBItemRegistry.HULLBACK_SPAWN_EGG.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
-                output.accept(EXAMPLE_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
+                output.accept(WBItemRegistry.HULLBACK_SPAWN_EGG.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
             }).build());
 
     public Whaleborne()
@@ -68,7 +70,7 @@ public class Whaleborne
         modEventBus.addListener(this::commonSetup);
         WBEntityRegistry.ENTITY_TYPES.register(modEventBus);
         WBBlockRegistry.BLOCKS.register(modEventBus);
-        ITEMS.register(modEventBus);
+        WBItemRegistry.ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
 
         MinecraftForge.EVENT_BUS.register(this);
@@ -126,6 +128,7 @@ public class Whaleborne
         @SubscribeEvent
         public static void registerEntityRenderers(EntityRenderersEvent.RegisterRenderers event) {
             event.registerEntityRenderer(WBEntityRegistry.HULLBACK.get(), HullbackRenderer::new);
+            event.registerEntityRenderer(WBEntityRegistry.HULLBACK_PART.get(), HullbackPartRenderer::new);
         }
     }
 }

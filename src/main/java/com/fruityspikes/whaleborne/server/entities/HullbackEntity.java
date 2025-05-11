@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.sounds.SoundEvent;
@@ -48,11 +49,11 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         //this.moveControl = new HullbackMoveControl(this);
         this.lookControl = new SmoothSwimmingLookControl(this, 180);
 
-        this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F, new Vec3(0, 0, 6));
-        this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F, new Vec3(0, 0, 2.5));
-        this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F, new Vec3(0, 0, -3));
-        this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F, new Vec3(0, 0, -7));
-        this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F, new Vec3(0, 0, -11));
+        this.nose = new HullbackPartEntity(this, level, "nose", 5.0F, 5.0F, new Vec3(0, 0, 5.25f));
+        this.head = new HullbackPartEntity(this, level, "head", 5.0F, 5.0F, new Vec3(0, 0, 2.25f));
+        this.body = new HullbackPartEntity(this, level, "body", 5.0F, 5.0F, new Vec3(0, 0, -3));
+        this.tail = new HullbackPartEntity(this, level, "tail", 2.5F, 2.5F, new Vec3(0, 0, -7));
+        this.fluke = new HullbackPartEntity(this, level, "fluke", 4.0F, 0.6F, new Vec3(0, 0, -11));
 
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
         this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
@@ -60,6 +61,32 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         this.partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.1f, 0.07f};
         this.prevPartPositions = new Vec3[5];
         this.mouthOpenProgress = 0.0f;
+    }
+    @Override
+    public void onAddedToWorld() {
+        super.onAddedToWorld();
+
+        if (!this.level().isClientSide) {
+            for (HullbackPartEntity part : subEntities) {
+                this.level().addFreshEntity(part);
+
+                part.setPos(this.getX(), this.getY(), this.getZ());
+                part.setYRot(this.getYRot());
+                part.setXRot(this.getXRot());
+            }
+        }
+    }
+    @Override
+    public void remove(RemovalReason reason) {
+        super.remove(reason);
+
+        if (!this.level().isClientSide && subEntities != null) {
+            for (HullbackPartEntity part : subEntities) {
+                if (part != null) {
+                    part.remove(reason);
+                }
+            }
+        }
     }
     public static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 10.0).add(Attributes.MOVEMENT_SPEED, 1.2000000476837158).add(Attributes.ATTACK_DAMAGE, 3.0);
@@ -93,11 +120,11 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     }
 
 
-    public boolean isMultipartEntity() {
-        return true;
-    }
+    //public boolean isMultipartEntity() {
+    //    return true;
+    //}
 
-    public PartEntity<?>[] getParts() {
+    public HullbackPartEntity[] getHullbackParts() {
         return this.subEntities;
     }
 
@@ -153,56 +180,61 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
 
     private void updatePartPositions() {
         Vec3[] baseOffsets = {
-                new Vec3(0, 0, 6),   // Nose
-                new Vec3(0, 0, 2.5), // Head
+                new Vec3(0, 0, 5.25f),   // Nose
+                new Vec3(0, 0, 2.25f), // Head
                 new Vec3(0, 0, -3),  // Body
-                new Vec3(0, 0, -7),  // Tail base
-                new Vec3(0, 0, -11)  // Fluke tip
+                new Vec3(0, 0, -7),  // Tail
+                new Vec3(0, 0, -11)  // Fluke
         };
 
         if (prevPartPositions[0] == null) {
             prevPartPositions = Arrays.copyOf(baseOffsets, baseOffsets.length);
+            for (int i = 0; i < prevPartPositions.length; i++) {
+                prevPartPositions[i] = this.position().add(baseOffsets[i]
+                        .yRot(-this.getYRot() * Mth.DEG_TO_RAD)
+                        .xRot(this.getXRot() * Mth.DEG_TO_RAD));
+            }
         }
 
         float swimCycle = (float) (Mth.sin(this.tickCount * 0.1f) * this.getDeltaMovement().length());
         float yawRad = -this.getYRot() * Mth.DEG_TO_RAD;
         float pitchRad = this.getXRot() * Mth.DEG_TO_RAD;
 
+        Vec3[] targetPositions = new Vec3[baseOffsets.length];
         for (int i = 0; i < baseOffsets.length; i++) {
-            Vec3 rotatedOffset = baseOffsets[i]
-                    .yRot(yawRad)
-                    .xRot(pitchRad);
-
-            Vec3 targetPos = this.position().add(rotatedOffset);
-
-            if (i > 0) {
-                prevPartPositions[i] = new Vec3(
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetPos.x),
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].y, targetPos.y),
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].z, targetPos.z)
-                );
-            } else {
-                prevPartPositions[i] = targetPos;
-            }
+            targetPositions[i] = this.position().add(
+                    baseOffsets[i].yRot(yawRad).xRot(pitchRad)
+            );
         }
 
-        this.nose.moveTo(prevPartPositions[0].x, prevPartPositions[0].y, prevPartPositions[0].z,
+        float delta = Minecraft.getInstance().getDeltaFrameTime();
+
+        for (int i = 0; i < baseOffsets.length; i++) {
+            float lerpAmount = 1 - (float)Math.pow(1 - partDragFactors[i], delta * 20);
+            prevPartPositions[i] = new Vec3(
+                    Mth.lerp(lerpAmount, prevPartPositions[i].x, targetPositions[i].x),
+                    Mth.lerp(lerpAmount, prevPartPositions[i].y, targetPositions[i].y),
+                    Mth.lerp(lerpAmount, prevPartPositions[i].z, targetPositions[i].z)
+            );
+        }
+
+        this.nose.lerpMoveTo(prevPartPositions[0].x, prevPartPositions[0].y, prevPartPositions[0].z,
                 //getYRot(),
                 //getXRot());
                 calculateYaw(prevPartPositions[0], prevPartPositions[1]),
                 calculatePitch(prevPartPositions[0], prevPartPositions[1]));
 
-        this.head.moveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z,
+        this.head.lerpMoveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z,
                 calculateYaw(prevPartPositions[0], prevPartPositions[1]),
                 calculatePitch(prevPartPositions[0], prevPartPositions[1]));
 
-        this.body.moveTo(prevPartPositions[2].x,
+        this.body.lerpMoveTo(prevPartPositions[2].x,
                 prevPartPositions[2].y + swimCycle * 2,
                 prevPartPositions[2].z,
                 calculateYaw(prevPartPositions[1], prevPartPositions[2]),
                 calculatePitch(prevPartPositions[1], prevPartPositions[2]));
 
-        this.tail.moveTo(prevPartPositions[3].x,
+        this.tail.lerpMoveTo(prevPartPositions[3].x,
                 prevPartPositions[3].y + swimCycle * 8,
                 prevPartPositions[3].z,
                 calculateYaw(prevPartPositions[2], prevPartPositions[3]),
@@ -222,7 +254,7 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         float flukeYaw = calculateYaw(tail.position(), flukeTarget);
         float flukePitch = calculatePitch(tail.position(), flukeTarget);
 
-        this.fluke.moveTo(
+        this.fluke.lerpMoveTo(
                 flukeTarget.x,
                 flukeTarget.y,
                 flukeTarget.z,
