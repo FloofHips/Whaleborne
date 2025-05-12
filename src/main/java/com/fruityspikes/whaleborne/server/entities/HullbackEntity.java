@@ -37,8 +37,13 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     public final HullbackPartEntity tail;
     public final HullbackPartEntity fluke;
     private final HullbackPartEntity[] subEntities;
-    private final float[] partDragFactors;
     private Vec3[] prevPartPositions;
+    private Vec3[] partPosition;
+    private float[] partYRot;
+    private float[] partXRot;
+    private Vec3[] oldPartPosition;
+    private float[] oldPartYRot;
+    private float[] oldPartXRot;
     private float mouthOpenProgress;
     private boolean isOpening;
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
@@ -48,17 +53,25 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         //this.moveControl = new HullbackMoveControl(this);
         this.lookControl = new SmoothSwimmingLookControl(this, 180);
 
-        this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F, new Vec3(0, 0, 6));
-        this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F, new Vec3(0, 0, 2.5));
-        this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F, new Vec3(0, 0, -3));
-        this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F, new Vec3(0, 0, -7));
-        this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F, new Vec3(0, 0, -11));
+        this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F, 1f);
+        this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F, 1f);
+        this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F, 1f);
+        this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F, 1f);
+        this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F, 1f);
 
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
         this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
 
-        this.partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.1f, 0.07f};
         this.prevPartPositions = new Vec3[5];
+
+        this.partPosition = new Vec3[5];
+        this.partYRot = new float[5];
+        this.partXRot = new float[5];
+
+        this.oldPartPosition = new Vec3[5];
+        this.oldPartYRot = new float[5];
+        this.oldPartXRot = new float[5];
+
         this.mouthOpenProgress = 0.0f;
     }
     public static AttributeSupplier.Builder createAttributes() {
@@ -125,6 +138,7 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
 
     @Override
     public void tick() {
+        setOldPosAndRots();
         super.tick();
         updatePartPositions();
         updateMouthOpening();
@@ -151,7 +165,36 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         return mouthOpenProgress;
     }
 
+    public Vec3 getPartPos(int i){
+        return partPosition[i];
+    }
+
+    public float getPartYRot(int i){
+        return partYRot[i];
+    }
+    public float getPartXRot(int i){
+        return partXRot[i];
+    }
+
+    public Vec3 getOldPartPos(int i){
+        return oldPartPosition[i];
+    }
+    public float getOldPartYRot(int i){
+        return oldPartYRot[i];
+    }
+    public float getOldPartXRot(int i){
+        return oldPartXRot[i];
+    }
+
+    public void setOldPosAndRots(){
+        for (int i = 0; i < 5; i++) {
+            this.oldPartPosition[i] = subEntities[i].position();
+            this.oldPartYRot[i] = subEntities[i].getYRot();
+            this.oldPartXRot[i] = subEntities[i].getXRot();
+        }
+    }
     private void updatePartPositions() {
+        float[] partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.1f, 0.07f};
         Vec3[] baseOffsets = {
                 new Vec3(0, 0, 6),   // Nose
                 new Vec3(0, 0, 2.5), // Head
@@ -174,39 +217,49 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
                     .xRot(pitchRad);
 
             Vec3 targetPos = this.position().add(rotatedOffset);
-
-            if (i > 0) {
-                prevPartPositions[i] = new Vec3(
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetPos.x),
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].y, targetPos.y),
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].z, targetPos.z)
-                );
-            } else {
-                prevPartPositions[i] = targetPos;
-            }
+//            if (i > 0) {
+//                prevPartPositions[i] = new Vec3(
+//                        Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetPos.x),
+//                        Mth.lerp(partDragFactors[i], prevPartPositions[i].y, targetPos.y),
+//                        Mth.lerp(partDragFactors[i], prevPartPositions[i].z, targetPos.z)
+//                );
+//            } else {
+//                prevPartPositions[i] = targetPos;
+//            }
+            prevPartPositions[i] = targetPos;
         }
 
+        this.partPosition[0] = prevPartPositions[0];
+        this.partYRot[0] = calculateYaw(prevPartPositions[0], prevPartPositions[1]);
+        this.partXRot[0] = calculatePitch(prevPartPositions[0], prevPartPositions[1]);
         this.nose.moveTo(prevPartPositions[0].x, prevPartPositions[0].y, prevPartPositions[0].z,
-                //getYRot(),
-                //getXRot());
-                calculateYaw(prevPartPositions[0], prevPartPositions[1]),
-                calculatePitch(prevPartPositions[0], prevPartPositions[1]));
+                partYRot[0],
+                partXRot[0]);
 
+        this.partPosition[1] = new Vec3(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z);
+        this.partYRot[1] = calculateYaw(prevPartPositions[0], prevPartPositions[1]);
+        this.partXRot[1] = calculatePitch(prevPartPositions[0], prevPartPositions[1]);
         this.head.moveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z,
-                calculateYaw(prevPartPositions[0], prevPartPositions[1]),
-                calculatePitch(prevPartPositions[0], prevPartPositions[1]));
+                partYRot[1],
+                partXRot[1]);
 
+        this.partPosition[2] = new Vec3(prevPartPositions[2].x, prevPartPositions[2].y + swimCycle * 2, prevPartPositions[2].z);
+        this.partYRot[2] = calculateYaw(prevPartPositions[1], prevPartPositions[2]);
+        this.partXRot[2] = calculatePitch(prevPartPositions[1], prevPartPositions[2]);
         this.body.moveTo(prevPartPositions[2].x,
                 prevPartPositions[2].y + swimCycle * 2,
                 prevPartPositions[2].z,
-                calculateYaw(prevPartPositions[1], prevPartPositions[2]),
-                calculatePitch(prevPartPositions[1], prevPartPositions[2]));
+                partYRot[2],
+                partXRot[2]);
 
+        this.partPosition[3] = new Vec3(prevPartPositions[3].x, prevPartPositions[3].y + swimCycle * 8, prevPartPositions[3].z);
+        this.partYRot[3] = calculateYaw(prevPartPositions[2], prevPartPositions[3]);
+        this.partXRot[3] = calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 1.5f - swimCycle * 20f;
         this.tail.moveTo(prevPartPositions[3].x,
                 prevPartPositions[3].y + swimCycle * 8,
                 prevPartPositions[3].z,
-                calculateYaw(prevPartPositions[2], prevPartPositions[3]),
-                (calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 1.5f - swimCycle * 20f));
+                partYRot[3],
+                partXRot[3]);
 
         float flukeDistance = 4.0f;
         Vec3 flukeOffset = new Vec3(0, 0, -flukeDistance)
@@ -222,6 +275,9 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         float flukeYaw = calculateYaw(tail.position(), flukeTarget);
         float flukePitch = calculatePitch(tail.position(), flukeTarget);
 
+        this.partPosition[4] = flukeTarget;
+        this.partYRot[4] = flukeYaw;
+        this.partXRot[4] = flukePitch * 1.5f + swimCycle * 30f;
         this.fluke.moveTo(
                 flukeTarget.x,
                 flukeTarget.y,

@@ -16,6 +16,7 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -31,64 +32,70 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     public void render(HullbackEntity pEntity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         super.render(pEntity, entityYaw, partialTicks, poseStack, buffer, packedLight);
 
-        pEntity.nose.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getHead());
-        pEntity.body.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getBody());
-        pEntity.tail.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getTail());
-        pEntity.fluke.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getFluke());
+//        pEntity.nose.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getHead());
+//        pEntity.body.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getBody());
+//        pEntity.tail.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getTail());
+//        pEntity.fluke.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getFluke());
+//
+        renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getHead(), 0, 5.0F, 5.0F);
+        renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getBody(), 2, 5.0F, 5.0F);
 
-
-//        pEntity.nose.renderDirt(poseStack, buffer, packedLight);
-//        pEntity.body.renderDirt(poseStack, buffer, packedLight);
-//        pEntity.tail.renderDirt(poseStack, buffer, packedLight);
-//        pEntity.fluke.renderDirt(poseStack, buffer, packedLight);
-
-//        poseStack.translate(pEntity.head.getX() - pEntity.getX(),pEntity.head.getY() - pEntity.getY(),pEntity.head.getZ() - pEntity.getZ() );
-//        LevelRenderer.renderLineBox(
-//                poseStack,
-//                buffer.getBuffer(RenderType.lines()),
-//                new AABB(-0.1, -0.1, -0.1, 0.1, 10, 0.1),
-//                0, 1, 0, 1
-//        );
-
-        //poseStack.mulPose(Axis.YP.rotationDegrees(-pEntity.head.getYRot()));
-        //poseStack.mulPose(Axis.XP.rotationDegrees(-pEntity.head.getXRot()));
-
-//        poseStack.translate(-2, 5,0);
-//        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
-//        poseStack.translate(1, 0,4);
-//        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
-//        poseStack.translate(1, 0,-3);
-//        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
-//        poseStack.translate(1, 0,3);
-//        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY);
-//        poseStack.popPose();
-
+        renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getTail(), 3, 2.5F, 2.5F);
+        renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getFluke(), 4, 0.6F, 4.0F);
     }
 
-    private void renderModelPart(PoseStack poseStack, MultiBufferSource buffer, int packedLight, Vec3 entityPos, ModelPart part, float partialTicks, HullbackEntity pEntity, HullbackPartEntity entityPart, Vec3 offset) {
+    private void renderPart(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, float partialTicks, ResourceLocation texture, int packedLight, ModelPart part, int index, float height, float width) {
         poseStack.pushPose();
+
+        Vec3 pos = pEntity.getPartPos(index);
+        float yRot = pEntity.getPartYRot(index);
+        float xRot = pEntity.getPartXRot(index);
+
+        Vec3 oldPos = pEntity.getOldPartPos(index);
+        float oldYRot = pEntity.getOldPartYRot(index);
+        float oldXRot = pEntity.getOldPartXRot(index);
+
+        Vec3 finalPos = oldPos.lerp(pos, partialTicks);
+        float finalYRot = Mth.lerp(partialTicks, oldYRot, yRot);
+        float finalXRot = Mth.lerp(partialTicks, oldXRot, xRot);
 
         part.resetPose();
         part.setPos(0,0,0);
 
-        Vec3 renderPos = entityPart.position();
-
-        renderPos = renderPos.add(entityPart.getForward().scale(offset.y)).add(0,1,0);//);
-
         poseStack.mulPose(Axis.XP.rotationDegrees(180));
-        //poseStack.translate(leg.getRestingOffset().x / -4, 0, leg.getRestingOffset().z / 4);
-        poseStack.translate(renderPos.x - entityPos.x, - (renderPos.y - entityPos.y), -(renderPos.z - entityPos.z));
+        poseStack.translate(finalPos.x - pEntity.getX(), - (finalPos.y - pEntity.getY()), -(finalPos.z - pEntity.getZ()));
 
-        //double angle = leg.getCurrentPos().distanceTo(leg.getTargetPos());
+        if (index == 4){
+            System.out.println("Ah");
+            System.out.println(yRot);
+            System.out.println(oldYRot);
+            System.out.println(finalYRot);
+        }
+        poseStack.mulPose(Axis.YP.rotationDegrees(finalYRot));
+        poseStack.mulPose(Axis.XP.rotationDegrees(-finalXRot));
+        poseStack.translate(0, -height/2, -width/2);
 
-        poseStack.mulPose(Axis.YP.rotationDegrees((float) (pEntity.yBodyRot)));
-
-        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE)),
-                packedLight, OverlayTexture.NO_OVERLAY);
-
+        boolean flag = pEntity.hurtTime > 0;
+        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(texture)), packedLight, OverlayTexture.pack(0.0F, flag));
+        poseStack.translate(0, height/2, width/2);
+        renderDirt(poseStack, buffer, packedLight, pEntity);
+        poseStack.translate(0, -height-1, 0);
+        renderDirt(poseStack, buffer, packedLight, pEntity);
         poseStack.popPose();
     }
+    public void renderDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight, HullbackEntity parent) {
+        if(Minecraft.getInstance().getEntityRenderDispatcher().shouldRenderHitBoxes()) {
+            LevelRenderer.renderLineBox(
+                    poseStack,
+                    buffer.getBuffer(RenderType.lines()),
+                    new AABB(-0.1, -0.1, -0.1, 0.1, 10, 0.1),
+                    1, 0, 0, 1
+            );
+        }
 
+        boolean flag = parent.hurtTime > 0;
+        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.DARK_OAK_PLANKS.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+    }
     @Override
     public ResourceLocation getTextureLocation(HullbackEntity entity) {
         return TEXTURE;

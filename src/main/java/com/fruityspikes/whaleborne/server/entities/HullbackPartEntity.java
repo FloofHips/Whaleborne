@@ -20,6 +20,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -36,27 +37,116 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     public final HullbackEntity parent;
     public final String name;
     private final EntityDimensions size;
-    public final Vec3 restingOffset;
 
     private Vec3 prevPos;
     private float prevYRot;
     private float prevXRot;
-    public HullbackPartEntity(HullbackEntity parent, String name, float width, float height, Vec3 restingOffset) {
+    private Vec3 targetPosition;
+    private float targetYRot;
+    private float targetXRot;
+    private float lerpProgress;
+    private float lerpSpeed;
+
+    public HullbackPartEntity(HullbackEntity parent, String name, float width, float height, float dragFactor) {
         super(parent);
         this.size = EntityDimensions.scalable(width, height);
         this.refreshDimensions();
         this.parent = parent;
         this.name = name;
-        this.restingOffset = restingOffset;
+        this.lerpSpeed = 1.0f - dragFactor;
     }
+
+    public void setTargetPosition(double x, double y, double z, float targetYRot, float targetXRot) {
+        Vec3 target = new Vec3(x, y ,z);
+        if (!target.equals(this.targetPosition)) {
+            this.targetPosition = target;
+            this.targetYRot = targetYRot;
+            this.targetXRot = targetXRot;
+            //this.lerpProgress = 0.0f;
+        }
+    }
+
     public void tick() {
-        this.prevPos = this.position();
-        this.prevYRot = this.getYRot();
-        this.prevXRot = this.getXRot();
+        super.tick();
+
+//        lerpProgress+=0.1;
+//
+//        if(lerpProgress>=1)
+//            lerpProgress = 1;
+//        if(targetPosition!=null && targetPosition.distanceTo(this.position())<=0)
+//            lerpProgress = 0;
+
+        //if (lerpProgress < 1.0f) {
+
+        //lerpProgress = Math.min(1.0f, lerpProgress + lerpSpeed * 0.1f);
+
+//        double x = Mth.lerp(lerpProgress, this.getX(), targetPosition.x);
+//        double y = Mth.lerp(lerpProgress, this.getY(), targetPosition.y);
+//        double z = Mth.lerp(lerpProgress, this.getZ(), targetPosition.z);
+
+//        this.setYRot(Mth.lerp(lerpProgress, this.getYRot(), targetYRot));
+//        this.setXRot(Mth.lerp(lerpProgress, this.getXRot(), targetXRot));
+
+//        this.setYRot(targetYRot);
+//        this.setXRot(targetXRot);
+//        this.setPos(targetPosition.x, targetPosition.y, targetPosition.z);
+//        } else {
+//            this.setPos(targetPosition.x, targetPosition.y, targetPosition.z);
+//            this.setYRot(targetYRot);
+//            this.setXRot(targetXRot);
+//        }
+    }
+
+    protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
+        if (this.hasPassenger(passenger)) {
+            float f = 0;
+            float f1 = (float)((this.isRemoved() ? 0.009999999776482582 : this.getPassengersRidingOffset()) + passenger.getMyRidingOffset());
+            if (this.getPassengers().size() > 1) {
+                int i = this.getPassengers().indexOf(passenger);
+                if (i == 0) {
+                    f = 0.2F;
+                } else {
+                    f = -0.6F;
+                }
+
+                if (passenger instanceof Animal) {
+                    f += 0.2F;
+                }
+            }
+
+            Vec3 vec3 = (new Vec3((double)f, 0.0, 0.0)).yRot(-this.getYRot() * 0.017453292F - 1.5707964F);
+            callback.accept(passenger, this.getX() + vec3.x, this.getY() + (double)f1, this.getZ() + vec3.z);
+            passenger.setYRot(passenger.getYRot() + this.getYRot());
+            passenger.setYHeadRot(passenger.getYHeadRot() + this.getYRot());
+
+            if (passenger instanceof Animal && this.getPassengers().size() == this.getMaxPassengers()) {
+                int j = passenger.getId() % 2 == 0 ? 90 : 270;
+                passenger.setYBodyRot(((Animal)passenger).yBodyRot + (float)j);
+                passenger.setYHeadRot(passenger.getYHeadRot() + (float)j);
+            }
+        }
+    }
+    protected boolean canAddPassenger(Entity passenger) {
+        return this.getPassengers().size() < this.getMaxPassengers();
+    }
+    protected int getMaxPassengers() {
+        return 2;
+    }
+    public double getPassengersRidingOffset() {
+        return size.height;
+    }
+    public boolean dismountsUnderwater() {
+        return false;
+    }
+    public InteractionResult interact(Player player, InteractionHand hand) {
+        if (!this.isVehicle()) {
+            player.startRiding(this);
+            return InteractionResult.sidedSuccess(this.level().isClientSide);
+        }
+        return super.interact(player, hand);
     }
     protected void defineSynchedData() {
     }
-
     protected void readAdditionalSaveData(CompoundTag compound) {
     }
 
@@ -66,7 +156,6 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     public boolean isPickable() {
         return true;
     }
-
     @Nullable
     public ItemStack getPickResult() {
         return this.parent.getPickResult();
@@ -87,17 +176,17 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     public boolean canBeCollidedWith() {
         return true;
     }
-    public Packet<ClientGamePacketListener> getAddEntityPacket() {
-        throw new UnsupportedOperationException();
-    }
+//    public Packet<ClientGamePacketListener> getAddEntityPacket() {
+//        throw new UnsupportedOperationException();
+//    }
 
     public EntityDimensions getDimensions(Pose pose) {
         return this.size;
     }
 
-    public boolean shouldBeSaved() {
-        return false;
-    }
+//    public boolean shouldBeSaved() {
+//        return false;
+//    }
 
     public void render(PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, int packedOverlay, ModelPart part) {
         poseStack.pushPose();
@@ -124,24 +213,24 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     public void render(PoseStack poseStack, MultiBufferSource buffer, float partialTicks, ResourceLocation texture, int packedLight, ModelPart part) {
         poseStack.pushPose();
 
-        float X = (float) position().x;
-        float Y = (float) position().y;
-        float Z= (float) position().z;
-        if(prevPos!=null) {
-            X = (float) Mth.lerp(partialTicks, prevPos.x, position().x);
-            Y = (float) Mth.lerp(partialTicks, prevPos.y, position().y);
-            Z = (float) Mth.lerp(partialTicks, prevPos.z, position().z);
-        }
+//        System.out.println(xo);
+//        System.out.println(this.getX());
+//
+//        float X = (float) Mth.lerp(partialTicks, xo, position().x);
+//        float Y = (float) Mth.lerp(partialTicks, yo, position().y);
+//        float Z = (float) Mth.lerp(partialTicks, zo, position().z);
+//
+//        System.out.println(X);
 
-        float lerpedYRot = Mth.lerp(partialTicks, prevYRot, this.getYRot());
-        float lerpedXRot = Mth.lerp(partialTicks, prevXRot, this.getXRot());
+        float lerpedYRot = Mth.lerp(partialTicks, yRotO, this.getYRot());
+        float lerpedXRot = Mth.lerp(partialTicks, xRotO, this.getXRot());
 
 
         part.resetPose();
         part.setPos(0,0,0);
 
         poseStack.mulPose(Axis.XP.rotationDegrees(180));
-        poseStack.translate(X - parent.getX(), - (Y - parent.getY()), -(Z - parent.getZ()));
+        poseStack.translate(this.getX() - parent.getX(), - (this.getY() - parent.getY()), -(this.getZ() - parent.getZ()));
 
 
         poseStack.mulPose(Axis.YP.rotationDegrees(lerpedYRot));
