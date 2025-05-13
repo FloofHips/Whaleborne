@@ -20,9 +20,10 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaternionf;
 
 public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<HullbackEntity, HullbackModel<HullbackEntity>> {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback.png");
+    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/texture.png");
 
     public HullbackRenderer(EntityRendererProvider.Context ctx) {
         super(ctx, new HullbackModel<>(ctx.bakeLayer(WBEntityModelLayers.HULLBACK)), 5F);
@@ -36,7 +37,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 //        pEntity.body.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getBody());
 //        pEntity.tail.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getTail());
 //        pEntity.fluke.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getFluke());
-//
+
         renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getHead(), 0, 5.0F, 5.0F);
         renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getBody(), 2, 5.0F, 5.0F);
 
@@ -47,33 +48,45 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     private void renderPart(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, float partialTicks, ResourceLocation texture, int packedLight, ModelPart part, int index, float height, float width) {
         poseStack.pushPose();
 
-        Vec3 pos = pEntity.getPartPos(index);
-        float yRot = pEntity.getPartYRot(index);
-        float xRot = pEntity.getPartXRot(index);
+        Vec3 finalPos = Vec3.ZERO;
 
-        Vec3 oldPos = pEntity.getOldPartPos(index);
-        float oldYRot = pEntity.getOldPartYRot(index);
-        float oldXRot = pEntity.getOldPartXRot(index);
-
-        Vec3 finalPos = oldPos.lerp(pos, partialTicks);
-        float finalYRot = Mth.lerp(partialTicks, oldYRot, yRot);
-        float finalXRot = Mth.lerp(partialTicks, oldXRot, xRot);
+        if(pEntity.getOldPartPos(index) != null){
+            Vec3 pos = pEntity.getPartPos(index);
+            Vec3 oldPos = pEntity.getOldPartPos(index);
+            finalPos = oldPos.lerp(pos, partialTicks);
+        }
 
         part.resetPose();
         part.setPos(0,0,0);
 
         poseStack.mulPose(Axis.XP.rotationDegrees(180));
-        poseStack.translate(finalPos.x - pEntity.getX(), - (finalPos.y - pEntity.getY()), -(finalPos.z - pEntity.getZ()));
+        poseStack.translate(finalPos.x - pEntity.getPosition(partialTicks).x, - (finalPos.y - pEntity.getPosition(partialTicks).y), -(finalPos.z - pEntity.getPosition(partialTicks).z));
 
-        if (index == 4){
-            System.out.println("Ah");
-            System.out.println(yRot);
-            System.out.println(oldYRot);
-            System.out.println(finalYRot);
+        Quaternionf rotation = new Quaternionf();
+
+        if(pEntity.getOldPartPos(index) != null) {
+            float yRot = pEntity.getPartYRot(index);
+            float xRot = pEntity.getPartXRot(index);
+            float oldYRot = pEntity.getOldPartYRot(index);
+            float oldXRot = pEntity.getOldPartXRot(index);
+
+            float deltaYRot = Mth.wrapDegrees(yRot - oldYRot);
+            float interpYRot = oldYRot + deltaYRot * partialTicks;
+
+            float deltaXRot = Mth.wrapDegrees(xRot - oldXRot);
+            float interpXRot = oldXRot + deltaXRot * partialTicks;
+
+            rotation.rotationYXZ(
+                    interpYRot * Mth.DEG_TO_RAD,
+                    -interpXRot * Mth.DEG_TO_RAD,
+                    0
+            );
         }
-        poseStack.mulPose(Axis.YP.rotationDegrees(finalYRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(-finalXRot));
+
+
+        poseStack.mulPose(rotation);
         poseStack.translate(0, -height/2, -width/2);
+
 
         boolean flag = pEntity.hurtTime > 0;
         part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(texture)), packedLight, OverlayTexture.pack(0.0F, flag));

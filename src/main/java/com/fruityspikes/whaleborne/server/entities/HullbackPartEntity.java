@@ -225,12 +225,13 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
         float lerpedYRot = Mth.lerp(partialTicks, yRotO, this.getYRot());
         float lerpedXRot = Mth.lerp(partialTicks, xRotO, this.getXRot());
 
-
         part.resetPose();
         part.setPos(0,0,0);
 
         poseStack.mulPose(Axis.XP.rotationDegrees(180));
-        poseStack.translate(this.getX() - parent.getX(), - (this.getY() - parent.getY()), -(this.getZ() - parent.getZ()));
+        poseStack.translate(this.getPosition(partialTicks).x - parent.getPosition(partialTicks).x,
+                - (this.getPosition(partialTicks).y - parent.getPosition(partialTicks).y),
+                -(this.getPosition(partialTicks).z - parent.getPosition(partialTicks).z));
 
 
         poseStack.mulPose(Axis.YP.rotationDegrees(lerpedYRot));

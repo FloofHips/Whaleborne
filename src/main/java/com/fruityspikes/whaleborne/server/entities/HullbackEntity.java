@@ -217,15 +217,15 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
                     .xRot(pitchRad);
 
             Vec3 targetPos = this.position().add(rotatedOffset);
-//            if (i > 0) {
-//                prevPartPositions[i] = new Vec3(
-//                        Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetPos.x),
-//                        Mth.lerp(partDragFactors[i], prevPartPositions[i].y, targetPos.y),
-//                        Mth.lerp(partDragFactors[i], prevPartPositions[i].z, targetPos.z)
-//                );
-//            } else {
-//                prevPartPositions[i] = targetPos;
-//            }
+            if (i > 0) {
+                prevPartPositions[i] = new Vec3(
+                        Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetPos.x),
+                        Mth.lerp(partDragFactors[i], prevPartPositions[i].y, targetPos.y),
+                        Mth.lerp(partDragFactors[i], prevPartPositions[i].z, targetPos.z)
+                );
+            } else {
+                prevPartPositions[i] = targetPos;
+            }
             prevPartPositions[i] = targetPos;
         }
 
