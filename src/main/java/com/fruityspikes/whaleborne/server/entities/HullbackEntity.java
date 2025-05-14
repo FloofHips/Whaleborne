@@ -49,15 +49,14 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
-        this.moveControl = new SmoothSwimmingMoveControl(this, 1, 1, 0.02F, 0.1F, true);
-        //this.moveControl = new HullbackMoveControl(this);
+        this.moveControl = new SmoothSwimmingMoveControl(this, 1, 2, 0.02F, 0.1F, true);
         this.lookControl = new SmoothSwimmingLookControl(this, 180);
 
-        this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F, 1f);
-        this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F, 1f);
-        this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F, 1f);
-        this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F, 1f);
-        this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F, 1f);
+        this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F);
+        this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F);
+        this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F);
+        this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F);
+        this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F);
 
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
         this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
@@ -194,17 +193,19 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         }
     }
     private void updatePartPositions() {
-        float[] partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.1f, 0.07f};
+        float[] partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.3f, 0.07f};
         Vec3[] baseOffsets = {
                 new Vec3(0, 0, 6),   // Nose
                 new Vec3(0, 0, 2.5), // Head
-                new Vec3(0, 0, -3),  // Body
+                new Vec3(0, 0, -2.5),  // Body
                 new Vec3(0, 0, -7),  // Tail base
                 new Vec3(0, 0, -11)  // Fluke tip
         };
 
         if (prevPartPositions[0] == null) {
-            prevPartPositions = Arrays.copyOf(baseOffsets, baseOffsets.length);
+            for (int i = 0; i < prevPartPositions.length; i++) {
+                prevPartPositions[i] = position();
+            }
         }
 
         float swimCycle = (float) (Mth.sin(this.tickCount * 0.1f) * this.getDeltaMovement().length());
@@ -212,21 +213,24 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         float pitchRad = this.getXRot() * Mth.DEG_TO_RAD;
 
         for (int i = 0; i < baseOffsets.length; i++) {
-            Vec3 rotatedOffset = baseOffsets[i]
+            baseOffsets[i] = baseOffsets[i]
                     .yRot(yawRad)
                     .xRot(pitchRad);
 
-            Vec3 targetPos = this.position().add(rotatedOffset);
+            baseOffsets[i] = new Vec3(
+                    this.getX() + baseOffsets[i].x,
+                    this.getY() + baseOffsets[i].y,
+                    this.getZ() + baseOffsets[i].z
+            );
+
             if (i > 0) {
-                prevPartPositions[i] = new Vec3(
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].x, targetPos.x),
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].y, targetPos.y),
-                        Mth.lerp(partDragFactors[i], prevPartPositions[i].z, targetPos.z)
+                baseOffsets[i] = new Vec3(
+                        Mth.lerp(partDragFactors[i], prevPartPositions[i].x, baseOffsets[i].x),
+                        Mth.lerp(partDragFactors[i], prevPartPositions[i].y, baseOffsets[i].y),
+                        Mth.lerp(partDragFactors[i], prevPartPositions[i].z, baseOffsets[i].z)
                 );
-            } else {
-                prevPartPositions[i] = targetPos;
             }
-            prevPartPositions[i] = targetPos;
+            prevPartPositions[i] = baseOffsets[i];
         }
 
         this.partPosition[0] = prevPartPositions[0];

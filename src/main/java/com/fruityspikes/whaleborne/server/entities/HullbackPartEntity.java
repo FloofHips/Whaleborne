@@ -38,63 +38,16 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     public final String name;
     private final EntityDimensions size;
 
-    private Vec3 prevPos;
-    private float prevYRot;
-    private float prevXRot;
-    private Vec3 targetPosition;
-    private float targetYRot;
-    private float targetXRot;
-    private float lerpProgress;
-    private float lerpSpeed;
-
-    public HullbackPartEntity(HullbackEntity parent, String name, float width, float height, float dragFactor) {
+    public HullbackPartEntity(HullbackEntity parent, String name, float width, float height) {
         super(parent);
         this.size = EntityDimensions.scalable(width, height);
         this.refreshDimensions();
         this.parent = parent;
         this.name = name;
-        this.lerpSpeed = 1.0f - dragFactor;
-    }
-
-    public void setTargetPosition(double x, double y, double z, float targetYRot, float targetXRot) {
-        Vec3 target = new Vec3(x, y ,z);
-        if (!target.equals(this.targetPosition)) {
-            this.targetPosition = target;
-            this.targetYRot = targetYRot;
-            this.targetXRot = targetXRot;
-            //this.lerpProgress = 0.0f;
-        }
     }
 
     public void tick() {
         super.tick();
-
-//        lerpProgress+=0.1;
-//
-//        if(lerpProgress>=1)
-//            lerpProgress = 1;
-//        if(targetPosition!=null && targetPosition.distanceTo(this.position())<=0)
-//            lerpProgress = 0;
-
-        //if (lerpProgress < 1.0f) {
-
-        //lerpProgress = Math.min(1.0f, lerpProgress + lerpSpeed * 0.1f);
-
-//        double x = Mth.lerp(lerpProgress, this.getX(), targetPosition.x);
-//        double y = Mth.lerp(lerpProgress, this.getY(), targetPosition.y);
-//        double z = Mth.lerp(lerpProgress, this.getZ(), targetPosition.z);
-
-//        this.setYRot(Mth.lerp(lerpProgress, this.getYRot(), targetYRot));
-//        this.setXRot(Mth.lerp(lerpProgress, this.getXRot(), targetXRot));
-
-//        this.setYRot(targetYRot);
-//        this.setXRot(targetXRot);
-//        this.setPos(targetPosition.x, targetPosition.y, targetPosition.z);
-//        } else {
-//            this.setPos(targetPosition.x, targetPosition.y, targetPosition.z);
-//            this.setYRot(targetYRot);
-//            this.setXRot(targetXRot);
-//        }
     }
 
     protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
@@ -139,10 +92,7 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
         return false;
     }
     public InteractionResult interact(Player player, InteractionHand hand) {
-        if (!this.isVehicle()) {
-            player.startRiding(this);
-            return InteractionResult.sidedSuccess(this.level().isClientSide);
-        }
+        parent.interact(player, hand);
         return super.interact(player, hand);
     }
     protected void defineSynchedData() {
