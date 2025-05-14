@@ -21,6 +21,8 @@ import net.minecraft.world.entity.boss.EnderDragonPart;
 import net.minecraft.world.entity.monster.Guardian;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.entity.PartEntity;
 
@@ -46,6 +48,12 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     private float[] oldPartXRot;
     private float mouthOpenProgress;
     private boolean isOpening;
+    public BlockState[][] headDirt; // 8 x 5
+    public BlockState[][] headTopDirt; // 8 x 5
+    public BlockState[][] bodyDirt; // 5 x 5
+    public BlockState[][] bodyTopDirt; // 5 x 5
+    public BlockState[][] tailDirt; // 2 x 2
+    public BlockState[][] flukeDirt; // 4 x 4
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
@@ -72,7 +80,80 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         this.oldPartXRot = new float[5];
 
         this.mouthOpenProgress = 0.0f;
+        initDirt();
     }
+
+    private void initDirt() {
+        headDirt = new BlockState[8][5];
+        fillDirtArray(headDirt, true);
+
+        headTopDirt = new BlockState[8][5];
+        fillDirtArray(headTopDirt, false);
+
+        bodyDirt = new BlockState[6][5];
+        fillDirtArray(bodyDirt, true);
+
+        bodyTopDirt = new BlockState[6][5];
+        fillDirtArray(bodyTopDirt, false);
+
+        tailDirt = new BlockState[4][2];
+        fillDirtArray(tailDirt, true);
+
+        flukeDirt = new BlockState[3][5];
+        fillDirtArray(flukeDirt, true);
+    }
+
+    private void fillDirtArray(BlockState[][] array, boolean bottom) {
+        if(bottom){
+            BlockState[] possibleBottomBlocks = {
+                    Blocks.SEAGRASS.defaultBlockState(),
+                    Blocks.KELP.defaultBlockState(),
+                    Blocks.TALL_SEAGRASS.defaultBlockState(),
+                    Blocks.KELP_PLANT.defaultBlockState(),
+                    Blocks.ACACIA_LOG.defaultBlockState()
+            };
+
+            for (int x = 0; x < array.length; x++) {
+                for (int y = 0; y < array[x].length; y++) {
+                    array[x][y] = Blocks.MOSS_CARPET.defaultBlockState();
+                    if (random.nextDouble() < 0.5) {
+                        array[x][y] = possibleBottomBlocks[random.nextInt(possibleBottomBlocks.length)];
+                    }
+                }
+            }
+        } else {
+            BlockState[] possibleBottomBlocks = {
+                    Blocks.ACACIA_LOG.defaultBlockState(),
+                    Blocks.MOSS_CARPET.defaultBlockState()
+            };
+
+            for (int x = 0; x < array.length; x++) {
+                for (int y = 0; y < array[x].length; y++) {
+                    array[x][y] = Blocks.AIR.defaultBlockState();
+                    if (random.nextDouble() < 0.5) {
+                        array[x][y] = possibleBottomBlocks[random.nextInt(possibleBottomBlocks.length)];
+                    }
+                }
+            }
+        }
+    }
+
+    public BlockState[][] getDirtArray(int index, boolean bottom){
+        if(bottom){
+            switch (index){
+                case 2: return bodyDirt;
+                case 3: return tailDirt;
+                case 4: return flukeDirt;
+                default: return headDirt;
+            }
+        }
+        else {
+            if (index == 0)
+                return headTopDirt;
+            else return bodyTopDirt;
+        }
+    }
+
     public static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 10.0).add(Attributes.MOVEMENT_SPEED, 1.2000000476837158).add(Attributes.ATTACK_DAMAGE, 3.0);
     }

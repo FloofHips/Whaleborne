@@ -50,6 +50,10 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
         super.tick();
     }
 
+    public EntityDimensions getSize() {
+        return size;
+    }
+
     protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
         if (this.hasPassenger(passenger)) {
             float f = 0;

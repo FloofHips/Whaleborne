@@ -18,6 +18,9 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.TallSeagrassBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
@@ -90,24 +93,63 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
         boolean flag = pEntity.hurtTime > 0;
         part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(texture)), packedLight, OverlayTexture.pack(0.0F, flag));
-        poseStack.translate(0, height/2, width/2);
-        renderDirt(poseStack, buffer, packedLight, pEntity);
-        poseStack.translate(0, -height-1, 0);
-        renderDirt(poseStack, buffer, packedLight, pEntity);
+        if(index == 4)
+            poseStack.translate(-0.5f, 0, 0);
+        if(index == 3)
+            poseStack.translate(0.25f, 0, 0);
+        poseStack.translate(-width/2, height/2, 0);
+        //renderDirt(poseStack, buffer, packedLight, pEntity, index);
+        //poseStack.mulPose(Axis.ZN.rotationDegrees(180));
+       // poseStack.translate(0, -height-1, 0);
+        //poseStack.mulPose(Axis.ZP.rotationDegrees(180));
+        renderBottomDirt(poseStack, buffer, packedLight, pEntity, index);
+        if(index==0 || index==2){
+            poseStack.translate(0, -height, 0);
+            poseStack.mulPose(Axis.ZN.rotationDegrees(180));
+            poseStack.translate(-width, 0, 0);
+            rendertTopDirt(poseStack, buffer, packedLight, pEntity, index);
+        }
         poseStack.popPose();
     }
-    public void renderDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight, HullbackEntity parent) {
-        if(Minecraft.getInstance().getEntityRenderDispatcher().shouldRenderHitBoxes()) {
-            LevelRenderer.renderLineBox(
-                    poseStack,
-                    buffer.getBuffer(RenderType.lines()),
-                    new AABB(-0.1, -0.1, -0.1, 0.1, 10, 0.1),
-                    1, 0, 0, 1
-            );
-        }
 
+    private void rendertTopDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight, HullbackEntity parent, int index) {
         boolean flag = parent.hurtTime > 0;
-        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.DARK_OAK_PLANKS.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+        BlockState[][] array = parent.getDirtArray(index, false);
+
+        if(array!=null){
+            for (int x = 0; x < array.length; x++) {
+                for (int y = 0; y < array[x].length; y++) {
+                    poseStack.translate(y, 0, x);
+                    Minecraft.getInstance().getBlockRenderer().renderSingleBlock(array[x][y], poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+                    poseStack.translate(-y, 0, -x);
+                }
+            }
+        }
+    }
+
+    public void renderBottomDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight, HullbackEntity parent, int index) {
+        boolean flag = parent.hurtTime > 0;
+        BlockState[][] array = parent.getDirtArray(index, true);
+
+        if(array!=null){
+            for (int x = 0; x < array.length; x++) {
+                for (int y = 0; y < array[x].length; y++) {
+                    poseStack.translate(y, 0, x);
+                    Minecraft.getInstance().getBlockRenderer().renderSingleBlock(array[x][y], poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+                    if(array[x][y].is(Blocks.TALL_SEAGRASS)) {
+                        poseStack.translate(0, 1, 0);
+                        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(array[x][y].setValue(TallSeagrassBlock.HALF, DoubleBlockHalf.UPPER), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+                        poseStack.translate(0, -1, 0);
+                    }
+                    if(array[x][y].is(Blocks.KELP_PLANT)) {
+                        poseStack.translate(0, 1, 0);
+                        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+                        poseStack.translate(0, -1, 0);
+                    }
+                    poseStack.translate(-y, 0, -x);
+                }
+            }
+        }
     }
     @Override
     public ResourceLocation getTextureLocation(HullbackEntity entity) {
