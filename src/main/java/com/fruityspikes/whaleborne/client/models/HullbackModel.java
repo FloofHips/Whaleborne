@@ -1,20 +1,13 @@
 package com.fruityspikes.whaleborne.client.models;
 
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
-import com.fruityspikes.whaleborne.server.entities.HullbackPartEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.math.Axis;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.model.geom.builders.*;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
-import net.minecraft.world.phys.Vec3;
 
 public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
     private final ModelPart head;
@@ -132,8 +125,8 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
         //this.body.yRot = entity.body.getYRot();
 
         //float finMovement = Mth.sin(ageInTicks * 0.1f) * 0.2f;
-        left_fin.zRot = swimCycle;
-        right_fin.zRot = -swimCycle;
+        left_fin.zRot = -swimCycle;
+        right_fin.zRot = swimCycle;
 
     }
 

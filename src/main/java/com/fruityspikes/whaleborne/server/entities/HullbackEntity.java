@@ -1,11 +1,15 @@
 package com.fruityspikes.whaleborne.server.entities;
 
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
-import net.minecraft.sounds.SoundEvent;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
+import net.minecraft.world.*;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -15,24 +19,36 @@ import net.minecraft.world.entity.ai.goal.*;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.ai.navigation.WaterBoundPathNavigation;
-import net.minecraft.world.entity.animal.Dolphin;
+import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.animal.WaterAnimal;
-import net.minecraft.world.entity.boss.EnderDragonPart;
+import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Guardian;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.*;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.entity.PartEntity;
+import net.minecraftforge.items.wrapper.InvWrapper;
 
 import javax.annotation.Nullable;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.UUID;
+import java.util.*;
 
-public class HullbackEntity extends WaterAnimal {// implements HasCustomInventoryScreen, OwnableEntity, PlayerRideableJumping, Saddleable {
+public class HullbackEntity extends WaterAnimal implements ContainerListener, PlayerRideableJumping, Saddleable {
     private float leftEyeYaw, rightEyeYaw, eyePitch;
+    private LazyOptional<?> itemHandler = null;
+    protected SimpleContainer inventory;
+    public static final int INV_SLOT_ARMOR = 0;
+    public static final int INV_SLOT_CROWN = 1;
+    public static final int INV_SLOT_SADDLE = 2;
+    private static final int FLAG_SADDLE = 4;
+    private static final EntityDataAccessor<Boolean> DATA_SADDLE_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> DATA_ARMOR_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
     public final HullbackPartEntity head;
     public final HullbackPartEntity nose;
     public final HullbackPartEntity body;
@@ -54,6 +70,23 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     public BlockState[][] bodyTopDirt; // 5 x 5
     public BlockState[][] tailDirt; // 2 x 2
     public BlockState[][] flukeDirt; // 4 x 4
+    public BlockState[] possibleBottomBlocks = {
+            Blocks.SEAGRASS.defaultBlockState(),
+            Blocks.KELP.defaultBlockState(),
+            Blocks.TALL_SEAGRASS.defaultBlockState(),
+            Blocks.KELP_PLANT.defaultBlockState(),
+            Blocks.ACACIA_LOG.defaultBlockState()
+    };
+    public BlockState[] possibleFreshBlocks = {
+            Blocks.SEAGRASS.defaultBlockState(),
+            Blocks.KELP.defaultBlockState(),
+            Blocks.ACACIA_LOG.defaultBlockState(),
+            Blocks.MOSS_CARPET.defaultBlockState()
+    };
+    public BlockState[] possibleTopBlocks = {
+            Blocks.ACACIA_LOG.defaultBlockState(),
+            Blocks.MOSS_CARPET.defaultBlockState()
+    };
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
@@ -105,33 +138,20 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
 
     private void fillDirtArray(BlockState[][] array, boolean bottom) {
         if(bottom){
-            BlockState[] possibleBottomBlocks = {
-                    Blocks.SEAGRASS.defaultBlockState(),
-                    Blocks.KELP.defaultBlockState(),
-                    Blocks.TALL_SEAGRASS.defaultBlockState(),
-                    Blocks.KELP_PLANT.defaultBlockState(),
-                    Blocks.ACACIA_LOG.defaultBlockState()
-            };
-
             for (int x = 0; x < array.length; x++) {
                 for (int y = 0; y < array[x].length; y++) {
-                    array[x][y] = Blocks.MOSS_CARPET.defaultBlockState();
+                    array[x][y] = Blocks.AIR.defaultBlockState();
                     if (random.nextDouble() < 0.5) {
                         array[x][y] = possibleBottomBlocks[random.nextInt(possibleBottomBlocks.length)];
                     }
                 }
             }
         } else {
-            BlockState[] possibleBottomBlocks = {
-                    Blocks.ACACIA_LOG.defaultBlockState(),
-                    Blocks.MOSS_CARPET.defaultBlockState()
-            };
-
             for (int x = 0; x < array.length; x++) {
                 for (int y = 0; y < array[x].length; y++) {
                     array[x][y] = Blocks.AIR.defaultBlockState();
                     if (random.nextDouble() < 0.5) {
-                        array[x][y] = possibleBottomBlocks[random.nextInt(possibleBottomBlocks.length)];
+                        array[x][y] = possibleTopBlocks[random.nextInt(possibleTopBlocks.length)];
                     }
                 }
             }
@@ -158,6 +178,131 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 10.0).add(Attributes.MOVEMENT_SPEED, 1.2000000476837158).add(Attributes.ATTACK_DAMAGE, 3.0);
     }
 
+    protected int getInventorySize() {
+        return 3;
+    }
+    protected void createInventory() {
+        SimpleContainer simplecontainer = this.inventory;
+        this.inventory = new SimpleContainer(this.getInventorySize());
+        if (simplecontainer != null) {
+            simplecontainer.removeListener(this);
+            int i = Math.min(simplecontainer.getContainerSize(), this.inventory.getContainerSize());
+
+            for(int j = 0; j < i; ++j) {
+                ItemStack itemstack = simplecontainer.getItem(j);
+                if (!itemstack.isEmpty()) {
+                    this.inventory.setItem(j, itemstack.copy());
+                }
+            }
+        }
+
+        this.inventory.addListener(this);
+        this.updateContainerEquipment();
+        this.itemHandler = LazyOptional.of(() -> {
+            return new InvWrapper(this.inventory);
+        });
+    }
+    protected void updateContainerEquipment() {
+        if (!this.level().isClientSide) {
+            this.setFlag(4, !this.inventory.getItem(0).isEmpty());
+        }
+    }
+    public void containerChanged(Container invBasic) {
+        boolean flag = this.isSaddled();
+        this.updateContainerEquipment();
+        if (this.tickCount > 20 && !flag && this.isSaddled()) {
+            this.playSound(this.getSaddleSoundEvent(), 0.5F, 1.0F);
+        }
+
+    }
+    public boolean isTamed() {
+        return this.getFlag(2);
+    }
+    public void setTamed(boolean tamed) {
+        this.setFlag(2, tamed);
+    }
+
+    public SimpleContainer getInventory() {
+        return inventory;
+    }
+
+    public boolean isSaddleable() {
+        return this.isAlive();// && this.isTamed();
+    }
+
+    public void equipSaddle(@Nullable SoundSource source) {
+        this.inventory.setItem(INV_SLOT_SADDLE, new ItemStack(Items.SADDLE));
+        this.entityData.set(DATA_SADDLE_ID, true);
+    }
+
+    public void equipArmor() {
+        this.entityData.set(DATA_ARMOR_ID, 64);
+    }
+    public boolean isWearingArmor() {
+        if (this.level().isClientSide) {
+            return this.entityData.get(DATA_ARMOR_ID) == 64;
+        }
+        return !this.inventory.getItem(INV_SLOT_ARMOR).isEmpty();
+    }
+
+    public boolean isSaddled() {
+        if (this.level().isClientSide) {
+            return this.entityData.get(DATA_SADDLE_ID);
+        }
+        return !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty();
+    }
+
+    protected boolean getFlag(int flagId) {
+        return ((Byte)this.entityData.get(DATA_ID_FLAGS) & flagId) != 0;
+    }
+
+    protected void setFlag(int flagId, boolean value) {
+        byte b0 = (Byte)this.entityData.get(DATA_ID_FLAGS);
+        if (value) {
+            this.entityData.set(DATA_ID_FLAGS, (byte)(b0 | flagId));
+        } else {
+            this.entityData.set(DATA_ID_FLAGS, (byte)(b0 & ~flagId));
+        }
+    }
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.entityData.define(DATA_SADDLE_ID, false);
+        this.entityData.define(DATA_ARMOR_ID, 0);
+        this.entityData.define(DATA_ID_FLAGS, (byte)0);
+    }
+    public void addAdditionalSaveData(CompoundTag compound) {
+        super.addAdditionalSaveData(compound);
+        ListTag listtag = new ListTag();
+
+        for(int i = 2; i < this.inventory.getContainerSize(); ++i) {
+            ItemStack itemstack = this.inventory.getItem(i);
+            if (!itemstack.isEmpty()) {
+                CompoundTag compoundtag = new CompoundTag();
+                compoundtag.putByte("Slot", (byte)i);
+                itemstack.save(compoundtag);
+                listtag.add(compoundtag);
+            }
+        }
+        compound.put("Items", listtag);
+    }
+    public void readAdditionalSaveData(CompoundTag compound) {
+        super.readAdditionalSaveData(compound);
+        this.createInventory();
+        ListTag listtag = compound.getList("Items", 10);
+
+        for(int i = 0; i < listtag.size(); ++i) {
+            CompoundTag compoundtag = listtag.getCompound(i);
+            int j = compoundtag.getByte("Slot") & 255;
+            if (j >= 2 && j < this.inventory.getContainerSize()) {
+                this.inventory.setItem(j, ItemStack.of(compoundtag));
+            }
+        }
+
+        this.updateContainerEquipment();
+    }
+    public float getArmorProgress() {
+        return (float) this.entityData.get(DATA_ARMOR_ID) / 64;
+    }
     public float getLeftEyeYaw() { return leftEyeYaw; }
     public float getRightEyeYaw() { return rightEyeYaw; }
     public float getEyePitch() { return eyePitch; }
@@ -209,11 +354,145 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         this.goalSelector.addGoal(8, new FollowBoatGoal(this));
         this.goalSelector.addGoal(9, new AvoidEntityGoal(this, Guardian.class, 8.0F, 1.0, 1.0));
         this.targetSelector.addGoal(1, (new HurtByTargetGoal(this, new Class[]{Guardian.class})).setAlertOthers(new Class[0]));
+    }
 
-//        this.goalSelector.addGoal(0, new TryFindWaterGoal(this));
-//        this.goalSelector.addGoal(1, new RandomSwimmingGoal(this, 1.0, 40));
-//        this.goalSelector.addGoal(2, new LookAtPlayerGoal(this, Player.class, 6.0F));
-//        this.goalSelector.addGoal(3, new RandomLookAroundGoal(this));
+    public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
+        ItemStack heldItem = player.getItemInHand(hand);
+        return handleVegetationRemoval(player, hand, part, top, heldItem.getItem() instanceof ShearsItem);
+    }
+    public InteractionResult interactArmor(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
+        ItemStack heldItem = player.getItemInHand(hand);
+
+        if (!this.level().isClientSide) {
+            if (heldItem.getItem() instanceof SaddleItem) {
+                if (!this.isSaddled()) {
+                    this.equipSaddle(SoundSource.PLAYERS);
+                    if (!player.getAbilities().instabuild) {
+                        heldItem.shrink(1);
+                    }
+                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            SoundEvents.HORSE_SADDLE,
+                            SoundSource.PLAYERS, 1.0F, 0.1F);
+                    return InteractionResult.SUCCESS;
+                }
+                return InteractionResult.PASS;
+            }
+            else if (heldItem.is(Items.DARK_OAK_PLANKS)) {
+                ItemStack currentArmor = this.inventory.getItem(INV_SLOT_ARMOR);
+                int toAdd = Math.min(heldItem.getCount(), 64 - currentArmor.getCount());
+
+                if (toAdd > 0) {
+                    if (currentArmor.isEmpty()) {
+                        this.inventory.setItem(INV_SLOT_ARMOR, new ItemStack(Items.DARK_OAK_PLANKS, toAdd));
+                    } else {
+                        currentArmor.grow(toAdd);
+                    }
+
+                    if (!player.getAbilities().instabuild) {
+                        heldItem.shrink(toAdd);
+                    }
+                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            SoundEvents.WOOD_PLACE,
+                            SoundSource.PLAYERS, 1.0F, 1.0F);
+                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            SoundEvents.ITEM_FRAME_REMOVE_ITEM,
+                            SoundSource.PLAYERS, 1.0F, 0.5f + ((float) currentArmor.getCount() /64));
+                    if(currentArmor.getCount()==64){
+                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
+                            SoundSource.PLAYERS, 1.0F, 1.0F);
+                        this.equipArmor();
+
+                    }
+                    return InteractionResult.SUCCESS;
+                }
+                return InteractionResult.PASS;
+            }
+        }
+        return InteractionResult.PASS;
+    }
+    private InteractionResult handleVegetationRemoval(Player player, InteractionHand hand, HullbackPartEntity part, boolean top, boolean isShears) {
+        BlockState[][] dirtArray = getDirtArrayForPart(part, top);
+        BlockState removedState = Blocks.AIR.defaultBlockState();
+
+        for (int x = 0; x < dirtArray.length; x++) {
+            for (int y = 0; y < dirtArray[x].length; y++) {
+                if(isRemovableVegetation(dirtArray[x][y], isShears)){
+                    removedState = dirtArray[x][y];
+                    if (!this.level().isClientSide) {
+                        dirtArray[x][y] = Blocks.AIR.defaultBlockState();
+                        ItemStack drop = getDropForBlock(removedState);
+                        if (!drop.isEmpty()) {
+                            ItemEntity itemEntity = new ItemEntity(
+                                    this.level(),
+                                    part.getX() + y - part.getSize().width / 2,
+                                    part.getY() + (top ? part.getSize().height + 0.5f : - 0.5f),
+                                    part.getZ() - x + part.getSize().width / 2,
+                                    drop
+                            );
+                            this.level().addFreshEntity(itemEntity);
+                        }
+
+                        if (!player.isCreative()) {
+                            player.getItemInHand(hand).hurtAndBreak(1, player,
+                                    (p) -> p.broadcastBreakEvent(hand));
+                        }
+
+                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                                isShears ? SoundEvents.SHEEP_SHEAR : SoundEvents.AXE_STRIP,
+                                SoundSource.PLAYERS, 1.0F, 1.0f);
+
+                        return InteractionResult.SUCCESS;
+                    } else {
+                        dirtArray[x][y] = Blocks.AIR.defaultBlockState();
+                        return InteractionResult.SUCCESS;
+                    }
+                }
+            }
+        }
+        return InteractionResult.PASS;
+    }
+
+    private BlockState[][] getDirtArrayForPart(HullbackPartEntity part, boolean top) {
+        if (part == this.head) {
+            return top ? this.headTopDirt : this.headDirt;
+        } else if (part == this.body) {
+            return top ? this.bodyTopDirt : this.bodyDirt;
+        } else if (part == this.fluke) {
+            return this.flukeDirt;
+        } else if (part == this.nose) {
+            return top ? this.headTopDirt : this.headDirt;
+        }
+        return this.tailDirt;
+    }
+
+    private boolean isRemovableVegetation(BlockState state, boolean isShears) {
+        Block block = state.getBlock();
+        if (isShears) {
+            return block == Blocks.SEAGRASS || block == Blocks.TALL_SEAGRASS ||
+                    block == Blocks.KELP || block == Blocks.KELP_PLANT ||
+                    block == Blocks.MOSS_CARPET;
+        } else {
+            return block == Blocks.ACACIA_LOG;
+        }
+    }
+
+    private ItemStack getDropForBlock(BlockState state) {
+        Block block = state.getBlock();
+        if (block == Blocks.SEAGRASS) {
+            return new ItemStack(Items.SEAGRASS);
+        } else if (block == Blocks.KELP) {
+            return new ItemStack(Items.KELP);
+        } else if (block == Blocks.MOSS_CARPET) {
+            return new ItemStack(Items.MOSS_CARPET);
+        } else if (block == Blocks.ACACIA_LOG) {
+            return new ItemStack(Items.ACACIA_LOG);
+        } else if (block == Blocks.KELP_PLANT) {
+            return new ItemStack(Items.KELP, 2);
+        } else if (block == Blocks.TALL_SEAGRASS) {
+            return new ItemStack(Items.SEAGRASS, 2);
+        }
+        return ItemStack.EMPTY;
     }
 
     @Override
@@ -222,9 +501,67 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         super.tick();
         updatePartPositions();
         updateMouthOpening();
+
+        if(this.inventory!=null && !this.inventory.getItem(INV_SLOT_ARMOR).isEmpty())
+            this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR).getCount());
+
+        randomTickDirt(headDirt, true);
+        randomTickDirt(bodyDirt, true);
+        randomTickDirt(tailDirt, true);
+        randomTickDirt(flukeDirt, true);
+
+        if(!isSaddled()){
+            randomTickDirt(headTopDirt, false);
+            randomTickDirt(bodyTopDirt, false);
+        } else {
+            for (int x = 0; x < headTopDirt.length; x++) {
+                for (int y = 0; y < headTopDirt[x].length; y++) {
+                    headTopDirt[x][y] = Blocks.AIR.defaultBlockState();
+                }
+            }
+            for (int x = 0; x < bodyTopDirt.length; x++) {
+                for (int y = 0; y < bodyTopDirt[x].length; y++) {
+                    bodyTopDirt[x][y] = Blocks.AIR.defaultBlockState();
+                }
+            }
+        }
+
         for ( HullbackPartEntity part : getSubEntities()
              ) {
             part.tick();
+        }
+    }
+
+    private void randomTickDirt(BlockState[][] array, boolean bottom) {
+        if(bottom){
+            if (this.random.nextInt(100) <= 10) {
+                int x = this.random.nextInt(array.length);
+                if (array[x][this.random.nextInt(array[x].length)] == Blocks.SEAGRASS.defaultBlockState()) {
+                    array[x][this.random.nextInt(array[x].length)] = Blocks.TALL_SEAGRASS.defaultBlockState();
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+                if (array[x][this.random.nextInt(array[x].length)] == Blocks.KELP.defaultBlockState()) {
+                    array[x][this.random.nextInt(array[x].length)] = Blocks.KELP_PLANT.defaultBlockState();
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+                if (array[x][this.random.nextInt(array[x].length)] == Blocks.AIR.defaultBlockState()) {
+                    array[x][this.random.nextInt(array[x].length)] = possibleFreshBlocks[this.random.nextInt(possibleFreshBlocks.length)];
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+            }
+        }
+        else{
+            if (this.random.nextInt(100) <= 5) {
+                int x = this.random.nextInt(array.length);
+                if (array[x][this.random.nextInt(array[x].length)] == Blocks.AIR.defaultBlockState()) {
+                    array[x][this.random.nextInt(array[x].length)] = possibleTopBlocks[this.random.nextInt(possibleTopBlocks.length)];
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+            }
         }
     }
 
@@ -278,7 +615,7 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
         Vec3[] baseOffsets = {
                 new Vec3(0, 0, 6),   // Nose
                 new Vec3(0, 0, 2.5), // Head
-                new Vec3(0, 0, -2.5),  // Body
+                new Vec3(0, 0, -2.25),  // Body
                 new Vec3(0, 0, -7),  // Tail base
                 new Vec3(0, 0, -11)  // Fluke tip
         };
@@ -445,6 +782,26 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
     }
     protected BodyRotationControl createBodyControl() {
         return new HullbackBodyRotationControl(this);
+    }
+
+    @Override
+    public void onPlayerJump(int i) {
+        
+    }
+
+    @Override
+    public boolean canJump() {
+        return false;
+    }
+
+    @Override
+    public void handleStartJump(int i) {
+
+    }
+
+    @Override
+    public void handleStopJump() {
+
     }
 
     class HullbackMoveControl extends MoveControl {
@@ -659,7 +1016,6 @@ public class HullbackEntity extends WaterAnimal {// implements HasCustomInventor
             float desiredYaw = (float)Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
 
             float angleToPlayer = Mth.wrapDegrees(desiredYaw - this.whale.getYRot());
-            boolean shouldBeOnRight = angleToPlayer > 0;
 
             float sideAwareYaw = desiredYaw + (approachFromRight ? -90f : 90f);
 

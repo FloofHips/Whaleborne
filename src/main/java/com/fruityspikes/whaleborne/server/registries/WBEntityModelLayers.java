@@ -7,6 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 public class WBEntityModelLayers {
 
     public static final ModelLayerLocation HULLBACK = register("hullback");
+    public static final ModelLayerLocation HULLBACK_ARMOR = register("hullback_armor");
 
     private static ModelLayerLocation register(String name) {
         return register(name, "main");

@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne;
 
+import com.fruityspikes.whaleborne.client.models.HullbackArmorModel;
 import com.fruityspikes.whaleborne.client.models.HullbackModel;
 import com.fruityspikes.whaleborne.client.renderers.HullbackRenderer;
 import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
@@ -121,6 +122,7 @@ public class Whaleborne
         @SubscribeEvent
         public static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
             event.registerLayerDefinition(WBEntityModelLayers.HULLBACK, HullbackModel::createBodyLayer);
+            event.registerLayerDefinition(WBEntityModelLayers.HULLBACK_ARMOR, HullbackArmorModel::createBodyLayer);
         }
 
         @SubscribeEvent

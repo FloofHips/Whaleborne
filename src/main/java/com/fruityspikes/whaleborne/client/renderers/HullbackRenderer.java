@@ -1,11 +1,13 @@
 package com.fruityspikes.whaleborne.client.renderers;
 
 import com.fruityspikes.whaleborne.Whaleborne;
+import com.fruityspikes.whaleborne.client.models.HullbackArmorModel;
 import com.fruityspikes.whaleborne.client.models.HullbackModel;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackPartEntity;
 import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
@@ -26,29 +28,45 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 
 public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<HullbackEntity, HullbackModel<HullbackEntity>> {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/texture.png");
+    public static final ResourceLocation MOB_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback.png");
+    public static final ResourceLocation SADDLE_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback_saddle.png");
+    public static final ResourceLocation ARMOR_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback_dark_oak_armor.png");
+    public static final ResourceLocation ARMOR_PROGRESS = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback_armor_progress.png");
+    private final HullbackArmorModel<HullbackEntity> armorModel;
 
     public HullbackRenderer(EntityRendererProvider.Context ctx) {
         super(ctx, new HullbackModel<>(ctx.bakeLayer(WBEntityModelLayers.HULLBACK)), 5F);
+        this.armorModel = new HullbackArmorModel<>(ctx.bakeLayer(WBEntityModelLayers.HULLBACK_ARMOR));
     }
 
     @Override
     public void render(HullbackEntity pEntity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         super.render(pEntity, entityYaw, partialTicks, poseStack, buffer, packedLight);
 
-//        pEntity.nose.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getHead());
-//        pEntity.body.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getBody());
-//        pEntity.tail.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getTail());
-//        pEntity.fluke.render(poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getFluke());
+//        VertexConsumer vertexconsumer4;
+//        //if (pEntity.getArmorProgress() > 0) {
+//
+//            float f2 = pEntity.getMouthOpenProgress();
+//
+//            VertexConsumer vertexconsumer = buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS));
+//            this.armorModel.renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, f2);
+//
+//            VertexConsumer vertexconsumer1 = buffer.getBuffer(RenderType.entityDecal(ARMOR_TEXTURE));
+//            this.armorModel.renderToBuffer(poseStack, vertexconsumer1, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);
 
-        renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getHead(), 0, 5.0F, 5.0F);
-        renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getBody(), 2, 5.0F, 5.0F);
+        //} else {
+        //    vertexconsumer4 = buffer.getBuffer(RenderType.entityCutoutNoCull(ARMOR_TEXTURE));
+        //    this.armorModel.renderToBuffer(poseStack, vertexconsumer4, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);
+        //}
 
-        renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getTail(), 3, 2.5F, 2.5F);
-        renderPart(pEntity, poseStack, buffer, partialTicks, TEXTURE, packedLight, this.model.getFluke(), 4, 0.6F, 4.0F);
+        renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getHead(), this.armorModel.getHead(), 0, 5.0F, 5.0F);
+        renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getBody(), this.armorModel.getBody(), 2, 5.0F, 5.0F);
+
+        renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getTail(), null, 3, 2.5F, 2.5F);
+        renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getFluke(), this.armorModel.getFluke(), 4, 0.6F, 4.0F);
     }
 
-    private void renderPart(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, float partialTicks, ResourceLocation texture, int packedLight, ModelPart part, int index, float height, float width) {
+    private void renderPart(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, float partialTicks, int packedLight, ModelPart part, ModelPart armorPart, int index, float height, float width) {
         poseStack.pushPose();
 
         Vec3 finalPos = Vec3.ZERO;
@@ -92,16 +110,53 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
 
         boolean flag = pEntity.hurtTime > 0;
-        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(texture)), packedLight, OverlayTexture.pack(0.0F, flag));
+
+        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(MOB_TEXTURE)), packedLight, OverlayTexture.pack(0.0F, flag));
+
+        if(pEntity.isSaddled()) {
+            poseStack.pushPose();
+            poseStack.scale(1.009f, 1.009f, 1.009f);
+            poseStack.translate(0, -0.01f, -0.01f);
+            part.render(
+                    poseStack,
+                    buffer.getBuffer(RenderType.entityCutoutNoCull(SADDLE_TEXTURE)),
+                    packedLight,
+                    OverlayTexture.pack(0.0F, flag)
+            );
+            poseStack.popPose();
+        }
+
+        if(armorPart!=null){
+            poseStack.pushPose();
+            poseStack.translate(0, -1.5f, 0);
+            poseStack.scale(1.0002f,1.0002f,1.0002f );
+            float progress = 1 - pEntity.getArmorProgress();
+
+            armorPart.render(
+                    poseStack,
+                    buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
+                    packedLight,
+                    OverlayTexture.pack(0.0F, flag),
+                    1, 1, 1, progress
+            );
+
+
+            armorPart.render(
+                    poseStack,
+                    buffer.getBuffer(RenderType.entityDecal(ARMOR_TEXTURE)),
+                    packedLight,
+                    OverlayTexture.pack(0.0F, flag)
+            );
+
+            poseStack.popPose();
+        }
+
         if(index == 4)
             poseStack.translate(-0.5f, 0, 0);
         if(index == 3)
             poseStack.translate(0.25f, 0, 0);
         poseStack.translate(-width/2, height/2, 0);
-        //renderDirt(poseStack, buffer, packedLight, pEntity, index);
-        //poseStack.mulPose(Axis.ZN.rotationDegrees(180));
-       // poseStack.translate(0, -height-1, 0);
-        //poseStack.mulPose(Axis.ZP.rotationDegrees(180));
+
         renderBottomDirt(poseStack, buffer, packedLight, pEntity, index);
         if(index==0 || index==2){
             poseStack.translate(0, -height, 0);
@@ -153,6 +208,6 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     }
     @Override
     public ResourceLocation getTextureLocation(HullbackEntity entity) {
-        return TEXTURE;
+        return MOB_TEXTURE;
     }
 }

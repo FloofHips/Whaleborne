@@ -23,10 +23,12 @@ import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.world.item.*;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.entity.PartEntity;
 
@@ -95,10 +97,22 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     public boolean dismountsUnderwater() {
         return false;
     }
-    public InteractionResult interact(Player player, InteractionHand hand) {
-        parent.interact(player, hand);
-        return super.interact(player, hand);
+    @Override
+    public InteractionResult interactAt(Player player, Vec3 vec, InteractionHand hand) {
+        boolean topClicked = vec.y > size.height * 0.6f;
+        ItemStack heldItem = player.getItemInHand(hand);
+
+        if (heldItem.getItem() instanceof ShearsItem || heldItem.getItem() instanceof AxeItem) {
+            return parent.interactClean(player, hand, this, topClicked);
+        }
+
+        if (heldItem.getItem() instanceof SaddleItem || heldItem.is(Items.DARK_OAK_PLANKS)) {
+            return parent.interactArmor(player, hand, this, topClicked);
+        }
+
+        return InteractionResult.PASS;
     }
+
     protected void defineSynchedData() {
     }
     protected void readAdditionalSaveData(CompoundTag compound) {
