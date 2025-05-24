@@ -87,6 +87,22 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             Blocks.ACACIA_LOG.defaultBlockState(),
             Blocks.MOSS_CARPET.defaultBlockState()
     };
+    public final Vec3[] seatOffsets = {
+            //head
+            new Vec3(0, 6f, 3.35), //sail
+            new Vec3(0, 6f, 0.35), //captain
+
+            //body
+            new Vec3(1.5, 6f, 0.3),
+            new Vec3(-1.5, 6f, 0.3),
+            new Vec3(1.5, 6f, -1.75),
+            new Vec3(-1.5, 6f, -1.75),
+
+            //fluke
+            new Vec3(0, 2.1f, -0.8)
+    };
+
+    public Vec3[] seats = new Vec3[7];
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
@@ -108,12 +124,19 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         this.partYRot = new float[5];
         this.partXRot = new float[5];
 
+        Arrays.fill(partPosition, Vec3.ZERO);
+
         this.oldPartPosition = new Vec3[5];
         this.oldPartYRot = new float[5];
         this.oldPartXRot = new float[5];
 
         this.mouthOpenProgress = 0.0f;
         initDirt();
+        //initSeats();
+    }
+
+    private void initSeats() {
+        //seats = seatOffsets;
     }
 
     private void initDirt() {
@@ -301,7 +324,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         this.updateContainerEquipment();
     }
     public float getArmorProgress() {
-        return (float) this.entityData.get(DATA_ARMOR_ID) / 64;
+        float progress = (float) this.entityData.get(DATA_ARMOR_ID) / 64;
+        progress = (float) (Math.round(progress * Math.pow(10, 3))
+                        / Math.pow(10, 3));
+
+        return progress;
     }
     public float getLeftEyeYaw() { return leftEyeYaw; }
     public float getRightEyeYaw() { return rightEyeYaw; }
@@ -501,6 +528,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         super.tick();
         updatePartPositions();
         updateMouthOpening();
+
+        if (partPosition!=null && partYRot!=null && partXRot!=null){
+            seats[0] = partPosition[1].add((seatOffsets[0]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
+            seats[1] = partPosition[1].add((seatOffsets[1]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
+            seats[2] = partPosition[2].add((seatOffsets[2]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
+            seats[3] = partPosition[2].add((seatOffsets[3]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
+            seats[4] = partPosition[2].add((seatOffsets[4]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
+            seats[5] = partPosition[2].add((seatOffsets[5]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
+            seats[6] = partPosition[4].add((seatOffsets[6]).xRot(partXRot[4] * Mth.DEG_TO_RAD).yRot(-partYRot[4] * Mth.DEG_TO_RAD));
+        }
 
         if(this.inventory!=null && !this.inventory.getItem(INV_SLOT_ARMOR).isEmpty())
             this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR).getCount());
@@ -721,52 +758,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         double horizontalDistance = Math.sqrt(dx * dx + dz * dz);
         return -(float)(Mth.atan2(dy, horizontalDistance) * (180F / Math.PI));
     }
-//    @Override
-//    public void openCustomInventoryScreen(Player player) {
-//
-//    }
-//
-//    @Nullable
-//    @Override
-//    public UUID getOwnerUUID() {
-//        return null;
-//    }
-//
-//    @Override
-//    public void onPlayerJump(int i) {
-//
-//    }
-//
-//    @Override
-//    public boolean canJump() {
-//        return false;
-//    }
-//
-//    @Override
-//    public void handleStartJump(int i) {
-//
-//    }
-//
-//    @Override
-//    public void handleStopJump() {
-//
-//    }
-//
-//    @Override
-//    public boolean isSaddleable() {
-//        return false;
-//    }
-//
-//    @Override
-//    public void equipSaddle(@Nullable SoundSource soundSource) {
-//
-//    }
-//
-//    @Override
-//    public boolean isSaddled() {
-//        return false;
-//    }
-
     public void travel(Vec3 travelVector) {
         if (this.isEffectiveAi() && this.isInWater()) {
             this.moveRelative(this.getSpeed(), travelVector);

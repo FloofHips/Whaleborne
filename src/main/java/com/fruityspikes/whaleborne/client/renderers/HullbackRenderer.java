@@ -43,27 +43,34 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     public void render(HullbackEntity pEntity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         super.render(pEntity, entityYaw, partialTicks, poseStack, buffer, packedLight);
 
-//        VertexConsumer vertexconsumer4;
-//        //if (pEntity.getArmorProgress() > 0) {
-//
-//            float f2 = pEntity.getMouthOpenProgress();
-//
-//            VertexConsumer vertexconsumer = buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS));
-//            this.armorModel.renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, f2);
-//
-//            VertexConsumer vertexconsumer1 = buffer.getBuffer(RenderType.entityDecal(ARMOR_TEXTURE));
-//            this.armorModel.renderToBuffer(poseStack, vertexconsumer1, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);
-
-        //} else {
-        //    vertexconsumer4 = buffer.getBuffer(RenderType.entityCutoutNoCull(ARMOR_TEXTURE));
-        //    this.armorModel.renderToBuffer(poseStack, vertexconsumer4, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);
-        //}
-
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getHead(), this.armorModel.getHead(), 0, 5.0F, 5.0F);
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getBody(), this.armorModel.getBody(), 2, 5.0F, 5.0F);
 
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getTail(), null, 3, 2.5F, 2.5F);
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getFluke(), this.armorModel.getFluke(), 4, 0.6F, 4.0F);
+
+        renderDebug(pEntity, poseStack, buffer, partialTicks);
+    }
+
+    private void renderDebug(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, float partialTicks) {
+        if(pEntity.seats[0]!=null){
+            for ( Vec3 seat : pEntity.seats ) {
+                poseStack.pushPose();
+                poseStack.translate(
+                        seat.x - pEntity.position().x,
+                        seat.y - pEntity.position().y,
+                        seat.z - pEntity.position().z
+                );
+
+                LevelRenderer.renderLineBox(
+                        poseStack,
+                        buffer.getBuffer(RenderType.lines()),
+                        new AABB(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5),
+                        1, 0, 0, 1
+                );
+                poseStack.popPose();
+            }
+        }
     }
 
     private void renderPart(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, float partialTicks, int packedLight, ModelPart part, ModelPart armorPart, int index, float height, float width) {
@@ -111,6 +118,31 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
         boolean flag = pEntity.hurtTime > 0;
 
+        if(armorPart!=null && pEntity.getArmorProgress() > 0){
+            poseStack.pushPose();
+            poseStack.translate(0, -1.5f, 0);
+            poseStack.scale(1.005f,1.005f,1.005f );
+            float progress = 1 - pEntity.getArmorProgress();
+
+            armorPart.render(
+                    poseStack,
+                    buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
+                    packedLight,
+                    OverlayTexture.pack(0.0F, flag),
+                    1, 1, 1, pEntity.getMouthOpenProgress()
+            );
+
+
+            armorPart.render(
+                    poseStack,
+                    buffer.getBuffer(RenderType.entityDecal(ARMOR_TEXTURE)),
+                    packedLight,
+                    OverlayTexture.pack(0.0F, flag)
+            );
+
+            poseStack.popPose();
+        }
+
         part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(MOB_TEXTURE)), packedLight, OverlayTexture.pack(0.0F, flag));
 
         if(pEntity.isSaddled()) {
@@ -123,31 +155,6 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                     packedLight,
                     OverlayTexture.pack(0.0F, flag)
             );
-            poseStack.popPose();
-        }
-
-        if(armorPart!=null){
-            poseStack.pushPose();
-            poseStack.translate(0, -1.5f, 0);
-            poseStack.scale(1.0002f,1.0002f,1.0002f );
-            float progress = 1 - pEntity.getArmorProgress();
-
-            armorPart.render(
-                    poseStack,
-                    buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
-                    packedLight,
-                    OverlayTexture.pack(0.0F, flag),
-                    1, 1, 1, progress
-            );
-
-
-            armorPart.render(
-                    poseStack,
-                    buffer.getBuffer(RenderType.entityDecal(ARMOR_TEXTURE)),
-                    packedLight,
-                    OverlayTexture.pack(0.0F, flag)
-            );
-
             poseStack.popPose();
         }
 
