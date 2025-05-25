@@ -101,6 +101,35 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             return parent.interactArmor(player, hand, this, topClicked);
         }
 
+        if (heldItem.isEmpty()){
+            if(this.name == "tail")
+                return parent.interact(player, hand);
+            if(this.name == "fluke")
+                return parent.interactRide(player, hand,6);
+            if(topClicked){
+                if(this.name == "body"){
+                    Vec3 localClick = new Vec3(vec.x, 0, vec.z);
+
+                    float inverseYaw = this.getYRot() * Mth.DEG_TO_RAD;
+                    localClick = localClick.xRot(0).yRot(inverseYaw);
+                    double angle = Math.atan2(localClick.z, localClick.x) + Math.PI;
+                    int quadrant = (int)(angle / (Math.PI/2)) % 4;
+
+                    switch(quadrant) {
+                        case 0: return parent.interactRide(player, hand, 5);
+                        case 1: return parent.interactRide(player, hand, 4);
+                        case 2: return parent.interactRide(player, hand, 2);
+                        default: return parent.interactRide(player, hand, 3);
+                    }
+                }
+                if(this.name == "nose")
+                    return parent.interactRide(player, hand,0);
+                if(this.name == "head")
+                    return parent.interactRide(player, hand,1);
+            }
+            return parent.interact(player, hand);
+        }
+
         return parent.interact(player, hand);
     }
 

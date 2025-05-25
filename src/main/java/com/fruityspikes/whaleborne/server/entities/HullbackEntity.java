@@ -1,7 +1,10 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.HolderGetter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -37,6 +40,7 @@ import net.minecraftforge.items.wrapper.InvWrapper;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.stream.IntStream;
 
 public class HullbackEntity extends WaterAnimal implements ContainerListener, PlayerRideableJumping, Saddleable {
     private float leftEyeYaw, rightEyeYaw, eyePitch;
@@ -46,6 +50,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public static final int INV_SLOT_CROWN = 1;
     public static final int INV_SLOT_SADDLE = 2;
     private static final int FLAG_SADDLE = 4;
+    public static final int SEAT_HEAD_SAIL = 0;
+    public static final int SEAT_HEAD_CAPTAIN = 1;
+    public static final int SEAT_BODY_RIGHT_FRONT = 2;
+    public static final int SEAT_BODY_LEFT_FRONT = 3;
+    public static final int SEAT_BODY_RIGHT_BACK = 4;
+    public static final int SEAT_BODY_LEFT_BACK = 5;
+    public static final int SEAT_FLUKE = 6;
     private static final EntityDataAccessor<Boolean> DATA_SADDLE_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> DATA_ARMOR_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
@@ -89,20 +100,23 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     };
     public final Vec3[] seatOffsets = {
             //head
-            new Vec3(0, 6f, 3.35), //sail
-            new Vec3(0, 6f, 0.35), //captain
+            new Vec3(0, 5f, 3.35), //sail
+            new Vec3(0, 5f, 0.35), //captain
 
             //body
-            new Vec3(1.5, 6f, 0.3),
-            new Vec3(-1.5, 6f, 0.3),
-            new Vec3(1.5, 6f, -1.75),
-            new Vec3(-1.5, 6f, -1.75),
+            new Vec3(1.5, 5f, 0.3),
+            new Vec3(-1.5, 5f, 0.3),
+            new Vec3(1.5, 5f, -1.75),
+            new Vec3(-1.5, 5f, -1.75),
 
             //fluke
-            new Vec3(0, 2.1f, -0.8)
+            new Vec3(0, 1.1f, -0.8)
     };
 
     public Vec3[] seats = new Vec3[7];
+    public Vec3[] oldSeats = new Vec3[7];
+    private final Map<UUID, Integer> seatAssignments = new HashMap<>();
+
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
@@ -132,11 +146,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
         this.mouthOpenProgress = 0.0f;
         initDirt();
-        //initSeats();
-    }
-
-    private void initSeats() {
-        //seats = seatOffsets;
     }
 
     private void initDirt() {
@@ -307,6 +316,21 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             }
         }
         compound.put("Items", listtag);
+
+        compound.putBoolean("Saddled", this.isSaddled());
+        compound.putInt("Armor", this.entityData.get(DATA_ARMOR_ID));
+        compound.putByte("Flags", this.entityData.get(DATA_ID_FLAGS));
+
+        CompoundTag seatsTag = new CompoundTag();
+        for (int i = 0; i < seats.length; i++) {
+            UUID occupant = findUUIDForSeat(i);
+            seatsTag.putUUID("Seat_" + i, occupant != null ? occupant : new UUID(0, 0));
+        }
+        compound.put("SeatAssignments", seatsTag);
+
+//        if (this.headDirt != null) {
+//            compound.put("HeadDirt", saveDirtArray(headDirt));
+//        }
     }
     public void readAdditionalSaveData(CompoundTag compound) {
         super.readAdditionalSaveData(compound);
@@ -321,8 +345,61 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             }
         }
 
+        this.entityData.set(DATA_SADDLE_ID, compound.getBoolean("Saddled"));
+        this.entityData.set(DATA_ARMOR_ID, compound.getInt("Armor"));
+        this.entityData.set(DATA_ID_FLAGS, compound.getByte("Flags"));
+
+        seatAssignments.clear();
+        if (compound.contains("SeatAssignments")) {
+            CompoundTag seatsTag = compound.getCompound("SeatAssignments");
+            for (int i = 0; i < seats.length; i++) {
+                UUID occupant = seatsTag.getUUID("Seat_" + i);
+                if (!occupant.equals(new UUID(0, 0))) {
+                    seatAssignments.put(occupant, i);
+                }
+            }
+        }
+
+//        if (compound.contains("HeadDirt")) {
+//            this.headDirt = loadDirtArray(compound.getCompound("HeadDirt"), this.level().holderLookup(Registries.BLOCK));
+//        }
+
         this.updateContainerEquipment();
     }
+    private UUID findUUIDForSeat(int seatIndex) {
+        return seatAssignments.entrySet().stream()
+                .filter(entry -> entry.getValue() == seatIndex)
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse(null);
+    }
+//    private CompoundTag saveDirtArray(BlockState[][] array) {
+//        CompoundTag tag = new CompoundTag();
+//        for (int x = 0; x < array.length; x++) {
+//            ListTag column = new ListTag();
+//            for (int y = 0; y < array[x].length; y++) {
+//                CompoundTag blockTag = NbtUtils.writeBlockState(array[x][y]);
+//                column.add(blockTag);
+//            }
+//            tag.put("X" + x, column);
+//        }
+//        return tag;
+//    }
+//
+//    private BlockState[][] loadDirtArray(CompoundTag tag, HolderGetter<Block> blockGetter) {
+//        BlockState[][] array = new BlockState[8][5];
+//        for (int x = 0; x < array.length; x++) {
+//            if (tag.contains("X" + x)) {
+//                ListTag column = tag.getList("X" + x, 10);
+//                for (int y = 0; y < Math.min(column.size(), array[x].length); y++) {
+//                    array[x][y] = NbtUtils.readBlockState(blockGetter, column.getCompound(y));
+//                }
+//            } else {
+//                Arrays.fill(array[x], Blocks.AIR.defaultBlockState());
+//            }
+//        }
+//        return array;
+//    }
     public float getArmorProgress() {
         float progress = (float) this.entityData.get(DATA_ARMOR_ID) / 64;
         progress = (float) (Math.round(progress * Math.pow(10, 3))
@@ -376,13 +453,43 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         this.goalSelector.addGoal(4, new HullbackRandomSwimGoal(this, 0.8, 10));
         this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
         this.goalSelector.addGoal(2, new LookAtPlayerGoal(this, Player.class, 6.0F));
-        this.goalSelector.addGoal(1, new HullbackApproachPlayerGoal(this, 0.4f));
+        //this.goalSelector.addGoal(1, new HullbackApproachPlayerGoal(this, 0.4f));
         this.goalSelector.addGoal(6, new MeleeAttackGoal(this, 1.2000000476837158, true));
         this.goalSelector.addGoal(8, new FollowBoatGoal(this));
         this.goalSelector.addGoal(9, new AvoidEntityGoal(this, Guardian.class, 8.0F, 1.0, 1.0));
         this.targetSelector.addGoal(1, (new HurtByTargetGoal(this, new Class[]{Guardian.class})).setAlertOthers(new Class[0]));
     }
 
+    public InteractionResult mobInteract(Player player, InteractionHand hand) {
+        if (this.isVehicle()) {
+            return super.mobInteract(player, hand);
+        }
+
+        return super.mobInteract(player, hand);
+    }
+    public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex) {
+        seatAssignments.remove(player.getUUID());
+
+        System.out.println(seatIndex);
+
+        if (this.level().isClientSide) {
+            seatAssignments.put(player.getUUID(), seatIndex);
+            return InteractionResult.SUCCESS;
+        }
+
+        if (seatAssignments.containsValue(seatIndex)) {
+            return InteractionResult.PASS;
+        }
+
+        //if () {
+            player.startRiding(this);
+            seatAssignments.put(player.getUUID(), seatIndex);
+            this.positionRider(player, (e, x, y, z) -> e.teleportTo(x, y, z));
+            return InteractionResult.CONSUME;
+        //}
+
+        //return InteractionResult.PASS;
+    }
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         ItemStack heldItem = player.getItemInHand(hand);
         return handleVegetationRemoval(player, hand, part, top, heldItem.getItem() instanceof ShearsItem);
@@ -526,6 +633,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public void tick() {
         setOldPosAndRots();
         super.tick();
+
+//        if(level().isClientSide)
+//            System.out.println(level() + ": " + seatAssignments);
+//        else
+//            System.out.println(level() + ": " + seatAssignments);
+
         updatePartPositions();
         updateMouthOpening();
 
@@ -537,7 +650,20 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             seats[4] = partPosition[2].add((seatOffsets[4]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
             seats[5] = partPosition[2].add((seatOffsets[5]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
             seats[6] = partPosition[4].add((seatOffsets[6]).xRot(partXRot[4] * Mth.DEG_TO_RAD).yRot(-partYRot[4] * Mth.DEG_TO_RAD));
+
+
+            oldSeats[0] = oldPartPosition[1].add((seatOffsets[0]).xRot(oldPartXRot[1] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[1] * Mth.DEG_TO_RAD));
+            oldSeats[1] = oldPartPosition[1].add((seatOffsets[1]).xRot(oldPartXRot[1] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[1] * Mth.DEG_TO_RAD));
+            oldSeats[2] = oldPartPosition[2].add((seatOffsets[2]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
+            oldSeats[3] = oldPartPosition[2].add((seatOffsets[3]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
+            oldSeats[4] = oldPartPosition[2].add((seatOffsets[4]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
+            oldSeats[5] = oldPartPosition[2].add((seatOffsets[5]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
+            oldSeats[6] = oldPartPosition[4].add((seatOffsets[6]).xRot(oldPartXRot[4] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[4] * Mth.DEG_TO_RAD));
         }
+
+//        for (Entity passenger : this.getPassengers()) {
+//            this.positionRider(passenger);
+//        }
 
         if(this.inventory!=null && !this.inventory.getItem(INV_SLOT_ARMOR).isEmpty())
             this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR).getCount());
@@ -795,6 +921,82 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
     }
 
+    // PASSENGERS
+    @Override
+    public boolean canAddPassenger(Entity passenger) {
+        return this.getPassengers().size() < seats.length;
+    }
+    @Override
+    protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
+        if (!this.hasPassenger(passenger)) return;
+        if (seatAssignments.isEmpty()) return;
+
+        Integer seatIndex = seatAssignments.get(passenger.getUUID());
+        if (seatIndex == null || seatIndex < 0 || seatIndex >= seats.length) {
+            seatIndex = 0;
+            seatAssignments.put(passenger.getUUID(), seatIndex);
+        }
+        if (seatIndex < seats.length) {
+            if(seats[seatIndex] != null)
+                callback.accept(passenger,
+                        seats[seatIndex].x,
+                        seats[seatIndex].y,
+                        seats[seatIndex].z);
+        }
+    }
+    private int findAvailableSeat() {
+        Set<Integer> occupiedSeats = new HashSet<>(seatAssignments.values());
+        for (int i = 0; i < seats.length; i++) {
+            if (!occupiedSeats.contains(i)) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    protected void addPassenger(Entity passenger, int index) {
+//        super.addPassenger(passenger);
+//        if (!seatAssignments.containsKey(passenger.getUUID())) {
+//            seatAssignments.put(passenger.getUUID(), index);
+//        }
+    }
+    @Override
+    protected void addPassenger(Entity passenger) {
+        super.addPassenger(passenger);
+
+        if (!seatAssignments.containsKey(passenger.getUUID())) {
+            if (passenger instanceof Player) {
+                return;
+            }
+
+            int availableSeat = IntStream.range(0, seats.length)
+                    .filter(i -> !seatAssignments.containsValue(i))
+                    .findFirst()
+                    .orElse(0);
+
+            seatAssignments.put(passenger.getUUID(), availableSeat);
+        }
+    }
+    @Override
+    protected void removePassenger(Entity passenger) {
+        super.removePassenger(passenger);
+    }
+
+    @Override
+    public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
+        if (!seatAssignments.isEmpty()){
+            int seatIndex = seatAssignments.get(passenger.getUUID());
+            seatAssignments.remove(passenger.getUUID());
+            if (seatIndex >= 0 && seatIndex < seats.length) {
+                Vec3 seatPos = seats[seatIndex];
+                return new Vec3(
+                        seatPos.x,
+                        seatPos.y,
+                        seatPos.z);
+            }
+        }
+        return super.getDismountLocationForPassenger(passenger);
+    }
     class HullbackMoveControl extends MoveControl {
         private static final float WHALE_TURN_SPEED = 1.5F;
         private static final float WHALE_PITCH_SPEED = 0.8F;

@@ -49,13 +49,15 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getTail(), null, 3, 2.5F, 2.5F);
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getFluke(), this.armorModel.getFluke(), 4, 0.6F, 4.0F);
 
-        renderDebug(pEntity, poseStack, buffer, partialTicks);
+        if(entityRenderDispatcher.shouldRenderHitBoxes())
+            renderDebug(pEntity, poseStack, buffer, partialTicks);
     }
 
     private void renderDebug(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, float partialTicks) {
         if(pEntity.seats[0]!=null){
             for ( Vec3 seat : pEntity.seats ) {
                 poseStack.pushPose();
+
                 poseStack.translate(
                         seat.x - pEntity.position().x,
                         seat.y - pEntity.position().y,
@@ -129,7 +131,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                     buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
                     packedLight,
                     OverlayTexture.pack(0.0F, flag),
-                    1, 1, 1, pEntity.getMouthOpenProgress()
+                    1, 1, 1, progress
             );
 
 
