@@ -22,6 +22,7 @@ import net.minecraft.world.item.*;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.common.ForgeSpawnEggItem;
 import net.minecraftforge.entity.PartEntity;
 
 import javax.annotation.Nullable;
@@ -105,7 +106,7 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             if(this.name == "tail")
                 return parent.interact(player, hand);
             if(this.name == "fluke")
-                return parent.interactRide(player, hand,6);
+                return parent.interactRide(player, hand,6, null);
             if(topClicked){
                 if(this.name == "body"){
                     Vec3 localClick = new Vec3(vec.x, 0, vec.z);
@@ -116,16 +117,47 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
                     int quadrant = (int)(angle / (Math.PI/2)) % 4;
 
                     switch(quadrant) {
-                        case 0: return parent.interactRide(player, hand, 5);
-                        case 1: return parent.interactRide(player, hand, 4);
-                        case 2: return parent.interactRide(player, hand, 2);
-                        default: return parent.interactRide(player, hand, 3);
+                        case 0: return parent.interactRide(player, hand, 5, null);
+                        case 1: return parent.interactRide(player, hand, 4, null);
+                        case 2: return parent.interactRide(player, hand, 2, null);
+                        default: return parent.interactRide(player, hand, 3, null);
                     }
                 }
                 if(this.name == "nose")
-                    return parent.interactRide(player, hand,0);
+                    return parent.interactRide(player, hand,0, null);
                 if(this.name == "head")
-                    return parent.interactRide(player, hand,1);
+                    return parent.interactRide(player, hand,1, null);
+            }
+            return parent.interact(player, hand);
+        }
+
+        if (heldItem.getItem() instanceof SpawnEggItem spawnEggItem){
+            EntityType<?> entity = spawnEggItem.getType(null);//.getDefaultInstance().getEntityRepresentation();
+
+            if(this.name == "tail")
+                return parent.interact(player, hand);
+            if(this.name == "fluke")
+                return parent.interactRide(player, hand,6, entity);
+            if(topClicked){
+                if(this.name == "body"){
+                    Vec3 localClick = new Vec3(vec.x, 0, vec.z);
+
+                    float inverseYaw = this.getYRot() * Mth.DEG_TO_RAD;
+                    localClick = localClick.xRot(0).yRot(inverseYaw);
+                    double angle = Math.atan2(localClick.z, localClick.x) + Math.PI;
+                    int quadrant = (int)(angle / (Math.PI/2)) % 4;
+
+                    switch(quadrant) {
+                        case 0: return parent.interactRide(player, hand, 5, entity);
+                        case 1: return parent.interactRide(player, hand, 4, entity);
+                        case 2: return parent.interactRide(player, hand, 2, entity);
+                        default: return parent.interactRide(player, hand, 3, entity);
+                    }
+                }
+                if(this.name == "nose")
+                    return parent.interactRide(player, hand,0, entity);
+                if(this.name == "head")
+                    return parent.interactRide(player, hand,1, entity);
             }
             return parent.interact(player, hand);
         }

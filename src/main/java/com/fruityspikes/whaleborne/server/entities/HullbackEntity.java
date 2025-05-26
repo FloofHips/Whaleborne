@@ -1,10 +1,7 @@
 package com.fruityspikes.whaleborne.server.entities;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.core.HolderGetter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -22,9 +19,7 @@ import net.minecraft.world.entity.ai.goal.*;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.ai.navigation.WaterBoundPathNavigation;
-import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.animal.WaterAnimal;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Guardian;
 import net.minecraft.world.entity.player.Player;
@@ -33,6 +28,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.entity.PartEntity;
@@ -44,20 +40,13 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class HullbackEntity extends WaterAnimal implements ContainerListener, PlayerRideableJumping, Saddleable {
+    private boolean validatedAfterLoad = false;
     private float leftEyeYaw, rightEyeYaw, eyePitch;
     private LazyOptional<?> itemHandler = null;
     protected SimpleContainer inventory;
     public static final int INV_SLOT_ARMOR = 0;
     public static final int INV_SLOT_CROWN = 1;
     public static final int INV_SLOT_SADDLE = 2;
-    private static final int FLAG_SADDLE = 4;
-    public static final int SEAT_HEAD_SAIL = 0;
-    public static final int SEAT_HEAD_CAPTAIN = 1;
-    public static final int SEAT_BODY_RIGHT_FRONT = 2;
-    public static final int SEAT_BODY_LEFT_FRONT = 3;
-    public static final int SEAT_BODY_RIGHT_BACK = 4;
-    public static final int SEAT_BODY_LEFT_BACK = 5;
-    public static final int SEAT_FLUKE = 6;
     private static final EntityDataAccessor<Boolean> DATA_SADDLE_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> DATA_ARMOR_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
@@ -102,8 +91,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     };
     public final Vec3[] seatOffsets = {
             //head
-            new Vec3(0, 5f, 3.35), //sail
-            new Vec3(0, 5f, 0.35), //captain
+            new Vec3(0, 5f, 0.0), //sail
+            new Vec3(0, 5f, -3.0), //captain
 
             //body
             new Vec3(1.5, 5f, 0.3),
@@ -324,12 +313,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         compound.putInt("Armor", this.entityData.get(DATA_ARMOR_ID));
         compound.putByte("Flags", this.entityData.get(DATA_ID_FLAGS));
 
-        CompoundTag seatsTag = new CompoundTag();
-        for (int i = 0; i < seats.length; i++) {
-            UUID occupant = findUUIDForSeat(i);
-            seatsTag.putUUID("Seat_" + i, occupant != null ? occupant : new UUID(0, 0));
+        CompoundTag seatAssignmentsTag = new CompoundTag();
+        for (Map.Entry<UUID, Integer> entry : seatAssignments.entrySet()) {
+            seatAssignmentsTag.putInt(entry.getKey().toString(), entry.getValue());
         }
-        compound.put("SeatAssignments", seatsTag);
+        compound.put("SeatAssignments", seatAssignmentsTag);
 
 //        if (this.headDirt != null) {
 //            compound.put("HeadDirt", saveDirtArray(headDirt));
@@ -354,14 +342,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
         seatAssignments.clear();
         if (compound.contains("SeatAssignments")) {
-            CompoundTag seatsTag = compound.getCompound("SeatAssignments");
-            for (int i = 0; i < seats.length; i++) {
-                UUID occupant = seatsTag.getUUID("Seat_" + i);
-                if (!occupant.equals(new UUID(0, 0))) {
-                    seatAssignments.put(occupant, i);
-                }
+            CompoundTag seatAssignmentsTag = compound.getCompound("SeatAssignments");
+            for (String key : seatAssignmentsTag.getAllKeys()) {
+                    UUID uuid = UUID.fromString(key);
+                    int seatIndex = seatAssignmentsTag.getInt(key);
+                    if (seatIndex >= 0 && seatIndex < seats.length) {
+                        seatAssignments.put(uuid, seatIndex);
+                    }
             }
         }
+
 
 //        if (compound.contains("HeadDirt")) {
 //            this.headDirt = loadDirtArray(compound.getCompound("HeadDirt"), this.level().holderLookup(Registries.BLOCK));
@@ -383,8 +373,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             }
         }
 
-        updateSeatAssignmentsSync();
-
+        syncSeatAssignments();
         this.updateContainerEquipment();
     }
 
@@ -404,8 +393,21 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
                 .collect(Collectors.toSet());
 
         seatAssignments.keySet().removeIf(uuid -> !passengerUUIDs.contains(uuid));
+        syncSeatAssignments();
     }
-
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        super.onSyncedDataUpdated(key);
+        if (DATA_SEAT_ASSIGNMENTS.equals(key)) {
+            CompoundTag tag = this.entityData.get(DATA_SEAT_ASSIGNMENTS);
+            seatAssignments.clear();
+            for (String k : tag.getAllKeys()) {
+                UUID uuid = UUID.fromString(k);
+                int index = tag.getInt(k);
+                seatAssignments.put(uuid, index);
+            }
+        }
+    }
     private UUID findUUIDForSeat(int seatIndex) {
         return seatAssignments.entrySet().stream()
                 .filter(entry -> entry.getValue() == seatIndex)
@@ -451,9 +453,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public float getRightEyeYaw() { return rightEyeYaw; }
     public float getEyePitch() { return eyePitch; }
 
-    public void setLeftEyeYaw(float yaw) { this.leftEyeYaw = Mth.wrapDegrees(yaw); }
-    public void setRightEyeYaw(float yaw) { this.rightEyeYaw = Mth.wrapDegrees(yaw); }
-    public void setEyePitch(float pitch) { this.eyePitch = Mth.wrapDegrees(pitch); }
+    public void setLeftEyeYaw(float yaw) { this.leftEyeYaw = yaw; }
+    public void setRightEyeYaw(float yaw) { this.rightEyeYaw = yaw; }
+    public void setEyePitch(float pitch) { this.eyePitch = pitch; }
 
     public void setId(int p_20235_) {
         super.setId(p_20235_);
@@ -493,7 +495,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         this.goalSelector.addGoal(4, new HullbackRandomSwimGoal(this, 0.8, 10));
         this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
         this.goalSelector.addGoal(2, new LookAtPlayerGoal(this, Player.class, 6.0F));
-        //this.goalSelector.addGoal(1, new HullbackApproachPlayerGoal(this, 0.4f));
+        this.goalSelector.addGoal(1, new HullbackApproachPlayerGoal(this, 0.4f));
         this.goalSelector.addGoal(6, new MeleeAttackGoal(this, 1.2000000476837158, true));
         this.goalSelector.addGoal(8, new FollowBoatGoal(this));
         this.goalSelector.addGoal(9, new AvoidEntityGoal(this, Guardian.class, 8.0F, 1.0, 1.0));
@@ -507,26 +509,44 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
         return super.mobInteract(player, hand);
     }
-    public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex) {
-        seatAssignments.remove(player.getUUID());
-
-        System.out.println(seatIndex);
-
-        if (this.level().isClientSide) {
-            seatAssignments.put(player.getUUID(), seatIndex);
-            return InteractionResult.SUCCESS;
-        }
-
+    public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
         if (seatAssignments.containsValue(seatIndex)) {
             return InteractionResult.PASS;
         }
 
-        player.startRiding(this);
-        seatAssignments.put(player.getUUID(), seatIndex);
-        updateSeatAssignmentsSync();
-        this.positionRider(player, (e, x, y, z) -> e.teleportTo(x, y, z));
+        seatAssignments.remove(player.getUUID());
 
-        return InteractionResult.CONSUME;
+        if (entityType != null) {
+            Entity entity = entityType.create(this.level());
+
+            if (entity != null) {
+                entity.moveTo(seats[seatIndex].x + 0.5, seats[seatIndex].y + 1, seats[seatIndex].z + 0.5, this.getYRot(), 0);
+
+                this.level().addFreshEntity(entity);
+
+                entity.startRiding(this, true);
+                seatAssignments.put(entity.getUUID(), seatIndex);
+                syncSeatAssignments();
+
+                if (!player.getAbilities().instabuild) {
+                    player.getItemInHand(hand).shrink(1);
+                }
+
+                return InteractionResult.SUCCESS;
+            }
+
+            return InteractionResult.FAIL;
+        }
+
+        player.startRiding(this, true);
+        seatAssignments.put(player.getUUID(), seatIndex);
+        syncSeatAssignments();
+
+        if (this.level().isClientSide) {
+            return InteractionResult.SUCCESS;
+        }
+
+        return InteractionResult.SUCCESS;
     }
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         ItemStack heldItem = player.getItemInHand(hand);
@@ -674,16 +694,26 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
         updatePartPositions();
         updateMouthOpening();
-        if(level().isClientSide)
-            if (seatAssignments.isEmpty())
-                onSeatAssignmentsUpdated();
-        else
-            if (seatAssignments.isEmpty())
-                onSeatAssignmentsUpdated();
+        if (this.tickCount % 20 == 0)
+            validateAssignments();
+
+        if (!level().isClientSide && !validatedAfterLoad) {
+            validateAfterLoad();
+            validatedAfterLoad = true;
+        }
+
+        yHeadRot = yBodyRot + (partYRot[0] - partYRot[4]) * 1.5f;
+//        if (this.tickCount % 200 == 0)
+//            {
+//                if (level().isClientSide)
+//                    onSeatAssignmentsUpdated();
+//                else
+//                    updateSeatAssignmentsSync();
+//            }
 
         if (partPosition!=null && partYRot!=null && partXRot!=null){
-            seats[0] = partPosition[1].add((seatOffsets[0]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
-            seats[1] = partPosition[1].add((seatOffsets[1]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
+            seats[0] = partPosition[0].add((seatOffsets[0]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
+            seats[1] = partPosition[0].add((seatOffsets[1]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
             seats[2] = partPosition[2].add((seatOffsets[2]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
             seats[3] = partPosition[2].add((seatOffsets[3]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
             seats[4] = partPosition[2].add((seatOffsets[4]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
@@ -691,8 +721,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             seats[6] = partPosition[4].add((seatOffsets[6]).xRot(partXRot[4] * Mth.DEG_TO_RAD).yRot(-partYRot[4] * Mth.DEG_TO_RAD));
 
 
-            oldSeats[0] = oldPartPosition[1].add((seatOffsets[0]).xRot(oldPartXRot[1] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[1] * Mth.DEG_TO_RAD));
-            oldSeats[1] = oldPartPosition[1].add((seatOffsets[1]).xRot(oldPartXRot[1] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[1] * Mth.DEG_TO_RAD));
+            oldSeats[0] = oldPartPosition[0].add((seatOffsets[0]).xRot(oldPartXRot[1] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[1] * Mth.DEG_TO_RAD));
+            oldSeats[1] = oldPartPosition[0].add((seatOffsets[1]).xRot(oldPartXRot[1] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[1] * Mth.DEG_TO_RAD));
             oldSeats[2] = oldPartPosition[2].add((seatOffsets[2]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
             oldSeats[3] = oldPartPosition[2].add((seatOffsets[3]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
             oldSeats[4] = oldPartPosition[2].add((seatOffsets[4]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
@@ -809,7 +839,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         }
     }
     private void updatePartPositions() {
-        float[] partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.3f, 0.07f};
+
+        float[] partDragFactors = new float[]{1f, 0.9f, 0.2f, 0.1f, 0.09f};
+        //float[] partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.3f, 0.07f};
         Vec3[] baseOffsets = {
                 new Vec3(0, 0, 6),   // Nose
                 new Vec3(0, 0, 2.5), // Head
@@ -895,6 +927,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         float flukeYaw = calculateYaw(tail.position(), flukeTarget);
         float flukePitch = calculatePitch(tail.position(), flukeTarget);
 
+        flukeYaw = Mth.rotLerp(partDragFactors[4], oldPartYRot[4], flukeYaw);
+
         this.partPosition[4] = flukeTarget;
         this.partYRot[4] = flukeYaw;
         this.partXRot[4] = flukePitch * 1.5f + swimCycle * 30f;
@@ -975,16 +1009,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             if(seats[seatIndex] != null)
                 callback.accept(passenger,
                         seats[seatIndex].x,
-                        seats[seatIndex].y,
+                        seats[seatIndex].y + passenger.getMyRidingOffset(),
                         seats[seatIndex].z);
         }
-    }
-    private void updateSeatAssignmentsSync() {
-        CompoundTag tag = new CompoundTag();
-        seatAssignments.forEach((uuid, seat) -> {
-            tag.putInt(uuid.toString(), seat);
-        });
-        this.entityData.set(DATA_SEAT_ASSIGNMENTS, tag);
     }
 
     private void onSeatAssignmentsUpdated() {
@@ -992,11 +1019,57 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
         seatAssignments.clear();
         for (String key : tag.getAllKeys()) {
-            try {
-                UUID uuid = UUID.fromString(key);
-                seatAssignments.put(uuid, tag.getInt(key));
-            } catch (IllegalArgumentException ignored) {}
+            UUID uuid = UUID.fromString(key);
+            seatAssignments.put(uuid, tag.getInt(key));
         }
+    }
+    private void syncSeatAssignments() {
+        CompoundTag tag = new CompoundTag();
+        for (Map.Entry<UUID, Integer> entry : seatAssignments.entrySet()) {
+            tag.putInt(entry.getKey().toString(), entry.getValue());
+        }
+        this.entityData.set(DATA_SEAT_ASSIGNMENTS, tag);
+    }
+
+    private void validateAssignments() {
+        Map<UUID, Integer> assignmentsCopy = new HashMap<>(seatAssignments);
+        Set<UUID> currentPassengers = this.getPassengers().stream()
+                .map(Entity::getUUID)
+                .collect(Collectors.toSet());
+
+        assignmentsCopy.forEach((uuid, seat) -> {
+            if (seat < 0 || seat >= seats.length) {
+                seatAssignments.remove(uuid);
+                return;
+            }
+
+            if (!currentPassengers.contains(uuid)) {
+                seatAssignments.remove(uuid);
+                return;
+            }
+
+            Entity entity = this.getPassengers().stream()
+                    .filter(e -> e.getUUID().equals(uuid))
+                    .findFirst()
+                    .orElse(null);
+
+            if (entity != null) {
+                AABB seatArea = new AABB(seats[seat], seats[seat]).inflate(1.0);
+                if (!seatArea.contains(entity.position())) {
+                    seatAssignments.remove(uuid);
+                }
+            }
+        });
+
+        this.getPassengers().forEach(passenger -> {
+            if (!seatAssignments.containsKey(passenger.getUUID())) {
+                int availableSeat = IntStream.range(0, seats.length)
+                        .filter(i -> !seatAssignments.containsValue(i))
+                        .findFirst()
+                        .orElse(0);
+                seatAssignments.put(passenger.getUUID(), availableSeat);
+            }
+        });
     }
     @Override
     protected void addPassenger(Entity passenger) {
@@ -1013,20 +1086,26 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
                     .orElse(0);
 
             seatAssignments.put(passenger.getUUID(), availableSeat);
-            updateSeatAssignmentsSync();
         }
     }
     @Override
     protected void removePassenger(Entity passenger) {
+        if(passenger.isRemoved())
+            if (!seatAssignments.isEmpty()){
+                seatAssignments.remove(passenger.getUUID());
+                syncSeatAssignments();
+            }
         super.removePassenger(passenger);
-        updateSeatAssignmentsSync();
     }
 
     @Override
     public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
+
         if (!seatAssignments.isEmpty()){
             int seatIndex = seatAssignments.get(passenger.getUUID());
             seatAssignments.remove(passenger.getUUID());
+            syncSeatAssignments();
+
             if (seatIndex >= 0 && seatIndex < seats.length) {
                 Vec3 seatPos = seats[seatIndex];
                 return new Vec3(
@@ -1037,81 +1116,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         }
         return super.getDismountLocationForPassenger(passenger);
     }
-    class HullbackMoveControl extends MoveControl {
-        private static final float WHALE_TURN_SPEED = 1.5F;
-        private static final float WHALE_PITCH_SPEED = 0.8F;
-        private static final float MAX_PITCH_ANGLE = 30.0F;
-        private static final float BUOYANCY_FORCE = 0.002F;
-
-        private final HullbackEntity whale;
-        private float targetYaw;
-        private float targetPitch;
-
-        public HullbackMoveControl(HullbackEntity whale) {
-            super(whale);
-            this.whale = whale;
-            this.targetYaw = whale.getYRot();
-            this.targetPitch = whale.getXRot();
-        }
-
-        @Override
-        public void tick() {
-            if (whale.isInWater()) {
-                whale.setDeltaMovement(whale.getDeltaMovement().add(0, BUOYANCY_FORCE, 0));
-            }
-
-            if (this.operation == Operation.MOVE_TO) {
-                double dx = this.wantedX - whale.getX();
-                double dy = this.wantedY - whale.getY();
-                double dz = this.wantedZ - whale.getZ();
-                double distance = Math.sqrt(dx * dx + dz * dz);
-
-                if (distance > 0.1) {
-                    this.targetYaw = (float)(Mth.atan2(dz, dx) * (180F / (float)Math.PI) - 90F);
-                    this.targetPitch = (float)(-Mth.atan2(dy, distance) * (180F / (float)Math.PI));
-                    this.targetPitch = Mth.clamp(this.targetPitch, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
-
-                    whale.setYRot(this.newrotlerp(whale.getYRot(), targetYaw, WHALE_TURN_SPEED));
-                    whale.setXRot(this.newrotlerp(whale.getXRot(), targetPitch, WHALE_PITCH_SPEED));
-
-                    float speed = (float)(this.speedModifier * whale.getAttributeValue(Attributes.MOVEMENT_SPEED));
-                    float adjustedSpeed = speed * 0.1F;
-
-                    float f4 = Mth.cos(whale.getXRot() * ((float)Math.PI / 180F));
-                    float f5 = Mth.sin(whale.getXRot() * ((float)Math.PI / 180F));
-                    whale.zza = f4 * adjustedSpeed;
-                    whale.yya = -f5 * adjustedSpeed;
-
-                    whale.xxa = Mth.sin(whale.tickCount * 0.1F) * 0.05F * adjustedSpeed;
-                } else {
-                    whale.setSpeed(0);
-                    whale.setZza(0);
-                    whale.setYya(0);
-                    whale.setXxa(0);
-                }
-            } else {
-                whale.setSpeed(0);
-                whale.setZza(0);
-                whale.setYya(0);
-                whale.setXxa(0);
-
-                if (whale.tickCount % 40 == 0) {
-                    this.targetYaw += (whale.getRandom().nextFloat() - 0.5F) * 30F;
-                    this.targetPitch += (whale.getRandom().nextFloat() - 0.5F) * 10F;
-                    this.targetPitch = Mth.clamp(this.targetPitch, -15F, 15F);
-                }
-
-                whale.setYRot(this.newrotlerp(whale.getYRot(), targetYaw, WHALE_TURN_SPEED * 0.3F));
-                whale.setXRot(this.newrotlerp(whale.getXRot(), targetPitch, WHALE_PITCH_SPEED * 0.3F));
-            }
-        }
-
-        float newrotlerp(float current, float target, float maxStep) {
-            float delta = Mth.wrapDegrees(target - current);
-            delta = Mth.clamp(delta, -maxStep, maxStep);
-            return current + delta * 0.2F;
-        }
-    }
 
     class HullbackBodyRotationControl extends BodyRotationControl {
         public HullbackBodyRotationControl(HullbackEntity hullBack) {
@@ -1120,51 +1124,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
         public void clientTick() {
             HullbackEntity.this.setYBodyRot(HullbackEntity.this.getYRot());
-        }
-    }
-
-    class HullbackLookControl extends LookControl {
-        private final HullbackEntity hullback;
-        private static final float EYE_SIDEWAYS_ANGLE = 90F;
-
-        public HullbackLookControl(HullbackEntity mob) {
-            super(mob);
-            this.hullback = mob;
-        }
-
-        @Override
-        public void tick() {
-            if (this.lookAtCooldown > 0) {
-                this.lookAtCooldown--;
-
-                double dx = this.wantedX - this.mob.getX();
-                double dz = this.wantedZ - this.mob.getZ();
-                double dy = this.wantedY - this.mob.getEyeY();
-                double distanceXZ = Math.sqrt(dx * dx + dz * dz);
-
-                float pitch = (float) -Math.toDegrees(Math.atan2(dy, distanceXZ));
-                hullback.setEyePitch(pitch);
-
-                float bodyYaw = this.mob.getYRot();
-                float targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
-                float angleToTarget = Mth.wrapDegrees(targetYaw - bodyYaw);
-
-                float leftEyeYaw = bodyYaw - EYE_SIDEWAYS_ANGLE;
-                float rightEyeYaw = bodyYaw + EYE_SIDEWAYS_ANGLE;
-
-                if (angleToTarget > 0) {
-                    rightEyeYaw += Mth.clamp(angleToTarget * 0.5F, 0, 45F);
-                } else {
-                    leftEyeYaw += Mth.clamp(angleToTarget * 0.5F, -45F, 0);
-                }
-
-                hullback.setLeftEyeYaw(leftEyeYaw);
-                hullback.setRightEyeYaw(rightEyeYaw);
-            } else {
-                hullback.setLeftEyeYaw(this.mob.getYRot() - EYE_SIDEWAYS_ANGLE);
-                hullback.setRightEyeYaw(this.mob.getYRot() + EYE_SIDEWAYS_ANGLE);
-                hullback.setEyePitch(0);
-            }
         }
     }
 
@@ -1189,11 +1148,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         private Player targetPlayer;
         private int repositionCooldown;
         private boolean approachFromRight;
+        private Vec3 targetPosition;
 
         public HullbackApproachPlayerGoal(HullbackEntity whale, float speedModifier) {
             this.whale = whale;
             this.speedModifier = speedModifier;
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
+            this.repositionCooldown = 200 + whale.getRandom().nextInt(200);
         }
 
         @Override
@@ -1202,13 +1163,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
                 this.repositionCooldown--;
                 return false;
             }
-
-            this.targetPlayer = this.whale.level().getNearestPlayer(this.whale, 15.0);
+            this.targetPlayer = this.whale.level().getNearestPlayer(this.whale, 30.0);
             if (this.targetPlayer == null) return false;
 
-            // Alternate approach sides for variety
-            this.approachFromRight = whale.getRandom().nextBoolean();
-            this.repositionCooldown = 200 + whale.getRandom().nextInt(200);
+            Vec3 toPlayer = targetPlayer.position().subtract(whale.position());
+            Vec3 whaleRight = Vec3.directionFromRotation(0, whale.getYRot() - 90);
+            this.approachFromRight = toPlayer.dot(whaleRight) > 0;
+
             return true;
         }
 
@@ -1222,55 +1183,55 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         @Override
         public void start() {
             super.start();
+            this.whale.setTarget(this.targetPlayer);
+            Vec3 playerLook = this.targetPlayer.getLookAngle();
+
+            // Get perpendicular vector (90 degrees to player's look)
+            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
+
+            // Calculate side offset based on approach direction
+            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
+
+            // Calculate position in front of player
+            this.targetPosition = this.targetPlayer.position()
+                    .add(sideOffset)
+                    .add(playerLook.scale(-APPROACH_DISTANCE));
+
             playSound(SoundEvents.AMETHYST_BLOCK_BREAK);
         }
 
         @Override
         public void stop() {
             this.targetPlayer = null;
+            this.targetPosition = null;
+            this.whale.setTarget(null);
+            this.repositionCooldown = 200 + whale.getRandom().nextInt(200);
             this.whale.getNavigation().stop();
         }
 
         @Override
         public void tick() {
             if (this.targetPlayer == null) return;
-
-            Vec3 playerLook = this.targetPlayer.getViewVector(1.0f);
+            Vec3 playerLook = this.targetPlayer.getLookAngle();
             Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-
             Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            Vec3 targetPos = this.targetPlayer.position()
+            this.targetPosition = this.targetPlayer.position()
                     .add(sideOffset)
                     .add(playerLook.scale(-APPROACH_DISTANCE));
+            this.whale.getNavigation().moveTo(
+                    targetPosition.x,
+                    targetPosition.y,
+                    targetPosition.z,
+                    this.speedModifier
+            );
 
-            this.whale.getNavigation().moveTo(targetPos.x, targetPos.y, targetPos.z, this.speedModifier);
+            Vec3 toPlayer = targetPlayer.position().subtract(whale.position());
+            float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
+            float sideYawOffset = approachFromRight ? -90f : 90f;
+            float targetYaw = desiredYaw + sideYawOffset;
 
-            Vec3 toPlayer = this.targetPlayer.position().subtract(this.whale.position());
-            float desiredYaw = (float)Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
-
-            float angleToPlayer = Mth.wrapDegrees(desiredYaw - this.whale.getYRot());
-
-            float sideAwareYaw = desiredYaw + (approachFromRight ? -90f : 90f);
-
-            float newYRot = Mth.rotLerp(0.05f, this.whale.getYRot(), sideAwareYaw);
-            this.whale.setYRot(newYRot);
-            this.whale.yBodyRot = newYRot;
-
-            float eyeBaseAngle = approachFromRight ? 90f : -90f;
-            float eyeFollowAmount = Mth.clamp(Math.abs(angleToPlayer) * 0.5f, 0, 45f);
-
-            if (approachFromRight) {
-                this.whale.setRightEyeYaw(eyeBaseAngle + eyeFollowAmount);
-                this.whale.setLeftEyeYaw(-90f);
-            } else {
-                this.whale.setLeftEyeYaw(eyeBaseAngle - eyeFollowAmount);
-                this.whale.setRightEyeYaw(90f);
-            }
-
-            double yDiff = this.targetPlayer.getEyeY() - this.whale.getEyeY();
-            double horizontalDist = new Vec3(toPlayer.x, 0, toPlayer.z).length();
-            float pitch = (float)-Math.toDegrees(Math.atan2(yDiff, horizontalDist));
-            this.whale.setEyePitch(pitch);
+            this.whale.setYRot(Mth.rotLerp(0.2f, this.whale.getYRot(), targetYaw));
+            this.whale.yBodyRot = this.whale.getYRot();
         }
     }
 }
