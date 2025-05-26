@@ -40,6 +40,7 @@ import net.minecraftforge.items.wrapper.InvWrapper;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class HullbackEntity extends WaterAnimal implements ContainerListener, PlayerRideableJumping, Saddleable {
@@ -60,6 +61,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     private static final EntityDataAccessor<Boolean> DATA_SADDLE_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> DATA_ARMOR_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<CompoundTag> DATA_SEAT_ASSIGNMENTS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.COMPOUND_TAG);
     public final HullbackPartEntity head;
     public final HullbackPartEntity nose;
     public final HullbackPartEntity body;
@@ -301,6 +303,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         this.entityData.define(DATA_SADDLE_ID, false);
         this.entityData.define(DATA_ARMOR_ID, 0);
         this.entityData.define(DATA_ID_FLAGS, (byte)0);
+        this.entityData.define(DATA_SEAT_ASSIGNMENTS, new CompoundTag());
     }
     public void addAdditionalSaveData(CompoundTag compound) {
         super.addAdditionalSaveData(compound);
@@ -364,8 +367,45 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 //            this.headDirt = loadDirtArray(compound.getCompound("HeadDirt"), this.level().holderLookup(Registries.BLOCK));
 //        }
 
+        if (compound.contains("Passengers")) {
+            ListTag passengers = compound.getList("Passengers", 10);
+            for (int i = 0; i < passengers.size(); i++) {
+                CompoundTag passengerTag = passengers.getCompound(i);
+                UUID passengerUUID = passengerTag.getUUID("UUID");
+
+                if (!seatAssignments.containsKey(passengerUUID)) {
+                    int seat = IntStream.range(0, seats.length)
+                            .filter(idx -> !seatAssignments.containsValue(idx))
+                            .findFirst()
+                            .orElse(0);
+                    seatAssignments.put(passengerUUID, seat);
+                }
+            }
+        }
+
+        updateSeatAssignmentsSync();
+
         this.updateContainerEquipment();
     }
+
+    private void validateAfterLoad() {
+        getPassengers().forEach(passenger -> {
+            if (!seatAssignments.containsKey(passenger.getUUID())) {
+                int seat = IntStream.range(0, seats.length)
+                        .filter(i -> !seatAssignments.containsValue(i))
+                        .findFirst()
+                        .orElse(0);
+                seatAssignments.put(passenger.getUUID(), seat);
+            }
+        });
+
+        Set<UUID> passengerUUIDs = getPassengers().stream()
+                .map(Entity::getUUID)
+                .collect(Collectors.toSet());
+
+        seatAssignments.keySet().removeIf(uuid -> !passengerUUIDs.contains(uuid));
+    }
+
     private UUID findUUIDForSeat(int seatIndex) {
         return seatAssignments.entrySet().stream()
                 .filter(entry -> entry.getValue() == seatIndex)
@@ -481,14 +521,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             return InteractionResult.PASS;
         }
 
-        //if () {
-            player.startRiding(this);
-            seatAssignments.put(player.getUUID(), seatIndex);
-            this.positionRider(player, (e, x, y, z) -> e.teleportTo(x, y, z));
-            return InteractionResult.CONSUME;
-        //}
+        player.startRiding(this);
+        seatAssignments.put(player.getUUID(), seatIndex);
+        updateSeatAssignmentsSync();
+        this.positionRider(player, (e, x, y, z) -> e.teleportTo(x, y, z));
 
-        //return InteractionResult.PASS;
+        return InteractionResult.CONSUME;
     }
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         ItemStack heldItem = player.getItemInHand(hand);
@@ -634,13 +672,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         setOldPosAndRots();
         super.tick();
 
-//        if(level().isClientSide)
-//            System.out.println(level() + ": " + seatAssignments);
-//        else
-//            System.out.println(level() + ": " + seatAssignments);
-
         updatePartPositions();
         updateMouthOpening();
+        if(level().isClientSide)
+            if (seatAssignments.isEmpty())
+                onSeatAssignmentsUpdated();
+        else
+            if (seatAssignments.isEmpty())
+                onSeatAssignmentsUpdated();
 
         if (partPosition!=null && partYRot!=null && partXRot!=null){
             seats[0] = partPosition[1].add((seatOffsets[0]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
@@ -660,10 +699,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             oldSeats[5] = oldPartPosition[2].add((seatOffsets[5]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
             oldSeats[6] = oldPartPosition[4].add((seatOffsets[6]).xRot(oldPartXRot[4] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[4] * Mth.DEG_TO_RAD));
         }
-
-//        for (Entity passenger : this.getPassengers()) {
-//            this.positionRider(passenger);
-//        }
 
         if(this.inventory!=null && !this.inventory.getItem(INV_SLOT_ARMOR).isEmpty())
             this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR).getCount());
@@ -944,21 +979,24 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
                         seats[seatIndex].z);
         }
     }
-    private int findAvailableSeat() {
-        Set<Integer> occupiedSeats = new HashSet<>(seatAssignments.values());
-        for (int i = 0; i < seats.length; i++) {
-            if (!occupiedSeats.contains(i)) {
-                return i;
-            }
-        }
-        return 0;
+    private void updateSeatAssignmentsSync() {
+        CompoundTag tag = new CompoundTag();
+        seatAssignments.forEach((uuid, seat) -> {
+            tag.putInt(uuid.toString(), seat);
+        });
+        this.entityData.set(DATA_SEAT_ASSIGNMENTS, tag);
     }
 
-    protected void addPassenger(Entity passenger, int index) {
-//        super.addPassenger(passenger);
-//        if (!seatAssignments.containsKey(passenger.getUUID())) {
-//            seatAssignments.put(passenger.getUUID(), index);
-//        }
+    private void onSeatAssignmentsUpdated() {
+        CompoundTag tag = this.entityData.get(DATA_SEAT_ASSIGNMENTS);
+
+        seatAssignments.clear();
+        for (String key : tag.getAllKeys()) {
+            try {
+                UUID uuid = UUID.fromString(key);
+                seatAssignments.put(uuid, tag.getInt(key));
+            } catch (IllegalArgumentException ignored) {}
+        }
     }
     @Override
     protected void addPassenger(Entity passenger) {
@@ -975,11 +1013,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
                     .orElse(0);
 
             seatAssignments.put(passenger.getUUID(), availableSeat);
+            updateSeatAssignmentsSync();
         }
     }
     @Override
     protected void removePassenger(Entity passenger) {
         super.removePassenger(passenger);
+        updateSeatAssignmentsSync();
     }
 
     @Override
