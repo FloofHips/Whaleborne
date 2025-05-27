@@ -7,18 +7,19 @@ import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackPartEntity;
 import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.TallSeagrassBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -26,6 +27,9 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<HullbackEntity, HullbackModel<HullbackEntity>> {
     public static final ResourceLocation MOB_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback.png");
@@ -218,5 +222,30 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     @Override
     public ResourceLocation getTextureLocation(HullbackEntity entity) {
         return MOB_TEXTURE;
+    }
+
+
+    @Override
+    public boolean shouldRender(HullbackEntity livingEntity, Frustum frustum, double v, double v1, double v2) {
+        if (this.shouldRenderAll(livingEntity, frustum, v, v1, v2)) {
+            return true;
+        } else {
+            Entity entity = livingEntity.getLeashHolder();
+            return entity != null && frustum.isVisible(entity.getBoundingBoxForCulling());
+        }
+    }
+
+    public boolean shouldRenderAll(HullbackEntity hullbackEntity, Frustum frustum, double v, double v1, double v2) {
+        if (!hullbackEntity.shouldRender(v, v1, v2)) {
+            return false;
+        } else if (hullbackEntity.noCulling) {
+            return true;
+        } else {
+            ArrayList<AABB> list = new ArrayList<>(List.of());
+            for (HullbackPartEntity entity : hullbackEntity.getSubEntities()) {
+                list.add(entity.getBoundingBoxForCulling().inflate(0.5F));
+            }
+            return list.stream().anyMatch(frustum::isVisible);
+        }
     }
 }
