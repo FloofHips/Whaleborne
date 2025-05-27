@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -131,8 +132,13 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             return parent.interact(player, hand);
         }
 
-        if (heldItem.getItem() instanceof SpawnEggItem spawnEggItem){
-            EntityType<?> entity = spawnEggItem.getType(null);//.getDefaultInstance().getEntityRepresentation();
+        if (heldItem.is(Items.PAPER) || (heldItem.getItem() instanceof SpawnEggItem spawnEggItem)){
+            EntityType<?> entity;
+
+            if(heldItem.getItem() instanceof SpawnEggItem spawnEggItem)
+               entity = spawnEggItem.getType(null);//.getDefaultInstance().getEntityRepresentation();
+            else
+                entity = WBEntityRegistry.SAIL.get();
 
             if(this.name == "tail")
                 return parent.interact(player, hand);

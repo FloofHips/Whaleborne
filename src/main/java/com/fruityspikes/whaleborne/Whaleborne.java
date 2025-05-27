@@ -2,7 +2,9 @@ package com.fruityspikes.whaleborne;
 
 import com.fruityspikes.whaleborne.client.models.HullbackArmorModel;
 import com.fruityspikes.whaleborne.client.models.HullbackModel;
+import com.fruityspikes.whaleborne.client.models.SailModel;
 import com.fruityspikes.whaleborne.client.renderers.HullbackRenderer;
+import com.fruityspikes.whaleborne.client.renderers.SailRenderer;
 import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
 import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
@@ -123,11 +125,13 @@ public class Whaleborne
         public static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
             event.registerLayerDefinition(WBEntityModelLayers.HULLBACK, HullbackModel::createBodyLayer);
             event.registerLayerDefinition(WBEntityModelLayers.HULLBACK_ARMOR, HullbackArmorModel::createBodyLayer);
+            event.registerLayerDefinition(WBEntityModelLayers.SAIL, SailModel::createBodyLayer);
         }
 
         @SubscribeEvent
         public static void registerEntityRenderers(EntityRenderersEvent.RegisterRenderers event) {
             event.registerEntityRenderer(WBEntityRegistry.HULLBACK.get(), HullbackRenderer::new);
+            event.registerEntityRenderer(WBEntityRegistry.SAIL.get(), SailRenderer::new);
         }
     }
 }

@@ -8,6 +8,7 @@ public class WBEntityModelLayers {
 
     public static final ModelLayerLocation HULLBACK = register("hullback");
     public static final ModelLayerLocation HULLBACK_ARMOR = register("hullback_armor");
+    public static final ModelLayerLocation SAIL = register("sail");
 
     private static ModelLayerLocation register(String name) {
         return register(name, "main");

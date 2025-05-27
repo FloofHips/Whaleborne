@@ -1141,7 +1141,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public class HullbackApproachPlayerGoal extends Goal {
         private static final float APPROACH_DISTANCE = 8.0f;
         private static final float SIDE_OFFSET = 5.0f;
-        private static final float ROTATION_SPEED = 0.8f; // Degrees per tick
+        private static final float ROTATION_SPEED = 0.8f;
 
         private final HullbackEntity whale;
         private final float speedModifier;
@@ -1186,13 +1186,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             this.whale.setTarget(this.targetPlayer);
             Vec3 playerLook = this.targetPlayer.getLookAngle();
 
-            // Get perpendicular vector (90 degrees to player's look)
             Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-
-            // Calculate side offset based on approach direction
+            //TODO FIX
             Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-
-            // Calculate position in front of player
             this.targetPosition = this.targetPlayer.position()
                     .add(sideOffset)
                     .add(playerLook.scale(-APPROACH_DISTANCE));
