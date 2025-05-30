@@ -1,12 +1,14 @@
 package com.fruityspikes.whaleborne.server.entities;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
 public class CannonEntity extends RideableWhaleWidgetEntity {
     public CannonEntity(EntityType<?> entityType, Level level) {
-        super(entityType, level);
+        super(entityType, level, Items.FIREWORK_ROCKET);
     }
 
     @Override
@@ -22,6 +24,11 @@ public class CannonEntity extends RideableWhaleWidgetEntity {
     @Override
     protected void addAdditionalSaveData(CompoundTag compoundTag) {
 
+    }
+
+    @Override
+    public void onPassengerTurned(Entity entityToUpdate) {
+        super.onPassengerTurned(entityToUpdate);
     }
 
     @Override

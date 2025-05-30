@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.registries;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
+import com.fruityspikes.whaleborne.server.entities.MastEntity;
 import com.fruityspikes.whaleborne.server.entities.SailEntity;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
@@ -29,6 +30,13 @@ public class WBEntityRegistry {
                             .sized(1F, 4.5F)
                             .clientTrackingRange(20)
                             .build(new ResourceLocation(Whaleborne.MODID, "sail").toString())
+    );
+    public static final RegistryObject<EntityType<MastEntity>> MAST = ENTITY_TYPES.register(
+            "mast", () ->
+                    EntityType.Builder.of(MastEntity::new, MobCategory.AMBIENT)
+                            .sized(1F, 8.3F)
+                            .clientTrackingRange(20)
+                            .build(new ResourceLocation(Whaleborne.MODID, "mast").toString())
     );
     @SubscribeEvent
     public static void entityAttributes(EntityAttributeCreationEvent event) {

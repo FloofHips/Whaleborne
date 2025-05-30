@@ -6,6 +6,7 @@ import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
@@ -29,6 +30,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.entity.PartEntity;
@@ -36,8 +38,10 @@ import net.minecraftforge.items.wrapper.InvWrapper;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public class HullbackEntity extends WaterAnimal implements ContainerListener, PlayerRideableJumping, Saddleable {
     private boolean validatedAfterLoad = false;
@@ -691,7 +695,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public void tick() {
         setOldPosAndRots();
         super.tick();
-
+        rotatePassengers();
+        //updateWalkerPositions();
         updatePartPositions();
         updateMouthOpening();
         if (this.tickCount % 20 == 0)
@@ -703,13 +708,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         }
 
         yHeadRot = yBodyRot + (partYRot[0] - partYRot[4]) * 1.5f;
-//        if (this.tickCount % 200 == 0)
-//            {
-//                if (level().isClientSide)
-//                    onSeatAssignmentsUpdated();
-//                else
-//                    updateSeatAssignmentsSync();
-//            }
 
         if (partPosition!=null && partYRot!=null && partXRot!=null){
             seats[0] = partPosition[0].add((seatOffsets[0]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
@@ -759,6 +757,21 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             part.tick();
         }
     }
+
+//    private void updateWalkerPositions() {
+//        for ( HullbackPartEntity part : getSubEntities()) {
+//            AABB boundingBox = part.getBoundingBoxForCulling().move(0, 0.5f, 0);
+//
+//            List<Entity> riders = level().getEntities(part, boundingBox);
+//            riders.removeIf(rider -> rider.isPassenger());
+//
+//            for (Entity entity : riders) {
+//                if (entity instanceof HullbackEntity || entity instanceof HullbackPartEntity)
+//                    return;
+//                Vec3 offset = new Vec3
+//            }
+//        }
+//    }
 
     private void randomTickDirt(BlockState[][] array, boolean bottom) {
         if(bottom){
@@ -956,7 +969,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public void travel(Vec3 travelVector) {
         if (this.isEffectiveAi() && this.isInWater()) {
             this.moveRelative(this.getSpeed(), travelVector);
-            this.move(MoverType.SELF, this.getDeltaMovement());
+            this.move(MoverType.SHULKER, this.getDeltaMovement());
             this.setDeltaMovement(this.getDeltaMovement().scale(0.9));
             if (this.getTarget() == null) {
                 this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.005, 0.0));
@@ -972,12 +985,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
     @Override
     public void onPlayerJump(int i) {
-        
+        this.setDeltaMovement(this.getDeltaMovement().add(0,i,i));
     }
 
     @Override
     public boolean canJump() {
-        return false;
+        return true;
     }
 
     @Override
@@ -1028,7 +1041,31 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         for (Map.Entry<UUID, Integer> entry : seatAssignments.entrySet()) {
             tag.putInt(entry.getKey().toString(), entry.getValue());
         }
+        updateModifiers();
         this.entityData.set(DATA_SEAT_ASSIGNMENTS, tag);
+    }
+
+    private void updateModifiers() {
+        double baseSpeed = 1.2;
+        double speedModifier = 0.0;
+
+        for (Entity passenger : getPassengers()) {
+            if (passenger instanceof SailEntity sail) {
+                speedModifier += sail.getSpeedModifier();
+            }
+        }
+
+        double newSpeed = baseSpeed * (1.0 + speedModifier);
+
+        Objects.requireNonNull(this.getAttribute(Attributes.MOVEMENT_SPEED))
+                .setBaseValue(newSpeed);
+    }
+
+    public int getSeatByEntity(Entity entity){
+        if(entity!=null && seatAssignments.containsKey(entity.getUUID())){
+            return seatAssignments.get(entity.getUUID());
+        }
+        return -1;
     }
 
     private void validateAssignments() {
@@ -1093,8 +1130,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         if(passenger.isRemoved())
             if (!seatAssignments.isEmpty()){
                 seatAssignments.remove(passenger.getUUID());
-                syncSeatAssignments();
             }
+        syncSeatAssignments();
         super.removePassenger(passenger);
     }
 
@@ -1117,6 +1154,102 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         return super.getDismountLocationForPassenger(passenger);
     }
 
+    public void rotatePassengers(){
+        for (Entity passenger : getPassengers()) {
+            int seat = getSeatByEntity(passenger);
+            int partIndex;
+
+            // Determine which part rotation to use based on seat
+            if (seat == 0 || seat == 1) {
+                partIndex = 0;
+            } else if (seat >= 2 && seat <= 5) {
+                partIndex = 2;
+            } else if (seat == 6) {
+                partIndex = 4;
+            } else {
+                continue; // Skip if seat number is invalid
+            }
+
+            // Apply rotation
+            if (!(passenger instanceof Player)) {
+                passenger.setYRot(partYRot[partIndex]);
+                passenger.setXRot(partXRot[partIndex]);
+            }
+//            } else {
+//                // Smooth rotation for players
+//                passenger.setYRot(Mth.rotLerp(0.1f, passenger.getYRot(), partYRot[partIndex]));
+//                passenger.setXRot(Mth.rotLerp(0.1f, passenger.getXRot(), partXRot[partIndex]));
+//            }
+        }
+    }
+
+    @Nullable
+    @Override
+    public LivingEntity getControllingPassenger() {
+        Stream<Map.Entry<UUID, Integer>> sorted = seatAssignments.entrySet().stream().sorted(Map.Entry.comparingByValue());
+
+        for (Map.Entry<UUID, Integer> passenger: sorted.toList()) {
+            if(getEntityByUUID(passenger.getKey()) instanceof Player player){
+                return player;
+            }
+        }
+
+        return super.getControllingPassenger();
+    }
+
+    public Entity getEntityByUUID(UUID uuid) {
+        for (Entity entity : getPassengers()) {
+
+            if(entity.getUUID().equals(uuid))
+                return entity;
+        }
+        return null;
+    }
+
+    protected void tickRidden(Player player, Vec3 travelVector) {
+        super.tickRidden(player, travelVector);
+        Vec2 vec2 = this.getRiddenRotation(player);
+        this.setRot(Mth.rotLerp(0.01f, this.getYRot(), vec2.y), Mth.rotLerp(0.1f, this.getXRot(), vec2.x));
+
+        this.yRotO = this.yBodyRot = this.yHeadRot = this.getYRot();
+//        if (this.isControlledByLocalInstance()) {
+//            if (travelVector.z <= 0.0) {
+//                this.gallopSoundCounter = 0;
+//            }
+//
+//            if (this.onGround()) {
+//                this.setIsJumping(false);
+//                if (this.playerJumpPendingScale > 0.0F && !this.isJumping()) {
+//                    this.executeRidersJump(this.playerJumpPendingScale, travelVector);
+//                }
+//
+//                this.playerJumpPendingScale = 0.0F;
+//            }
+//        }
+
+    }
+
+    protected Vec2 getRiddenRotation(LivingEntity entity) {
+        return new Vec2(entity.getXRot() * 0.5F, entity.getYRot());
+    }
+
+    protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
+//        if (this.onGround() && this.playerJumpPendingScale == 0.0F && this.isStanding() && !this.allowStandSliding) {
+//            return Vec3.ZERO;
+//        } else {
+            float f = player.xxa * 0.5F;
+            float f1 = player.zza;
+            if (f1 <= 0.0F) {
+                f1 *= 0.25F;
+            }
+
+            return new Vec3((double)f, 0.1, (double)f1);
+        //}
+    }
+
+    protected float getRiddenSpeed(Player player) {
+        return (float)this.getAttributeValue(Attributes.MOVEMENT_SPEED);
+    }
     class HullbackBodyRotationControl extends BodyRotationControl {
         public HullbackBodyRotationControl(HullbackEntity hullBack) {
             super(hullBack);
