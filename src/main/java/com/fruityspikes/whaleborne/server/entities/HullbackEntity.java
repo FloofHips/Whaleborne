@@ -29,11 +29,14 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.level.material.WaterFluid;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.entity.PartEntity;
+import net.minecraftforge.fluids.FluidType;
 import net.minecraftforge.items.wrapper.InvWrapper;
 
 import javax.annotation.Nullable;
@@ -696,7 +699,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         setOldPosAndRots();
         super.tick();
         rotatePassengers();
+        this.setYRot(Mth.rotLerp(0.5f, this.getYRot(), newRotY));
         //updateWalkerPositions();
+        if(isControlledByLocalInstance() && this.isEyeInFluidType(Fluids.WATER.getFluidType())){
+            this.setDeltaMovement(this.getDeltaMovement().add(0, 0.1, 0));
+        }
+
         updatePartPositions();
         updateMouthOpening();
         if (this.tickCount % 20 == 0)
@@ -969,7 +977,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public void travel(Vec3 travelVector) {
         if (this.isEffectiveAi() && this.isInWater()) {
             this.moveRelative(this.getSpeed(), travelVector);
-            this.move(MoverType.SHULKER, this.getDeltaMovement());
+            this.move(MoverType.SELF, this.getDeltaMovement());
             this.setDeltaMovement(this.getDeltaMovement().scale(0.9));
             if (this.getTarget() == null) {
                 this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.005, 0.0));
@@ -985,7 +993,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
     @Override
     public void onPlayerJump(int i) {
-        this.setDeltaMovement(this.getDeltaMovement().add(0,i,i));
+        this.setDeltaMovement(this.getControllingPassenger().getLookAngle().multiply(1.5, 2, 1.5));
     }
 
     @Override
@@ -1172,8 +1180,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
             // Apply rotation
             if (!(passenger instanceof Player)) {
-                passenger.setYRot(partYRot[partIndex]);
-                passenger.setXRot(partXRot[partIndex]);
+                passenger.setYRot(Mth.rotLerp(0.1f, oldPartYRot[partIndex], partYRot[partIndex]));
+                passenger.setXRot(Mth.rotLerp(0.1f, oldPartXRot[partIndex], partXRot[partIndex]));
             }
 //            } else {
 //                // Smooth rotation for players
@@ -1209,9 +1217,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     protected void tickRidden(Player player, Vec3 travelVector) {
         super.tickRidden(player, travelVector);
         Vec2 vec2 = this.getRiddenRotation(player);
-        this.setRot(Mth.rotLerp(0.01f, this.getYRot(), vec2.y), Mth.rotLerp(0.1f, this.getXRot(), vec2.x));
+        //this.setRot(Mth.rotLerp(0.01f, this.getYRot(), vec2.y), Mth.rotLerp(0.1f, this.getXRot(), vec2.x));
 
-        this.yRotO = this.yBodyRot = this.yHeadRot = this.getYRot();
+        //this.yRotO = this.yBodyRot = this.yHeadRot = this.getYRot();
 //        if (this.isControlledByLocalInstance()) {
 //            if (travelVector.z <= 0.0) {
 //                this.gallopSoundCounter = 0;
@@ -1233,18 +1241,22 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         return new Vec2(entity.getXRot() * 0.5F, entity.getYRot());
     }
 
+    public float newRotY = this.getYRot();
+
     protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
 //        if (this.onGround() && this.playerJumpPendingScale == 0.0F && this.isStanding() && !this.allowStandSliding) {
 //            return Vec3.ZERO;
 //        } else {
-            float f = player.xxa * 0.5F;
-            float f1 = player.zza;
-            if (f1 <= 0.0F) {
-                f1 *= 0.25F;
-            }
+        if(Mth.abs(player.xxa) > 0)
+            newRotY = this.getYRot() - player.xxa;
 
-            return new Vec3((double)f, 0.1, (double)f1);
-        //}
+        float f = player.xxa * 0.5F;
+        float f1 = player.zza;
+        if (f1 <= 0.0F) {
+            f1 *= 0.25F;
+        }
+
+        return new Vec3(0, 0.1, f1);
     }
 
     protected float getRiddenSpeed(Player player) {
@@ -1298,6 +1310,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             }
             this.targetPlayer = this.whale.level().getNearestPlayer(this.whale, 30.0);
             if (this.targetPlayer == null) return false;
+            if (this.targetPlayer.isPassenger() && this.targetPlayer.getVehicle().is(this.whale)) return false;
 
             Vec3 toPlayer = targetPlayer.position().subtract(whale.position());
             Vec3 whaleRight = Vec3.directionFromRotation(0, whale.getYRot() - 90);
@@ -1359,8 +1372,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             float sideYawOffset = approachFromRight ? -90f : 90f;
             float targetYaw = desiredYaw + sideYawOffset;
 
-            this.whale.setYRot(Mth.rotLerp(0.2f, this.whale.getYRot(), targetYaw));
-            this.whale.yBodyRot = this.whale.getYRot();
+            //this.whale.setYRot(Mth.rotLerp(0.2f, this.whale.getYRot(), targetYaw));
+            //this.whale.yBodyRot = this.whale.getYRot();
         }
     }
 }
