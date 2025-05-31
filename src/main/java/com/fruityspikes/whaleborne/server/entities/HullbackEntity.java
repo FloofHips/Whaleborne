@@ -699,10 +699,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         setOldPosAndRots();
         super.tick();
         rotatePassengers();
-        this.setYRot(Mth.rotLerp(0.5f, this.getYRot(), newRotY));
         //updateWalkerPositions();
-        if(isControlledByLocalInstance() && this.isEyeInFluidType(Fluids.WATER.getFluidType())){
-            this.setDeltaMovement(this.getDeltaMovement().add(0, 0.1, 0));
+        if(this.getControllingPassenger() instanceof Player){
+
+            this.setYRot(Mth.rotLerp(0.8f, this.getYRot(), newRotY));
+            //if(this.isEyeInFluidType(Fluids.WATER.getFluidType()))
+                //this.setDeltaMovement(this.getDeltaMovement().add(0, 0.1, 0));
         }
 
         updatePartPositions();
@@ -1030,7 +1032,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             if(seats[seatIndex] != null)
                 callback.accept(passenger,
                         seats[seatIndex].x,
-                        seats[seatIndex].y + passenger.getMyRidingOffset(),
+                        seats[seatIndex].y,// + passenger.getMyRidingOffset(),
                         seats[seatIndex].z);
         }
     }
@@ -1167,7 +1169,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             int seat = getSeatByEntity(passenger);
             int partIndex;
 
-            // Determine which part rotation to use based on seat
             if (seat == 0 || seat == 1) {
                 partIndex = 0;
             } else if (seat >= 2 && seat <= 5) {
@@ -1175,19 +1176,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             } else if (seat == 6) {
                 partIndex = 4;
             } else {
-                continue; // Skip if seat number is invalid
+                continue;
             }
 
-            // Apply rotation
             if (!(passenger instanceof Player)) {
-                passenger.setYRot(Mth.rotLerp(0.1f, oldPartYRot[partIndex], partYRot[partIndex]));
-                passenger.setXRot(Mth.rotLerp(0.1f, oldPartXRot[partIndex], partXRot[partIndex]));
+//                passenger.setYRot(partYRot[partIndex]);
+//                passenger.setXRot(partXRot[partIndex]);
+
+                passenger.setYRot(Mth.rotLerp((float) (0.1 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]));
+                passenger.setXRot(Mth.rotLerp((float) (0.1 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
             }
-//            } else {
-//                // Smooth rotation for players
-//                passenger.setYRot(Mth.rotLerp(0.1f, passenger.getYRot(), partYRot[partIndex]));
-//                passenger.setXRot(Mth.rotLerp(0.1f, passenger.getXRot(), partXRot[partIndex]));
-//            }
         }
     }
 
@@ -1256,7 +1254,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             f1 *= 0.25F;
         }
 
-        return new Vec3(0, 0.1, f1);
+        return new Vec3(0, 0.1, f1*getRiddenSpeed(player));
     }
 
     protected float getRiddenSpeed(Player player) {
@@ -1372,8 +1370,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             float sideYawOffset = approachFromRight ? -90f : 90f;
             float targetYaw = desiredYaw + sideYawOffset;
 
-            //this.whale.setYRot(Mth.rotLerp(0.2f, this.whale.getYRot(), targetYaw));
-            //this.whale.yBodyRot = this.whale.getYRot();
+            this.whale.setYRot(Mth.rotLerp(0.2f, this.whale.getYRot(), targetYaw));
+            this.whale.yBodyRot = this.whale.getYRot();
         }
     }
 }
