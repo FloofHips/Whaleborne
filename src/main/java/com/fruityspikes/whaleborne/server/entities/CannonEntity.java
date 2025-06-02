@@ -12,28 +12,15 @@ public class CannonEntity extends RideableWhaleWidgetEntity {
     }
 
     @Override
-    protected void defineSynchedData() {
-
-    }
-
-    @Override
-    protected void readAdditionalSaveData(CompoundTag compoundTag) {
-
-    }
-
-    @Override
-    protected void addAdditionalSaveData(CompoundTag compoundTag) {
-
-    }
-
-    @Override
     public void onPassengerTurned(Entity entityToUpdate) {
         super.onPassengerTurned(entityToUpdate);
     }
 
+
+
     @Override
     public boolean shouldRiderSit() {
-        return false;
+        return true;
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import com.fruityspikes.whaleborne.Whaleborne;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
@@ -12,8 +13,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.*;
 import net.minecraft.world.entity.*;
-import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
-import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.attributes.*;
 import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.control.*;
 import net.minecraft.world.entity.ai.goal.*;
@@ -34,6 +34,7 @@ import net.minecraft.world.level.material.WaterFluid;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.entity.PartEntity;
 import net.minecraftforge.fluids.FluidType;
@@ -47,6 +48,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class HullbackEntity extends WaterAnimal implements ContainerListener, PlayerRideableJumping, Saddleable {
+    private static final UUID SAIL_SPEED_MODIFIER_UUID = UUID.fromString("12345678-1234-1234-1234-1234567890ab");
     private boolean validatedAfterLoad = false;
     private float leftEyeYaw, rightEyeYaw, eyePitch;
     private LazyOptional<?> itemHandler = null;
@@ -71,8 +73,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     private Vec3[] oldPartPosition;
     private float[] oldPartYRot;
     private float[] oldPartXRot;
+    public float newRotY = this.getYRot();
     private float mouthOpenProgress;
     private boolean isOpening;
+    public float AttributeSpeedModifier = 1;
     public BlockState[][] headDirt; // 8 x 5
     public BlockState[][] headTopDirt; // 8 x 5
     public BlockState[][] bodyDirt; // 5 x 5
@@ -98,17 +102,17 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     };
     public final Vec3[] seatOffsets = {
             //head
-            new Vec3(0, 5f, 0.0), //sail
-            new Vec3(0, 5f, -3.0), //captain
+            new Vec3(0, 5.5f, 0.0), //sail
+            new Vec3(0, 5.5f, -3.0), //captain
 
             //body
-            new Vec3(1.5, 5f, 0.3),
-            new Vec3(-1.5, 5f, 0.3),
-            new Vec3(1.5, 5f, -1.75),
-            new Vec3(-1.5, 5f, -1.75),
+            new Vec3(1.5, 5.5f, 0.3),
+            new Vec3(-1.5, 5.5f, 0.3),
+            new Vec3(1.5, 5.5f, -1.75),
+            new Vec3(-1.5, 5.5f, -1.75),
 
             //fluke
-            new Vec3(0, 1.1f, -0.8)
+            new Vec3(0, 1.6f, -0.8)
     };
 
     public Vec3[] seats = new Vec3[7];
@@ -118,7 +122,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
-        this.moveControl = new SmoothSwimmingMoveControl(this, 1, 2, 0.02F, 0.1F, true);
+        this.moveControl = new SmoothSwimmingMoveControl(this, 1, 2, 1, 0.5F, true);
         this.lookControl = new SmoothSwimmingLookControl(this, 180);
 
         this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F);
@@ -976,19 +980,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         double horizontalDistance = Math.sqrt(dx * dx + dz * dz);
         return -(float)(Mth.atan2(dy, horizontalDistance) * (180F / Math.PI));
     }
-    public void travel(Vec3 travelVector) {
-        if (this.isEffectiveAi() && this.isInWater()) {
-            this.moveRelative(this.getSpeed(), travelVector);
-            this.move(MoverType.SELF, this.getDeltaMovement());
-            this.setDeltaMovement(this.getDeltaMovement().scale(0.9));
-            if (this.getTarget() == null) {
-                this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.005, 0.0));
-            }
-        } else {
-            super.travel(travelVector);
-        }
-
-    }
     protected BodyRotationControl createBodyControl() {
         return new HullbackBodyRotationControl(this);
     }
@@ -1032,7 +1023,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             if(seats[seatIndex] != null)
                 callback.accept(passenger,
                         seats[seatIndex].x,
-                        seats[seatIndex].y,// + passenger.getMyRidingOffset(),
+                        seats[seatIndex].y + passenger.getMyRidingOffset(),
                         seats[seatIndex].z);
         }
     }
@@ -1056,7 +1047,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     }
 
     private void updateModifiers() {
-        double baseSpeed = 1.2;
         double speedModifier = 0.0;
 
         for (Entity passenger : getPassengers()) {
@@ -1065,12 +1055,22 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             }
         }
 
-        double newSpeed = baseSpeed * (1.0 + speedModifier);
-
-        Objects.requireNonNull(this.getAttribute(Attributes.MOVEMENT_SPEED))
-                .setBaseValue(newSpeed);
+        AttributeInstance inst = this.getAttribute(ForgeMod.SWIM_SPEED.get());
+        if (inst != null) {
+            AttributeModifier old = inst.getModifier(SAIL_SPEED_MODIFIER_UUID);
+            if (old != null) {
+                inst.removeModifier(old);
+            }
+            if (speedModifier != 0.0) {
+                inst.addPermanentModifier(new AttributeModifier(
+                        SAIL_SPEED_MODIFIER_UUID,
+                        Whaleborne.MODID + ":sail_speed_modifier",
+                        speedModifier,
+                        AttributeModifier.Operation.ADDITION
+                ));
+            }
+        }
     }
-
     public int getSeatByEntity(Entity entity){
         if(entity!=null && seatAssignments.containsKey(entity.getUUID())){
             return seatAssignments.get(entity.getUUID());
@@ -1168,11 +1168,15 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         for (Entity passenger : getPassengers()) {
             int seat = getSeatByEntity(passenger);
             int partIndex;
-
+            float offset = 0;
             if (seat == 0 || seat == 1) {
                 partIndex = 0;
-            } else if (seat >= 2 && seat <= 5) {
+            } else if (seat == 2 || seat == 4) {
                 partIndex = 2;
+                offset = -1;
+            } else if (seat == 3 || seat == 5) {
+                partIndex = 2;
+                offset = 1;
             } else if (seat == 6) {
                 partIndex = 4;
             } else {
@@ -1180,11 +1184,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             }
 
             if (!(passenger instanceof Player)) {
-//                passenger.setYRot(partYRot[partIndex]);
-//                passenger.setXRot(partXRot[partIndex]);
-
-                passenger.setYRot(Mth.rotLerp((float) (0.1 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]));
-                passenger.setXRot(Mth.rotLerp((float) (0.1 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
+                if(!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())){
+                    passenger.setYRot(Mth.rotLerp((float) (0.1 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]) + offset);
+                    passenger.setXRot(Mth.rotLerp((float) (0.1 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
+                }
             }
         }
     }
@@ -1195,8 +1198,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         Stream<Map.Entry<UUID, Integer>> sorted = seatAssignments.entrySet().stream().sorted(Map.Entry.comparingByValue());
 
         for (Map.Entry<UUID, Integer> passenger: sorted.toList()) {
-            if(getEntityByUUID(passenger.getKey()) instanceof Player player){
-                return player;
+            if(getEntityByUUID(passenger.getKey()) instanceof HelmEntity helm && helm.hasControllingPassenger()){
+                return helm.getControllingPassenger();
             }
         }
 
@@ -1212,54 +1215,48 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         return null;
     }
 
+    @Override
     protected void tickRidden(Player player, Vec3 travelVector) {
         super.tickRidden(player, travelVector);
-        Vec2 vec2 = this.getRiddenRotation(player);
-        //this.setRot(Mth.rotLerp(0.01f, this.getYRot(), vec2.y), Mth.rotLerp(0.1f, this.getXRot(), vec2.x));
-
-        //this.yRotO = this.yBodyRot = this.yHeadRot = this.getYRot();
-//        if (this.isControlledByLocalInstance()) {
-//            if (travelVector.z <= 0.0) {
-//                this.gallopSoundCounter = 0;
-//            }
-//
-//            if (this.onGround()) {
-//                this.setIsJumping(false);
-//                if (this.playerJumpPendingScale > 0.0F && !this.isJumping()) {
-//                    this.executeRidersJump(this.playerJumpPendingScale, travelVector);
-//                }
-//
-//                this.playerJumpPendingScale = 0.0F;
-//            }
-//        }
-
     }
-
-    protected Vec2 getRiddenRotation(LivingEntity entity) {
-        return new Vec2(entity.getXRot() * 0.5F, entity.getYRot());
-    }
-
-    public float newRotY = this.getYRot();
 
     protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
 //        if (this.onGround() && this.playerJumpPendingScale == 0.0F && this.isStanding() && !this.allowStandSliding) {
 //            return Vec3.ZERO;
 //        } else {
-        if(Mth.abs(player.xxa) > 0)
+        if(Mth.abs(player.xxa) > 0){
             newRotY = this.getYRot() - player.xxa;
+            if(getControllingPassenger().getVehicle() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
+                helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / 10);
+            }
+        } else{
+            if(getControllingPassenger().getVehicle() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
+                helmEntity.setPrevWheelRotation(helmEntity.getWheelRotation());
+            }
+        }
 
         float f = player.xxa * 0.5F;
         float f1 = player.zza;
         if (f1 <= 0.0F) {
             f1 *= 0.25F;
         }
+        float f3 = 0;
+        if(this.nose.isEyeInFluidType(Fluids.WATER.getFluidType()))
+            f3 = 1;
 
-        return new Vec3(0, 0.1, f1*getRiddenSpeed(player));
+        return new Vec3(0, f3, f1);
     }
 
+    @Override
     protected float getRiddenSpeed(Player player) {
-        return (float)this.getAttributeValue(Attributes.MOVEMENT_SPEED);
+        return (float) this.getAttributeValue(Attributes.MOVEMENT_SPEED);
     }
+
+    @Override
+    public boolean canBeRiddenUnderFluidType(FluidType type, Entity rider) {
+        return true;
+    }
+
     class HullbackBodyRotationControl extends BodyRotationControl {
         public HullbackBodyRotationControl(HullbackEntity hullBack) {
             super(hullBack);
@@ -1319,6 +1316,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
         @Override
         public boolean canContinueToUse() {
+            if (this.targetPlayer.isPassenger() && this.targetPlayer.getVehicle().is(this.whale)) return false;
             return this.targetPlayer != null
                     && this.targetPlayer.isAlive()
                     && this.whale.distanceToSqr(this.targetPlayer) < 225.0; // 15^2

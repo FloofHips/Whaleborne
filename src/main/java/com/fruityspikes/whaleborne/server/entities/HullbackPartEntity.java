@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import com.fruityspikes.whaleborne.server.items.WhaleEquipment;
 import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -132,13 +133,14 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             return parent.interact(player, hand);
         }
 
-        if (heldItem.is(Items.PAPER) || (heldItem.getItem() instanceof SpawnEggItem spawnEggItem)){
+        if ((heldItem.getItem() instanceof WhaleEquipment) || (heldItem.getItem() instanceof SpawnEggItem)){
             EntityType<?> entity;
 
             if(heldItem.getItem() instanceof SpawnEggItem spawnEggItem)
-               entity = spawnEggItem.getType(null);//.getDefaultInstance().getEntityRepresentation();
-            else
-                entity = WBEntityRegistry.SAIL.get();
+               entity = spawnEggItem.getType(null);
+            else if(heldItem.getItem() instanceof WhaleEquipment whaleEquipment)
+                entity = whaleEquipment.getEntity();
+            else entity = EntityType.EXPERIENCE_ORB;
 
             if(this.name == "tail")
                 return parent.interact(player, hand);
@@ -202,92 +204,8 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
     public boolean canBeCollidedWith() {
         return true;
     }
-//    public Packet<ClientGamePacketListener> getAddEntityPacket() {
-//        throw new UnsupportedOperationException();
-//    }
-
     public EntityDimensions getDimensions(Pose pose) {
         return this.size;
     }
 
-//    public boolean shouldBeSaved() {
-//        return false;
-//    }
-
-    public void render(PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, int packedOverlay, ModelPart part) {
-        poseStack.pushPose();
-
-        Vec3 partOffset = this.position().subtract(parent.position());
-
-        poseStack.mulPose(Axis.YP.rotationDegrees(-parent.getYRot()));
-
-        poseStack.translate(partOffset.x, -partOffset.y, -partOffset.z);
-
-        poseStack.mulPose(Axis.YP.rotationDegrees(this.getYRot()));
-        poseStack.mulPose(Axis.XP.rotationDegrees(-this.getXRot()));
-
-        float xPivot = 0;
-        float yPivot = -size.height / 2;
-        float zPivot = -size.width / 2;
-
-        poseStack.translate(xPivot, yPivot, zPivot);
-
-        part.render(poseStack, vertexConsumer, packedLight, packedOverlay);
-
-        poseStack.popPose();
-    }
-    public void render(PoseStack poseStack, MultiBufferSource buffer, float partialTicks, ResourceLocation texture, int packedLight, ModelPart part) {
-        poseStack.pushPose();
-
-//        System.out.println(xo);
-//        System.out.println(this.getX());
-//
-//        float X = (float) Mth.lerp(partialTicks, xo, position().x);
-//        float Y = (float) Mth.lerp(partialTicks, yo, position().y);
-//        float Z = (float) Mth.lerp(partialTicks, zo, position().z);
-//
-//        System.out.println(X);
-
-        float lerpedYRot = Mth.lerp(partialTicks, yRotO, this.getYRot());
-        float lerpedXRot = Mth.lerp(partialTicks, xRotO, this.getXRot());
-
-        part.resetPose();
-        part.setPos(0,0,0);
-
-        poseStack.mulPose(Axis.XP.rotationDegrees(180));
-        poseStack.translate(this.getPosition(partialTicks).x - parent.getPosition(partialTicks).x,
-                - (this.getPosition(partialTicks).y - parent.getPosition(partialTicks).y),
-                -(this.getPosition(partialTicks).z - parent.getPosition(partialTicks).z));
-
-
-        poseStack.mulPose(Axis.YP.rotationDegrees(lerpedYRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(-lerpedXRot));
-        poseStack.translate(0, -size.height/2, -size.width/2);
-
-        boolean flag = parent.hurtTime > 0;
-        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(texture)), packedLight, OverlayTexture.pack(0.0F, flag));
-        poseStack.translate(0, size.height/2, size.width/2);
-        renderDirt(poseStack, buffer, packedLight);
-        poseStack.translate(0, -size.height-1, 0);
-        renderDirt(poseStack, buffer, packedLight);
-        poseStack.popPose();
-    }
-    public void renderDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
-//        Vec3 renderPos = this.position();
-//        poseStack.translate(renderPos.x - parent.getX(), - (renderPos.y - parent.getY()), -(renderPos.z - parent.getZ()));
-//
-//        poseStack.mulPose(Axis.XP.rotationDegrees(-this.getXRot()));
-//        poseStack.mulPose(Axis.YP.rotationDegrees(-this.getYRot()));
-        if(Minecraft.getInstance().getEntityRenderDispatcher().shouldRenderHitBoxes()) {
-            LevelRenderer.renderLineBox(
-                    poseStack,
-                    buffer.getBuffer(RenderType.lines()),
-                    new AABB(-0.1, -0.1, -0.1, 0.1, 10, 0.1),
-                    1, 0, 0, 1
-            );
-        }
-
-        boolean flag = parent.hurtTime > 0;
-        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.DARK_OAK_PLANKS.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
-    }
 }

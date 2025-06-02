@@ -10,7 +10,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
 public class SailEntity extends WhaleWidgetEntity{
-    private float SPEED_MODIFIER = 0.5F;
+    private float SPEED_MODIFIER = 1.0F;
 
     public SailEntity(EntityType<?> entityType, Level level) {
         super(entityType, level, Items.PAPER);
@@ -23,14 +23,14 @@ public class SailEntity extends WhaleWidgetEntity{
     @Override
     public void tick() {
         super.tick();
-//        if(this.isPassenger()){
-//            Entity whale = this.getVehicle();
-//
-//            if (whale.getDeltaMovement().length()>0.1f){
-//                if (this.tickCount % 100 == 0)
-//                    this.level().playSound(this, BlockPos.containing(this.position()), SoundEvents.ELYTRA_FLYING, SoundSource.NEUTRAL, (float) whale.getDeltaMovement().length(), (float) whale.getDeltaMovement().length());
-//            }
-//        }
+        if(this.isPassenger()){
+            Entity whale = this.getVehicle();
+
+            if (whale.getDeltaMovement().length()>0.1f){
+                if (this.tickCount % 500 == 0)
+                    this.level().playSound(this, BlockPos.containing(this.position()), SoundEvents.ELYTRA_FLYING, SoundSource.NEUTRAL, (float) whale.getDeltaMovement().length(), (float) whale.getDeltaMovement().length());
+            }
+        }
     }
 
     @Override
