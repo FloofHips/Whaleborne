@@ -32,7 +32,7 @@ public class WBEntityRegistry {
     public static final RegistryObject<EntityType<CannonEntity>> CANNON = ENTITY_TYPES.register(
             "cannon", () ->
                     EntityType.Builder.of(CannonEntity::new, MobCategory.MISC)
-                            .sized(2F, 2F)
+                            .sized(2F, 0.5F)
                             .clientTrackingRange(20)
                             .build(new ResourceLocation(Whaleborne.MODID, "cannon").toString())
     );

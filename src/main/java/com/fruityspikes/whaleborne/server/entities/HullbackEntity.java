@@ -1305,7 +1305,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             }
             this.targetPlayer = this.whale.level().getNearestPlayer(this.whale, 30.0);
             if (this.targetPlayer == null) return false;
-            if (this.targetPlayer.isPassenger() && this.targetPlayer.getVehicle().is(this.whale)) return false;
+            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.whale) || (this.targetPlayer.getVehicle().isPassenger() &&this.targetPlayer.getVehicle().getVehicle().is(this.whale)))) return false;
 
             Vec3 toPlayer = targetPlayer.position().subtract(whale.position());
             Vec3 whaleRight = Vec3.directionFromRotation(0, whale.getYRot() - 90);
@@ -1316,7 +1316,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
         @Override
         public boolean canContinueToUse() {
-            if (this.targetPlayer.isPassenger() && this.targetPlayer.getVehicle().is(this.whale)) return false;
+            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.whale) || (this.targetPlayer.getVehicle().isPassenger() &&this.targetPlayer.getVehicle().getVehicle().is(this.whale)))) return false;
             return this.targetPlayer != null
                     && this.targetPlayer.isAlive()
                     && this.whale.distanceToSqr(this.targetPlayer) < 225.0; // 15^2

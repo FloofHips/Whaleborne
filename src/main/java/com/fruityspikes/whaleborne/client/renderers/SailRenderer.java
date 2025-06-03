@@ -64,7 +64,7 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
         model.setupAnim((SailEntity) entity, partialTick, 0.0F, -0.1F, 0.0F, 0.0F);
         VertexConsumer vertexconsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(getTextureLocation(entity)));
         getModel().renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);
-        VertexConsumer vertexconsumer1 = buffer.getBuffer(RenderType.entityCutout(TARP_TEXTURE));
+        VertexConsumer vertexconsumer1 = buffer.getBuffer(RenderType.entityCutoutNoCull(TARP_TEXTURE));
         float alpha = (float) entity.getDeltaMovement().normalize().length();
         this.renderSails((SailEntity) entity, poseStack, vertexconsumer1, partialTick, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0f);
         poseStack.popPose();

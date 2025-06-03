@@ -35,7 +35,7 @@ public class CannonModel<T extends CannonEntity> extends EntityModel<T> {
     @Override
     public void setupAnim(T t, float v, float v1, float v2, float v3, float v4) {
         cannon.resetPose();
-        //cannon.xRot = Mth.lerp(v, t.getPrevWheelRotation(), t.getWheelRotation());
+        cannon.xRot = (t.getCannonXRot() + 90) * Mth.DEG_TO_RAD;
     }
 
     @Override

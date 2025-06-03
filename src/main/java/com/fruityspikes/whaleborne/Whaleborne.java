@@ -1,25 +1,22 @@
 package com.fruityspikes.whaleborne;
 
+import com.fruityspikes.whaleborne.client.menus.CannonScreen;
 import com.fruityspikes.whaleborne.client.models.*;
 import com.fruityspikes.whaleborne.client.renderers.*;
+import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
+import com.fruityspikes.whaleborne.server.entities.HelmEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
-import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
-import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
-import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
-import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
+import com.fruityspikes.whaleborne.server.registries.*;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockBehaviour;
-import net.minecraft.world.level.material.MapColor;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.client.event.ViewportEvent;
@@ -34,6 +31,7 @@ import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
@@ -73,7 +71,8 @@ public class Whaleborne
         WBEntityRegistry.ENTITY_TYPES.register(modEventBus);
         WBBlockRegistry.BLOCKS.register(modEventBus);
         WBItemRegistry.ITEMS.register(modEventBus);
-
+        WBMenuRegistry.MENUS.register(modEventBus);
+        WhaleborneNetwork.init();
         CREATIVE_MODE_TABS.register(modEventBus);
 
         MinecraftForge.EVENT_BUS.register(this);
@@ -118,61 +117,9 @@ public class Whaleborne
         @SubscribeEvent
         public static void onClientSetup(FMLClientSetupEvent event)
         {
-            // Some client setup code
+            MenuScreens.register(WBMenuRegistry.CANNON_MENU.get(), CannonScreen::new);
             LOGGER.info("HELLO FROM CLIENT SETUP");
             LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
-        }
-        @SubscribeEvent
-        public void computeCameraAngles(ViewportEvent.ComputeFov event) {
-            Minecraft mc = Minecraft.getInstance();
-            Player player = mc.player;
-            float partialTicks = (float) event.getPartialTick();
-
-            //Code taken and modified from Alex
-//            float lerpedShakeAmount = Mth.clamp(prevShakeAmount + (shakeAmount - prevShakeAmount) * partialTicks, 0, 4.0F);
-//            if (lerpedShakeAmount > 0) {
-//                float time = mc.cameraEntity == null ? 0.0F : mc.cameraEntity.tickCount + mc.getPartialTick();
-//                event.setRoll((float) (lerpedShakeAmount * Math.sin(2.0F * time)));
-//            }
-//
-//            float targetPitch = 0.0F;
-//            float targetRoll = 0.0F;
-//
-//            if (player instanceof PlayerAccess access) {
-//                Entity harpoonEntity = mc.level.getEntity(access.getHarpoonId());
-//                if (harpoonEntity instanceof Harpoon harpoon && harpoon.isAnchored() && harpoon.getAnchorPos() != null) {
-//
-//                    Vec3 anchor = Vec3.atCenterOf(harpoon.getAnchorPos());
-//
-//                    double px = Mth.lerp(partialTicks, player.xo, player.getX());
-//                    double py = Mth.lerp(partialTicks, player.yo, player.getY());
-//                    double pz = Mth.lerp(partialTicks, player.zo, player.getZ());
-//
-//                    Vec3 playerPos = new Vec3(px, py + player.getEyeHeight(), pz);
-//
-//                    Vec3 toAnchor = anchor.subtract(playerPos).normalize();
-//
-//                    float yawRad = -player.getYRot() * Mth.DEG_TO_RAD;
-//                    float pitchRad = -player.getXRot() * Mth.DEG_TO_RAD;
-//                    double forwardsInfluence = new Vec3(Math.sin(yawRad), 0, -Math.cos(yawRad)).dot(toAnchor);
-//                    double lateralInfluence = -(new Vec3(Math.sin(pitchRad) + Math.cos(yawRad), 0, Math.cos(pitchRad) - Math.cos(yawRad)).dot(toAnchor));
-//
-//                    float forwardsMaxTilt = (float) (5.0F * mc.options.fovEffectScale().get());
-//                    float lateralMaxTilt = (float) (5.0F * mc.options.fovEffectScale().get());
-//
-//                    targetPitch = (float) Mth.clamp(forwardsInfluence * forwardsMaxTilt, -forwardsMaxTilt, forwardsMaxTilt);
-//                    targetRoll = (float) Mth.clamp(lateralInfluence * lateralMaxTilt, -lateralMaxTilt, lateralMaxTilt);
-//                }
-//            }
-//
-//            smoothPitch = Mth.lerp(0.15F, smoothPitch, targetPitch);
-//            smoothRoll = Mth.lerp(0.15F, smoothRoll, targetRoll);
-//            event.setPitch(event.getPitch() + smoothPitch);
-//            event.setRoll(event.getRoll() + smoothRoll);
-            System.out.println("hi");
-            if(player.isPassenger() && player.getVehicle().getVehicle() instanceof HullbackEntity hullbackEntity){
-                event.setFOV(hullbackEntity.getDeltaMovement().length());
-            }
         }
         @SubscribeEvent
         public static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
