@@ -10,7 +10,7 @@ import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
 
-public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRideableJumping {
+public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRideableJumping, HasCustomInventoryScreen {
 
     public HelmEntity(EntityType<?> entityType, Level level) {
         super(entityType, level, Items.STICK);
@@ -66,5 +66,11 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     @Override
     public void handleStopJump() {
 
+    }
+
+    @Override
+    public void openCustomInventoryScreen(Player player) {
+        if(this.isPassenger() && this.getVehicle() instanceof HullbackEntity hullback)
+            hullback.openCustomInventoryScreen(player);
     }
 }

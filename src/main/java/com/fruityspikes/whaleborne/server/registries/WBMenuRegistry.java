@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.registries;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.client.menus.CannonMenu;
+import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import com.fruityspikes.whaleborne.server.entities.CannonEntity;
 import com.fruityspikes.whaleborne.server.items.WhaleEquipment;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -21,5 +22,7 @@ public class WBMenuRegistry {
     public static final RegistryObject<MenuType<CannonMenu>> CANNON_MENU =
             MENUS.register("cannon_menu", () ->
                     IForgeMenuType.create(CannonMenu::fromNetwork));
-
+    public static final RegistryObject<MenuType<HullbackMenu>> HULLBACK_MENU =
+            MENUS.register("hullback_menu", () ->
+                    IForgeMenuType.create(HullbackMenu::fromNetwork));
 }

@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.client.menus;
 
+import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.server.entities.CannonEntity;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -8,7 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 
 public class CannonScreen extends AbstractContainerScreen<CannonMenu> {
-    private static final ResourceLocation TEXTURE = new ResourceLocation("whaleborne", "textures/gui/cannon.png");
+    private static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/gui/cannon.png");
     public CannonScreen(CannonMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
     }

@@ -1,6 +1,7 @@
 package com.fruityspikes.whaleborne;
 
 import com.fruityspikes.whaleborne.client.menus.CannonScreen;
+import com.fruityspikes.whaleborne.client.menus.HullbackScreen;
 import com.fruityspikes.whaleborne.client.models.*;
 import com.fruityspikes.whaleborne.client.renderers.*;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
@@ -118,6 +119,7 @@ public class Whaleborne
         public static void onClientSetup(FMLClientSetupEvent event)
         {
             MenuScreens.register(WBMenuRegistry.CANNON_MENU.get(), CannonScreen::new);
+            MenuScreens.register(WBMenuRegistry.HULLBACK_MENU.get(), HullbackScreen::new);
             LOGGER.info("HELLO FROM CLIENT SETUP");
             LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
         }

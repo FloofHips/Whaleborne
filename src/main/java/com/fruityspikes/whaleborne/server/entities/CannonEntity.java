@@ -25,6 +25,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.phys.Vec3;
@@ -169,9 +170,33 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
             if(ammo.is(Items.ENDER_PEARL)){
                 projectile = new ThrownEnderpearl(
                         this.level(),
-                        (LivingEntity) this.getVehicle());
+                        (LivingEntity) this.getFirstPassenger());
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.ENDER_PEARL_THROW, SoundSource.BLOCKS, 1.0F,
+                        (float) power / 50);
+            }
+            else if(ammo.is(Items.PAPER)){
+                Entity passenger = this.getFirstPassenger();
+                if (passenger != null) {
+                    this.ejectPassengers();
+
+                    passenger.setDeltaMovement(
+                            lookAngle.x * ((double) power),
+                            lookAngle.y * ((double) power),
+                            lookAngle.z * ((double) power)
+                    );
+                    passenger.hurtMarked = true;
+                    passenger.setPose(Pose.CROUCHING);
+
+                    level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
+                            (float) power / 50);
+                }
+            }
+            else if(ammo.getItem() instanceof SpawnEggItem spawnEggItem){
+                projectile = spawnEggItem.getType(null).create(this.level());
+                level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);
             }
             else if(ammo.is(Items.TNT)){
@@ -287,7 +312,6 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
         super.addAdditionalSaveData(tag);
         ListTag items = new ListTag();
 
-        // Save both slots (0 and 1)
         for(int i = 0; i < this.inventory.getContainerSize(); i++) {
             ItemStack stack = this.inventory.getItem(i);
             if (!stack.isEmpty()) {

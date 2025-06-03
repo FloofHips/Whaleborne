@@ -9,6 +9,7 @@ import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -17,9 +18,12 @@ import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.TallSeagrassBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -149,6 +153,18 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             poseStack.popPose();
         }
 
+        if(index == 0 && !pEntity.inventory.getItem(0).isEmpty()){
+            poseStack.pushPose();
+            poseStack.translate(0,-4.07, -4);
+            poseStack.mulPose(Axis.XP.rotationDegrees(180));
+            Minecraft.getInstance().getItemRenderer().renderStatic(pEntity.inventory.getItem(0), ItemDisplayContext.HEAD, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
+            poseStack.popPose();
+        }
+
+        if(index == 2){
+            renderFixedNameTag(pEntity, poseStack, buffer, packedLight);
+        }
+
         part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(MOB_TEXTURE)), packedLight, OverlayTexture.pack(0.0F, flag));
 
         if(pEntity.isSaddled()) {
@@ -178,6 +194,47 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             rendertTopDirt(poseStack, buffer, packedLight, pEntity, index);
         }
         poseStack.popPose();
+    }
+
+    private void renderFixedNameTag(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
+        Component name = pEntity.getDisplayName();
+
+        if (pEntity.isAlive() && !name.getString().isEmpty()) {
+            Font font = this.getFont();
+
+            poseStack.pushPose();
+
+            poseStack.translate(0, -2.4, 6.79);
+            poseStack.mulPose(Axis.YN.rotationDegrees(180));
+
+            float scale = 0.08f;
+            poseStack.scale(scale, scale, scale);
+
+            List<FormattedCharSequence> lines = font.split(name, 8 * 6);
+
+            float totalHeight = lines.size() * font.lineHeight;
+
+            // Draw each line, stacked vertically
+            for (int i = 0; i < lines.size(); i++) {
+                FormattedCharSequence line = lines.get(i);
+                float xOffset = -font.width(line) / 2f;
+                float yOffset = i * font.lineHeight - totalHeight / 2f;
+
+                font.drawInBatch(
+                        line,
+                        xOffset, yOffset,
+                        0xFFFFFF,
+                        false,
+                        poseStack.last().pose(),
+                        buffer,
+                        Font.DisplayMode.NORMAL,
+                        0,
+                        packedLight
+                );
+            }
+
+            poseStack.popPose();
+        }
     }
 
     private void rendertTopDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight, HullbackEntity parent, int index) {

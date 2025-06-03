@@ -1,8 +1,10 @@
 package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.Whaleborne;
+import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -23,39 +25,45 @@ import net.minecraft.world.entity.ai.navigation.WaterBoundPathNavigation;
 import net.minecraft.world.entity.animal.WaterAnimal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Guardian;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluids;
-import net.minecraft.world.level.material.WaterFluid;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.entity.PartEntity;
 import net.minecraftforge.fluids.FluidType;
+import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.wrapper.InvWrapper;
+import net.minecraftforge.network.NetworkHooks;
 
 import javax.annotation.Nullable;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-public class HullbackEntity extends WaterAnimal implements ContainerListener, PlayerRideableJumping, Saddleable {
+public class HullbackEntity extends WaterAnimal implements ContainerListener, HasCustomInventoryScreen, PlayerRideableJumping, Saddleable {
     private static final UUID SAIL_SPEED_MODIFIER_UUID = UUID.fromString("12345678-1234-1234-1234-1234567890ab");
     private boolean validatedAfterLoad = false;
     private float leftEyeYaw, rightEyeYaw, eyePitch;
-    private LazyOptional<?> itemHandler = null;
-    protected SimpleContainer inventory;
-    public static final int INV_SLOT_ARMOR = 0;
-    public static final int INV_SLOT_CROWN = 1;
-    public static final int INV_SLOT_SADDLE = 2;
+    private LazyOptional<IItemHandler> itemHandler = LazyOptional.empty();
+    public SimpleContainer inventory = new SimpleContainer(3) {
+        @Override
+        public void setChanged() {
+            super.setChanged();
+        }
+    };
+    public static final int INV_SLOT_CROWN = 0;
+    public static final int INV_SLOT_SADDLE = 1;
+    public static final int INV_SLOT_ARMOR = 2;
     private static final EntityDataAccessor<Boolean> DATA_SADDLE_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> DATA_ARMOR_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
@@ -76,6 +84,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public float newRotY = this.getYRot();
     private float mouthOpenProgress;
     private boolean isOpening;
+
+    public static UUID getSailSpeedModifierUuid() {
+        return SAIL_SPEED_MODIFIER_UUID;
+    }
+
     public float AttributeSpeedModifier = 1;
     public BlockState[][] headDirt; // 8 x 5
     public BlockState[][] headTopDirt; // 8 x 5
@@ -121,6 +134,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
+
+        this.inventory.addListener(this);
+        this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
 
         this.moveControl = new SmoothSwimmingMoveControl(this, 1, 2, 1, 0.5F, true);
         this.lookControl = new SmoothSwimmingLookControl(this, 180);
@@ -266,23 +282,19 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 
     public void equipSaddle(@Nullable SoundSource source) {
         this.inventory.setItem(INV_SLOT_SADDLE, new ItemStack(Items.SADDLE));
-        this.entityData.set(DATA_SADDLE_ID, true);
+    //    this.entityData.set(DATA_SADDLE_ID, true);
     }
 
-    public void equipArmor() {
-        this.entityData.set(DATA_ARMOR_ID, 64);
-    }
+    //public void equipArmor() {
+//        this.entityData.set(DATA_ARMOR_ID, 64);
+//    }
     public boolean isWearingArmor() {
-        if (this.level().isClientSide) {
-            return this.entityData.get(DATA_ARMOR_ID) == 64;
-        }
         return !this.inventory.getItem(INV_SLOT_ARMOR).isEmpty();
     }
-
+    public float getArmorDurability() {
+        return (float) this.inventory.getItem(INV_SLOT_ARMOR).getCount() /64;
+    }
     public boolean isSaddled() {
-        if (this.level().isClientSide) {
-            return this.entityData.get(DATA_SADDLE_ID);
-        }
         return !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty();
     }
 
@@ -300,8 +312,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     }
     protected void defineSynchedData() {
         super.defineSynchedData();
-        this.entityData.define(DATA_SADDLE_ID, false);
-        this.entityData.define(DATA_ARMOR_ID, 0);
         this.entityData.define(DATA_ID_FLAGS, (byte)0);
         this.entityData.define(DATA_SEAT_ASSIGNMENTS, new CompoundTag());
     }
@@ -309,7 +319,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         super.addAdditionalSaveData(compound);
         ListTag listtag = new ListTag();
 
-        for(int i = 2; i < this.inventory.getContainerSize(); ++i) {
+        for(int i = 0; i < this.inventory.getContainerSize(); ++i) {
             ItemStack itemstack = this.inventory.getItem(i);
             if (!itemstack.isEmpty()) {
                 CompoundTag compoundtag = new CompoundTag();
@@ -320,8 +330,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         }
         compound.put("Items", listtag);
 
-        compound.putBoolean("Saddled", this.isSaddled());
-        compound.putInt("Armor", this.entityData.get(DATA_ARMOR_ID));
         compound.putByte("Flags", this.entityData.get(DATA_ID_FLAGS));
 
         CompoundTag seatAssignmentsTag = new CompoundTag();
@@ -336,19 +344,17 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     }
     public void readAdditionalSaveData(CompoundTag compound) {
         super.readAdditionalSaveData(compound);
-        this.createInventory();
-        ListTag listtag = compound.getList("Items", 10);
+        //this.createInventory();
+        ListTag items = compound.getList("Items", 10);
 
-        for(int i = 0; i < listtag.size(); ++i) {
-            CompoundTag compoundtag = listtag.getCompound(i);
-            int j = compoundtag.getByte("Slot") & 255;
-            if (j >= 2 && j < this.inventory.getContainerSize()) {
-                this.inventory.setItem(j, ItemStack.of(compoundtag));
+        for(int i = 0; i < items.size(); i++) {
+            CompoundTag itemTag = items.getCompound(i);
+            int slot = itemTag.getByte("Slot") & 255;
+            if (slot >= 0 && slot < this.inventory.getContainerSize()) {
+                this.inventory.setItem(slot, ItemStack.of(itemTag));
             }
         }
 
-        this.entityData.set(DATA_SADDLE_ID, compound.getBoolean("Saddled"));
-        this.entityData.set(DATA_ARMOR_ID, compound.getInt("Armor"));
         this.entityData.set(DATA_ID_FLAGS, compound.getByte("Flags"));
 
         seatAssignments.clear();
@@ -454,11 +460,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
 //        return array;
 //    }
     public float getArmorProgress() {
-        float progress = (float) this.entityData.get(DATA_ARMOR_ID) / 64;
-        progress = (float) (Math.round(progress * Math.pow(10, 3))
-                        / Math.pow(10, 3));
-
-        return progress;
+        return (float) this.inventory.getItem(INV_SLOT_ARMOR).getCount() /64;
     }
     public float getLeftEyeYaw() { return leftEyeYaw; }
     public float getRightEyeYaw() { return rightEyeYaw; }
@@ -511,6 +513,25 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         this.goalSelector.addGoal(8, new FollowBoatGoal(this));
         this.goalSelector.addGoal(9, new AvoidEntityGoal(this, Guardian.class, 8.0F, 1.0, 1.0));
         this.targetSelector.addGoal(1, (new HurtByTargetGoal(this, new Class[]{Guardian.class})).setAlertOthers(new Class[0]));
+    }
+
+    public void moveEntitiesOnTop(HullbackPartEntity part) {
+        for (Entity entity : this.level().getEntities(part, part.getBoundingBox().inflate(0F, 0.01F, 0F), EntitySelector.NO_SPECTATORS.and((entity) -> {
+            return (!entity.isPassenger());
+        }))) {
+            if (!entity.noPhysics && !(entity instanceof HullbackPartEntity) && !(entity instanceof HullbackEntity)) {
+                double gravity = entity.isNoGravity() ? 0 : 0.08D;
+                if (entity instanceof LivingEntity living) {
+                    AttributeInstance attribute = living.getAttribute(net.minecraftforge.common.ForgeMod.ENTITY_GRAVITY.get());
+                    gravity = attribute.getValue();
+                }
+                float f2 = 1.0F;
+                entity.move(MoverType.SHULKER, new Vec3((double) (f2 * (float) this.getDeltaMovement().x), (double) (f2 * (float) this.getDeltaMovement().y), (double) (f2 * (float) this.getDeltaMovement().z)));
+                if(this.getDeltaMovement().y >= 0){
+                    entity.setDeltaMovement(entity.getDeltaMovement().add(0, gravity, 0));
+                }
+            }
+        }
     }
 
     public InteractionResult mobInteract(Player player, InteractionHand hand) {
@@ -566,7 +587,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
     public InteractionResult interactArmor(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         ItemStack heldItem = player.getItemInHand(hand);
 
-        if (!this.level().isClientSide) {
+        //if (!this.level().isClientSide) {
             if (heldItem.getItem() instanceof SaddleItem) {
                 if (!this.isSaddled()) {
                     this.equipSaddle(SoundSource.PLAYERS);
@@ -582,17 +603,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             }
             else if (heldItem.is(Items.DARK_OAK_PLANKS)) {
                 ItemStack currentArmor = this.inventory.getItem(INV_SLOT_ARMOR);
-                int toAdd = Math.min(heldItem.getCount(), 64 - currentArmor.getCount());
-
-                if (toAdd > 0) {
+                System.out.println(currentArmor.getCount());
+                if (currentArmor.getCount() < 64) {
                     if (currentArmor.isEmpty()) {
-                        this.inventory.setItem(INV_SLOT_ARMOR, new ItemStack(Items.DARK_OAK_PLANKS, toAdd));
+                        this.inventory.setItem(INV_SLOT_ARMOR, new ItemStack(Items.DARK_OAK_PLANKS, 1));
                     } else {
-                        currentArmor.grow(toAdd);
+                        currentArmor.grow(1);
                     }
 
                     if (!player.getAbilities().instabuild) {
-                        heldItem.shrink(toAdd);
+                        heldItem.shrink(1);
                     }
                     this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                             SoundEvents.WOOD_PLACE,
@@ -604,14 +624,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
                         this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                             SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
                             SoundSource.PLAYERS, 1.0F, 1.0F);
-                        this.equipArmor();
-
                     }
                     return InteractionResult.SUCCESS;
                 }
                 return InteractionResult.PASS;
             }
-        }
+        //}
         return InteractionResult.PASS;
     }
     private InteractionResult handleVegetationRemoval(Player player, InteractionHand hand, HullbackPartEntity part, boolean top, boolean isShears) {
@@ -711,6 +729,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
                 //this.setDeltaMovement(this.getDeltaMovement().add(0, 0.1, 0));
         }
 
+        for (HullbackPartEntity part : getSubEntities()) {
+            //if (part.getDeltaMovement().length() > 0) {
+                moveEntitiesOnTop(part);
+            //}
+        }
+
         updatePartPositions();
         updateMouthOpening();
         if (this.tickCount % 20 == 0)
@@ -741,9 +765,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
             oldSeats[5] = oldPartPosition[2].add((seatOffsets[5]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
             oldSeats[6] = oldPartPosition[4].add((seatOffsets[6]).xRot(oldPartXRot[4] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[4] * Mth.DEG_TO_RAD));
         }
-
-        if(this.inventory!=null && !this.inventory.getItem(INV_SLOT_ARMOR).isEmpty())
-            this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR).getCount());
 
         randomTickDirt(headDirt, true);
         randomTickDirt(bodyDirt, true);
@@ -1257,6 +1278,25 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Pl
         return true;
     }
 
+    @Override
+    public void openCustomInventoryScreen(Player player) {
+        openHullbackMenu(player);
+    }
+    private void openHullbackMenu(Player player) {
+        if (!level().isClientSide && player instanceof ServerPlayer serverPlayer) {
+            NetworkHooks.openScreen(serverPlayer, new MenuProvider() {
+                @Override
+                public Component getDisplayName() {
+                    return HullbackEntity.this.getDisplayName();
+                }
+
+                @Override
+                public AbstractContainerMenu createMenu(int windowId, Inventory playerInventory, Player player) {
+                    return new HullbackMenu(windowId, playerInventory, HullbackEntity.this);
+                }
+            }, buf -> buf.writeInt(this.getId()));
+        }
+    }
     class HullbackBodyRotationControl extends BodyRotationControl {
         public HullbackBodyRotationControl(HullbackEntity hullBack) {
             super(hullBack);
