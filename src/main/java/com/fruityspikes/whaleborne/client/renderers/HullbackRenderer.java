@@ -157,6 +157,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             poseStack.pushPose();
             poseStack.translate(0,-4.07, -4);
             poseStack.mulPose(Axis.XP.rotationDegrees(180));
+            poseStack.mulPose(Axis.YP.rotationDegrees(180));
             Minecraft.getInstance().getItemRenderer().renderStatic(pEntity.inventory.getItem(0), ItemDisplayContext.HEAD, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
             poseStack.popPose();
         }
@@ -214,7 +215,6 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
             float totalHeight = lines.size() * font.lineHeight;
 
-            // Draw each line, stacked vertically
             for (int i = 0; i < lines.size(); i++) {
                 FormattedCharSequence line = lines.get(i);
                 float xOffset = -font.width(line) / 2f;
