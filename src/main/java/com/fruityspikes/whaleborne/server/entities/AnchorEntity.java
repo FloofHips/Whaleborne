@@ -1,7 +1,10 @@
 package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
@@ -23,6 +26,8 @@ public class AnchorEntity extends WhaleWidgetEntity{
     private float sinkSpeed = 0.05f;
     public AnchorEntity(EntityType<?> entityType, Level level) {
         super(entityType, level, Items.PAPER);
+        isDown = false;
+        isClosed = true;
     }
     public void setDown(boolean down) {
         isDown = down;
@@ -38,36 +43,35 @@ public class AnchorEntity extends WhaleWidgetEntity{
     public void setClosed(boolean closed) {
         isClosed = closed;
     }
+
     @Override
     public void tick() {
         super.tick();
 
+        if (!isClosed && getVehicle() != null) {
+            getVehicle().setPos(getVehicle().xOld, getVehicle().yOld, getVehicle().zOld);
+            getVehicle().setYRot(getVehicle().yRotO);
+            getVehicle().setXRot(getVehicle().xRotO);
+        }
+
         if(anchorHead!=null) {
             if (isDown) {
-                this.anchorHead.setDeltaMovement(0, -0.1, 0);
+                if (!level().getBlockState(BlockPos.containing(anchorHead.position().add(0, 0, 0))).isSolid()) {
+                    sinkSpeed -= 0.1f;
+                    playSound(SoundEvents.GRINDSTONE_USE);
+                    this.anchorHead.moveTo(this.position().add(0, sinkSpeed, 0));
+                }
             } else {
-                this.anchorHead.setDeltaMovement(0, 0.1, 0);
+                sinkSpeed += 0.1f;
+                playSound(SoundEvents.GRINDSTONE_USE);
+                this.anchorHead.moveTo(this.position().add(0, sinkSpeed, 0));
             }
+            this.anchorHead.setXRot(Math.max(0, 90 - (float) this.position().distanceTo(anchorHead.position())*15));
+            this.anchorHead.setYRot(this.getVehicle().getYRot());
 
-            if (this.position().distanceTo(anchorHead.position()) < 1)
+            if (this.position().distanceTo(anchorHead.position()) < 0.1 || this.position().y < anchorHead.position().y)
                 close();
         }
-//        if (isDown && anchorHead != null) {
-//            double distance = distanceTo(anchorHead);
-//
-//            float currentSinkSpeed = sinkSpeed * (float)(distance / 10.0);
-//
-//            Vec3 motion = anchorHead.getDeltaMovement();
-//            anchorHead.setDeltaMovement(motion.x, -currentSinkSpeed, motion.z);
-//
-//
-//            Vec3 direction = position().subtract(anchorHead.position()).normalize();
-//            double maxDistance = 10.0;
-//            if (distance > maxDistance) {
-//                Vec3 newPos = position().subtract(direction.scale(maxDistance - 0.5));
-//                anchorHead.setPos(newPos.x, newPos.y, newPos.z);
-//            }
-//        }
     }
 
     @Override
@@ -81,11 +85,13 @@ public class AnchorEntity extends WhaleWidgetEntity{
             isClosed = false;
             isDown = true;
 
+            playSound(SoundEvents.CHAIN_PLACE);
             anchorHead = new AnchorHeadEntity(WBEntityRegistry.ANCHOR_HEAD.get(), level());
-            anchorHead.setPos(this.getX(), this.getY() - 0.5, this.getZ());
+            anchorHead.setPos(this.getX(), this.getY() - 0.2, this.getZ());
             level().addFreshEntity(anchorHead);
         }
         else{
+            playSound(SoundEvents.CHAIN_BREAK);
             isDown = !isDown;
         }
     }
@@ -94,6 +100,7 @@ public class AnchorEntity extends WhaleWidgetEntity{
         anchorHead.discard();
         anchorHead = null;
         isClosed = true;
+        playSound(SoundEvents.NETHER_BRICKS_HIT);
     }
 
     @Override
@@ -130,5 +137,6 @@ public class AnchorEntity extends WhaleWidgetEntity{
         if (anchorHead != null) {
             anchorHead.discard();
         }
+        close();
     }
 }

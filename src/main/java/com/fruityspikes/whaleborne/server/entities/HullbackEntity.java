@@ -526,8 +526,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 float f2 = 1.0F;
                 entity.move(MoverType.SHULKER, new Vec3((double) (f2 * (float) this.getDeltaMovement().x), (double) (f2 * (float) this.getDeltaMovement().y), (double) (f2 * (float) this.getDeltaMovement().z)));
                 if(this.getDeltaMovement().y >= 0){
-                    Vec3 offset = part.position().subtract(entity.position());
-                    entity.setDeltaMovement(entity.getDeltaMovement().add(offset.x, gravity, offset.z));
+                    //Vec3 offset = part.position().subtract(entity.position());
+                    entity.setDeltaMovement(entity.getDeltaMovement().add(0, gravity, 0));
                 }
             }
         }

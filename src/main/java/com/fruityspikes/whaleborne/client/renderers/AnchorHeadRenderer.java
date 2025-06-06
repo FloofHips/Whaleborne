@@ -29,7 +29,16 @@ public class AnchorHeadRenderer<T extends AnchorHeadEntity> extends EntityRender
 
     @Override
     public void render(AnchorHeadEntity entity, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
-        super.render(entity, entityYaw, partialTick, poseStack, buffer, packedLight);
+        poseStack.pushPose();
+        poseStack.translate(0.0F, 1.5F, 0.0F);
+        poseStack.mulPose(Axis.XP.rotationDegrees(180));
+        poseStack.mulPose(Axis.YP.rotationDegrees(Mth.rotLerp(partialTick, entity.yRotO, entity.getYRot())));
+
+        poseStack.mulPose(Axis.XN.rotationDegrees(Mth.rotLerp(partialTick, entity.xRotO, entity.getXRot())));
+        model.setupAnim(entity, partialTick, 0.0F, -0.1F, 0.0F, 0.0F);
+        VertexConsumer vertexconsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(getTextureLocation(entity)));
+        getModel().renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);
+        poseStack.popPose();
     }
 
     @Override

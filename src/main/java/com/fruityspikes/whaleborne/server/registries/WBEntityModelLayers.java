@@ -12,6 +12,7 @@ public class WBEntityModelLayers {
     public static final ModelLayerLocation HELM = register("helm");
     public static final ModelLayerLocation MAST = register("mast");
     public static final ModelLayerLocation CANNON = register("cannon");
+    public static final ModelLayerLocation ANCHOR = register("anchor");
     public static final ModelLayerLocation ANCHOR_HEAD = register("anchor_head");
 
     private static ModelLayerLocation register(String name) {
