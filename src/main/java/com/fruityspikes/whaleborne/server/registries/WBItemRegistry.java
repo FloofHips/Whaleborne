@@ -14,5 +14,5 @@ public class WBItemRegistry {
     public static final RegistryObject<WhaleEquipment> CANNON = ITEMS.register("cannon", () -> new WhaleEquipment(WBEntityRegistry.CANNON::get, new Item.Properties()));
     public static final RegistryObject<WhaleEquipment> MAST = ITEMS.register("mast", () -> new WhaleEquipment(WBEntityRegistry.MAST::get, new Item.Properties()));
     public static final RegistryObject<WhaleEquipment> HELM = ITEMS.register("helm", () -> new WhaleEquipment(WBEntityRegistry.HELM::get, new Item.Properties()));
-    //public static final RegistryObject<WhaleEquipment> ANCHOR = WBItemRegistry.ITEMS.register("anchor", () -> new WhaleEquipment(WBEntityRegistry.ANCHOR.get(), new Item.Properties()));
+    public static final RegistryObject<WhaleEquipment> ANCHOR = WBItemRegistry.ITEMS.register("anchor", () -> new WhaleEquipment(WBEntityRegistry.ANCHOR::get, new Item.Properties()));
 }

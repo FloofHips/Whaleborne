@@ -50,6 +50,20 @@ public class WBEntityRegistry {
                             .clientTrackingRange(20)
                             .build(new ResourceLocation(Whaleborne.MODID, "mast").toString())
     );
+    public static final RegistryObject<EntityType<AnchorEntity>> ANCHOR = ENTITY_TYPES.register(
+            "anchor", () ->
+                    EntityType.Builder.of(AnchorEntity::new, MobCategory.MISC)
+                            .sized(1F, 4.5F)
+                            .clientTrackingRange(20)
+                            .build(new ResourceLocation(Whaleborne.MODID, "anchor").toString())
+    );
+    public static final RegistryObject<EntityType<AnchorHeadEntity>> ANCHOR_HEAD = ENTITY_TYPES.register(
+            "anchor_head", () ->
+                    EntityType.Builder.of(AnchorHeadEntity::new, MobCategory.MISC)
+                            .sized(1.5F, 2F)
+                            .clientTrackingRange(20)
+                            .build(new ResourceLocation(Whaleborne.MODID, "anchor_head").toString())
+    );
     @SubscribeEvent
     public static void entityAttributes(EntityAttributeCreationEvent event) {
         event.put(HULLBACK.get(), HullbackEntity.createAttributes().build());

@@ -42,14 +42,4 @@ public class SailEntity extends WhaleWidgetEntity{
     protected void addAdditionalSaveData(CompoundTag compoundTag) {
 
     }
-
-    @Override
-    public boolean shouldRiderSit() {
-        return false;
-    }
-
-    @Override
-    public boolean canRiderInteract() {
-        return true;
-    }
 }

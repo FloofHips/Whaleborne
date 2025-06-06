@@ -131,6 +131,7 @@ public class Whaleborne
             event.registerLayerDefinition(WBEntityModelLayers.HELM, HelmModel::createBodyLayer);
             event.registerLayerDefinition(WBEntityModelLayers.MAST, MastModel::createBodyLayer);
             event.registerLayerDefinition(WBEntityModelLayers.CANNON, CannonModel::createBodyLayer);
+            event.registerLayerDefinition(WBEntityModelLayers.ANCHOR_HEAD, AnchorHeadModel::createBodyLayer);
         }
 
         @SubscribeEvent
@@ -140,6 +141,8 @@ public class Whaleborne
             event.registerEntityRenderer(WBEntityRegistry.MAST.get(), MastRenderer::new);
             event.registerEntityRenderer(WBEntityRegistry.CANNON.get(), CannonRenderer::new);
             event.registerEntityRenderer(WBEntityRegistry.HELM.get(), HelmRenderer::new);
+            event.registerEntityRenderer(WBEntityRegistry.ANCHOR.get(), WhaleWidgetRenderer::new);
+            event.registerEntityRenderer(WBEntityRegistry.ANCHOR_HEAD.get(), AnchorHeadRenderer::new);
         }
     }
 }

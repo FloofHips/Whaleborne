@@ -17,9 +17,9 @@ public class SailModel<T extends SailEntity> extends EntityModel<T> {
         MeshDefinition meshdefinition = new MeshDefinition();
         PartDefinition partdefinition = meshdefinition.getRoot();
 
-        PartDefinition bone = partdefinition.addOrReplaceChild("bone", CubeListBuilder.create().texOffs(0, 0).addBox(-31.0F, -6.0F, -1.0F, 60.0F, 6.0F, 6.0F, new CubeDeformation(0.0F))
+        PartDefinition bone = partdefinition.addOrReplaceChild("bone", CubeListBuilder.create().texOffs(0, 0).addBox(-32.0F, -6.0F, -1.0F, 60.0F, 6.0F, 6.0F, new CubeDeformation(0.0F))
                 .texOffs(0, 24).addBox(-5.0F, -69.0F, 5.0F, 6.0F, 69.0F, 6.0F, new CubeDeformation(0.0F))
-                .texOffs(0, 12).addBox(-31.0F, -69.0F, -1.0F, 60.0F, 6.0F, 6.0F, new CubeDeformation(0.0F)), PartPose.offset(2.0F, 24.0F, -2.0F));
+                .texOffs(0, 12).addBox(-32.0F, -69.0F, -1.0F, 60.0F, 6.0F, 6.0F, new CubeDeformation(0.0F)), PartPose.offset(2.0F, 24.0F, -2.0F));
 
         return LayerDefinition.create(meshdefinition, 256, 128);
     }

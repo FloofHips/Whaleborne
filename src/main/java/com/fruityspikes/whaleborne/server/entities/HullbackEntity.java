@@ -516,9 +516,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     public void moveEntitiesOnTop(HullbackPartEntity part) {
-        for (Entity entity : this.level().getEntities(part, part.getBoundingBox().inflate(0F, 0.01F, 0F), EntitySelector.NO_SPECTATORS.and((entity) -> {
-            return (!entity.isPassenger());
-        }))) {
+        for (Entity entity : this.level().getEntities(part, part.getBoundingBox().inflate(0F, 0.01F, 0F), EntitySelector.NO_SPECTATORS.and((entity) -> (!entity.isPassenger())))) {
             if (!entity.noPhysics && !(entity instanceof HullbackPartEntity) && !(entity instanceof HullbackEntity)) {
                 double gravity = entity.isNoGravity() ? 0 : 0.08D;
                 if (entity instanceof LivingEntity living) {
@@ -528,7 +526,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 float f2 = 1.0F;
                 entity.move(MoverType.SHULKER, new Vec3((double) (f2 * (float) this.getDeltaMovement().x), (double) (f2 * (float) this.getDeltaMovement().y), (double) (f2 * (float) this.getDeltaMovement().z)));
                 if(this.getDeltaMovement().y >= 0){
-                    entity.setDeltaMovement(entity.getDeltaMovement().add(0, gravity, 0));
+                    Vec3 offset = part.position().subtract(entity.position());
+                    entity.setDeltaMovement(entity.getDeltaMovement().add(offset.x, gravity, offset.z));
                 }
             }
         }
