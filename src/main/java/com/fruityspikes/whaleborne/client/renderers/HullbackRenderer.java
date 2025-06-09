@@ -134,6 +134,10 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             poseStack.scale(1.005f,1.005f,1.005f );
             float progress = 1 - pEntity.getArmorProgress();
 
+            if(index == 2){
+                renderFixedNameTag(pEntity, poseStack, buffer, packedLight);
+            }
+
             armorPart.render(
                     poseStack,
                     buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
@@ -160,10 +164,6 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             poseStack.mulPose(Axis.YP.rotationDegrees(180));
             Minecraft.getInstance().getItemRenderer().renderStatic(pEntity.inventory.getItem(0), ItemDisplayContext.HEAD, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
             poseStack.popPose();
-        }
-
-        if(index == 2){
-            renderFixedNameTag(pEntity, poseStack, buffer, packedLight);
         }
 
         part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(MOB_TEXTURE)), packedLight, OverlayTexture.pack(0.0F, flag));
@@ -199,13 +199,13 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
     private void renderFixedNameTag(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         Component name = pEntity.getDisplayName();
-
+        if (name.getString().equals("entity.whaleborne.hullback")) return;
         if (pEntity.isAlive() && !name.getString().isEmpty()) {
             Font font = this.getFont();
 
             poseStack.pushPose();
 
-            poseStack.translate(0, -2.4, 6.79);
+            poseStack.translate(0, -1.0, 6.79);
             poseStack.mulPose(Axis.YN.rotationDegrees(180));
 
             float scale = 0.08f;

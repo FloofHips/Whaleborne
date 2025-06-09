@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.registries;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.server.items.WhaleEquipment;
+import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -15,4 +16,5 @@ public class WBItemRegistry {
     public static final RegistryObject<WhaleEquipment> MAST = ITEMS.register("mast", () -> new WhaleEquipment(WBEntityRegistry.MAST::get, new Item.Properties()));
     public static final RegistryObject<WhaleEquipment> HELM = ITEMS.register("helm", () -> new WhaleEquipment(WBEntityRegistry.HELM::get, new Item.Properties()));
     public static final RegistryObject<WhaleEquipment> ANCHOR = WBItemRegistry.ITEMS.register("anchor", () -> new WhaleEquipment(WBEntityRegistry.ANCHOR::get, new Item.Properties()));
+
 }

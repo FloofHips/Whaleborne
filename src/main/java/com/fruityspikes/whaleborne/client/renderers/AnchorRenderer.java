@@ -41,102 +41,65 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
         if (entity instanceof AnchorEntity anchor){
 
             if(!anchor.isClosed() && anchor.getHeadPos() != null){
-                poseStack.pushPose();
-
-                PoseStack.Pose pose = poseStack.last();
-
-                VertexConsumer builder = buffer.getBuffer(RenderType.entityCutoutNoCull(CHAIN));
-                Vec3 base = Vec3.ZERO;
-
-                Vec3 entityPos = anchor.position();
-                Vec3 tip = new Vec3(entityPos.subtract(anchor.getHeadPos().x, anchor.getHeadPos().y, anchor.getHeadPos().z).toVector3f()).multiply(-1, -1, -1);;
-
-                Vec3 direction = tip.subtract(base);
-
-                Vec3 dirNorm = direction.normalize();
-                Vec3 up = Math.abs(dirNorm.y) < 0.9 ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
-                Vec3 right = dirNorm.cross(up).normalize().scale(0.3);
-                Vec3 side = dirNorm.cross(right).normalize().scale(0.3);
-                float length = (float) direction.length();
-
-                builder.vertex(pose.pose(), (float) (base.x + side.x), (float) (base.y + side.y), (float) (base.z + side.z))
-                        .color(1F, 1F, 1F, 1F)
-                        .uv(0F, 0F)
-                        .overlayCoords(OverlayTexture.NO_OVERLAY)
-                        .uv2(packedLight)
-                        .normal(pose.normal(), 0, 1, 0)
-                        .endVertex();
-
-                builder.vertex(pose.pose(), (float) (base.x - side.x), (float) (base.y - side.y), (float) (base.z - side.z))
-                        .color(1F, 1F, 1F, 1F)
-                        .uv(1F, 0F)
-                        .overlayCoords(OverlayTexture.NO_OVERLAY)
-                        .uv2(packedLight)
-                        .normal(pose.normal(), 0, 1, 0)
-                        .endVertex();
-
-                builder.vertex(pose.pose(), (float) (tip.x - side.x), (float) (tip.y - side.y), (float) (tip.z - side.z))
-                        .color(1F, 1F, 1F, 1F)
-                        .uv(1F, length)
-                        .overlayCoords(OverlayTexture.NO_OVERLAY)
-                        .uv2(packedLight)
-                        .normal(pose.normal(), 0, 1, 0)
-                        .endVertex();
-
-                builder.vertex(pose.pose(), (float) (tip.x + side.x), (float) (tip.y + side.y), (float) (tip.z + side.z))
-                        .color(1F, 1F, 1F, 1F)
-                        .uv(0F, length)
-                        .overlayCoords(OverlayTexture.NO_OVERLAY)
-                        .uv2(packedLight)
-                        .normal(pose.normal(), 0, 1, 0)
-                        .endVertex();
-
-                poseStack.popPose();
-            }
-
-            boolean isClosed = anchor.isClosed();
-            boolean isDown = anchor.isDown();
-            Optional<UUID> anchorHead = null;
-            if(anchor.anchorHead!=null)
-                anchorHead = anchor.getAnchorHeadUUID();
-            if (entity.isAlive()) {
-                Font font = this.getFont();
-
-                poseStack.pushPose();
-
-                poseStack.translate(0, 2, 0);
-                poseStack.mulPose(Axis.ZN.rotationDegrees(180));
-                poseStack.mulPose(Axis.YN.rotationDegrees(180));
-
-                float scale = 0.03f;
-                poseStack.scale(scale, scale, scale);
-                String name = "Closed: " + isClosed + ", Down: " + isDown + ", Anchor: " + anchorHead;
-
-                List<FormattedCharSequence> lines = font.split(FormattedText.of(name), 20 * 6);
-
-                float totalHeight = lines.size() * font.lineHeight;
-
-                for (int i = 0; i < lines.size(); i++) {
-                    FormattedCharSequence line = lines.get(i);
-                    float xOffset = -font.width(line) / 2f;
-                    float yOffset = i * font.lineHeight - totalHeight / 2f;
-
-                    font.drawInBatch(
-                            line,
-                            xOffset, yOffset,
-                            0xFFFFFF,
-                            false,
-                            poseStack.last().pose(),
-                            buffer,
-                            Font.DisplayMode.NORMAL,
-                            0,
-                            packedLight
-                    );
-                }
-
-                poseStack.popPose();
+                renderChain(anchor, poseStack, buffer, packedLight, true);
+                renderChain(anchor, poseStack, buffer, packedLight, false);
             }
         }
+    }
+
+    public void renderChain(AnchorEntity anchor, PoseStack poseStack, MultiBufferSource buffer, int packedLight, boolean left){
+        poseStack.pushPose();
+
+        PoseStack.Pose pose = poseStack.last();
+
+        VertexConsumer builder = buffer.getBuffer(RenderType.entityCutoutNoCull(CHAIN));
+        Vec3 base = Vec3.ZERO.add(0, 1,0);
+
+        Vec3 entityPos = anchor.position();
+        Vec3 tip = new Vec3(entityPos.subtract(anchor.getHeadPos().x, anchor.getHeadPos().y, anchor.getHeadPos().z).toVector3f()).add(0, -2,0).multiply(-1, -1, -1);;
+
+        Vec3 direction = tip.subtract(base);
+
+        Vec3 dirNorm = direction.normalize();
+        Vec3 up = Math.abs(dirNorm.y) < 0.9 ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
+        Vec3 right = dirNorm.cross(up).normalize().scale(0.3);
+        Vec3 side = dirNorm.cross(right).normalize().scale(0.3);
+        Vec3 dir = left ? right : side;
+        float length = (float) direction.length();
+
+        builder.vertex(pose.pose(), (float) (base.x + dir.x), (float) (base.y + dir.y), (float) (base.z + dir.z))
+                .color(1F, 1F, 1F, 1F)
+                .uv(left ? 0 : 0.5f, 0F)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(packedLight)
+                .normal(pose.normal(), 0, 1, 0)
+                .endVertex();
+
+        builder.vertex(pose.pose(), (float) (base.x - dir.x), (float) (base.y - dir.y), (float) (base.z - dir.z))
+                .color(1F, 1F, 1F, 1F)
+                .uv(left ? 0.5f : 1, 0F)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(packedLight)
+                .normal(pose.normal(), 0, 1, 0)
+                .endVertex();
+
+        builder.vertex(pose.pose(), (float) (tip.x - dir.x), (float) (tip.y - dir.y), (float) (tip.z - dir.z))
+                .color(1F, 1F, 1F, 1F)
+                .uv(left ? 0.5f : 1, length)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2((int) (packedLight * tip.y))
+                .normal(pose.normal(), 0, 1, 0)
+                .endVertex();
+
+        builder.vertex(pose.pose(), (float) (tip.x + dir.x), (float) (tip.y + dir.y), (float) (tip.z + dir.z))
+                .color(1F, 1F, 1F, 1F)
+                .uv(left ? 0 : 0.5f, length)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2((int) (packedLight * tip.y))
+                .normal(pose.normal(), 0, 1, 0)
+                .endVertex();
+
+        poseStack.popPose();
     }
 
     @Override

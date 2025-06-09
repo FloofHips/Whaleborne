@@ -7,6 +7,7 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
@@ -66,6 +67,12 @@ public class AnchorEntity extends WhaleWidgetEntity{
     public void tick() {
         super.tick();
 
+        if (!isClosed() && getVehicle() != null) {
+            getVehicle().setPos(getVehicle().xo, getVehicle().yo, getVehicle().zo);
+            getVehicle().setYRot(getVehicle().yRotO);
+            getVehicle().setXRot(getVehicle().xRotO);
+        }
+
         if (this.coolDown > 0) {
             this.coolDown--;
         }
@@ -79,12 +86,6 @@ public class AnchorEntity extends WhaleWidgetEntity{
     private void handleServerTick() {
         if (!isClosed() && this.anchorHead == null) {
             relinkAnchorHead();
-        }
-
-        if (!isClosed() && getVehicle() != null) {
-            getVehicle().setPos(getVehicle().xOld, getVehicle().yOld, getVehicle().zOld);
-            getVehicle().setYRot(getVehicle().yRotO);
-            getVehicle().setXRot(getVehicle().xRotO);
         }
 
         if (this.anchorHead != null && getVehicle() != null) {
@@ -120,12 +121,12 @@ public class AnchorEntity extends WhaleWidgetEntity{
                 this.hasHitTheBottom = true;
             }
         } else {
-            this.sinkSpeed += 0.5f;
+            this.sinkSpeed += 0.3f;
             playSound(SoundEvents.CHAIN_STEP, 1.0f, 1.0f);
             this.anchorHead.moveTo(this.position().add(0, this.sinkSpeed, 0));
         }
 
-        this.anchorHead.setXRot(Math.min(0, -90 + (float) this.position().distanceTo(this.anchorHead.position()) * 15));
+        this.anchorHead.setXRot(Math.min(0, -90 + (float) this.position().distanceTo(this.anchorHead.position()) * 30));
         this.anchorHead.setYRot(this.getVehicle().getYRot());
 
         if (this.position().y < this.anchorHead.position().y) {
@@ -160,8 +161,12 @@ public class AnchorEntity extends WhaleWidgetEntity{
         this.entityData.set(DATA_IS_CLOSED, false);
         this.entityData.set(DATA_IS_DOWN, true);
 
+        double distanceInFront = -1.0;
+        double x = this.getX() + distanceInFront * Math.sin(Math.toRadians(-this.getYRot()));
+        double z = this.getZ() + distanceInFront * Math.cos(Math.toRadians(this.getYRot()));
+
         this.anchorHead = new AnchorHeadEntity(WBEntityRegistry.ANCHOR_HEAD.get(), this.level());
-        this.anchorHead.setPos(this.getX(), this.getY() - 0.2, this.getZ());
+        this.anchorHead.moveTo(x, this.getY() - 0.2, z, this.getYRot(), -90);
         this.level().addFreshEntity(this.anchorHead);
 
         this.entityData.set(DATA_ANCHOR_HEAD_UUID, Optional.of(this.anchorHead.getUUID()));

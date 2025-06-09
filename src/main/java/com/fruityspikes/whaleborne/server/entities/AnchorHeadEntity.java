@@ -53,7 +53,8 @@ public class AnchorHeadEntity extends Entity {
     @Override
     public void tick() {
         super.tick();
-        //this.moveTo(new Vec3(Mth.lerp(1, this.position().x, wantedPos.x), Mth.lerp(1, this.position().y, wantedPos.y), Mth.lerp(1, this.position().z, wantedPos.z)));
+        //if(this.wantedPos.distanceTo(this.position()) > 0.1)
+        //    this.moveTo(new Vec3(Mth.lerp(1, this.position().x, wantedPos.x), Mth.lerp(1, this.position().y, wantedPos.y), Mth.lerp(1, this.position().z, wantedPos.z)));
         //this.moveTo(new Vec3(wantedPos.x, wantedPos.y, wantedPos.z));
     }
 }

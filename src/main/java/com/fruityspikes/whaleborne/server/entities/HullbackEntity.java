@@ -2,6 +2,9 @@ package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
@@ -12,6 +15,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.*;
 import net.minecraft.world.entity.*;
@@ -22,6 +26,7 @@ import net.minecraft.world.entity.ai.goal.*;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.ai.navigation.WaterBoundPathNavigation;
+import net.minecraft.world.entity.animal.Dolphin;
 import net.minecraft.world.entity.animal.WaterAnimal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Guardian;
@@ -33,7 +38,9 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.ForgeMod;
@@ -55,6 +62,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private boolean validatedAfterLoad = false;
     private float leftEyeYaw, rightEyeYaw, eyePitch;
     private LazyOptional<IItemHandler> itemHandler = LazyOptional.empty();
+    private boolean immobile;
+    private boolean tamedCoolDown;
+    private Vec3 currentTarget;
     public SimpleContainer inventory = new SimpleContainer(3) {
         @Override
         public void setChanged() {
@@ -138,7 +148,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.inventory.addListener(this);
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
 
-        this.moveControl = new SmoothSwimmingMoveControl(this, 1, 2, 1, 0.5F, true);
+        this.moveControl = new SmoothSwimmingMoveControl(this, 180, 180, 1, 0.5F, true);
         this.lookControl = new SmoothSwimmingLookControl(this, 180);
 
         this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F);
@@ -163,6 +173,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.oldPartXRot = new float[5];
 
         this.mouthOpenProgress = 0.0f;
+        this.currentTarget = this.position();
         initDirt();
     }
 
@@ -282,17 +293,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     public void equipSaddle(@Nullable SoundSource source) {
         this.inventory.setItem(INV_SLOT_SADDLE, new ItemStack(Items.SADDLE));
-    //    this.entityData.set(DATA_SADDLE_ID, true);
-    }
-
-    //public void equipArmor() {
-//        this.entityData.set(DATA_ARMOR_ID, 64);
-//    }
-    public boolean isWearingArmor() {
-        return !this.inventory.getItem(INV_SLOT_ARMOR).isEmpty();
-    }
-    public float getArmorDurability() {
-        return (float) this.inventory.getItem(INV_SLOT_ARMOR).getCount() /64;
     }
     public boolean isSaddled() {
         return !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty();
@@ -470,6 +470,20 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public void setRightEyeYaw(float yaw) { this.rightEyeYaw = yaw; }
     public void setEyePitch(float pitch) { this.eyePitch = pitch; }
 
+    public boolean canBreatheUnderwater() {
+        return false;
+    }
+
+    protected void handleAirSupply(int airSupply) {
+    }
+    public int getMaxAirSupply() {
+        return 4800;
+    }
+
+    protected int increaseAirSupply(int currentAir) {
+        return this.getMaxAirSupply();
+    }
+
     public void setId(int p_20235_) {
         super.setId(p_20235_);
 
@@ -489,7 +503,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return false;
     }
 
-
     public boolean isMultipartEntity() {
         return true;
     }
@@ -503,19 +516,22 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     protected void registerGoals() {
-        this.goalSelector.addGoal(0, new BreathAirGoal(this));
-        this.goalSelector.addGoal(0, new TryFindWaterGoal(this));
-        this.goalSelector.addGoal(4, new HullbackRandomSwimGoal(this, 0.8, 10));
-        this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
-        this.goalSelector.addGoal(2, new LookAtPlayerGoal(this, Player.class, 6.0F));
-        this.goalSelector.addGoal(1, new HullbackApproachPlayerGoal(this, 0.4f));
-        this.goalSelector.addGoal(6, new MeleeAttackGoal(this, 1.2000000476837158, true));
-        this.goalSelector.addGoal(8, new FollowBoatGoal(this));
-        this.goalSelector.addGoal(9, new AvoidEntityGoal(this, Guardian.class, 8.0F, 1.0, 1.0));
-        this.targetSelector.addGoal(1, (new HurtByTargetGoal(this, new Class[]{Guardian.class})).setAlertOthers(new Class[0]));
+        //this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
+        //this.goalSelector.addGoal(0, new TryFindWaterGoal(this));
+        this.goalSelector.addGoal(0, new HullbackRandomSwimGoal(this, 1.1));
+        //this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
+        //this.goalSelector.addGoal(3, new LookAtPlayerGoal(this, Player.class, 6.0F));
+        //this.goalSelector.addGoal(2, new HullbackApproachPlayerGoal(this, 0.4f));
+        //this.goalSelector.addGoal(6, new MeleeAttackGoal(this, 1.2000000476837158, true));
+        //this.goalSelector.addGoal(5, new FollowBoatGoal(this));
+        //this.goalSelector.addGoal(9, new AvoidEntityGoal<>(this, Guardian.class, 8.0F, 1.0, 1.0));
+        //this.targetSelector.addGoal(1, (new HurtByTargetGoal(this, new Class[]{Guardian.class})).setAlertOthers(new Class[0]));
     }
 
-    public void moveEntitiesOnTop(HullbackPartEntity part) {
+    public void moveEntitiesOnTop(int index) {
+        HullbackPartEntity part = getSubEntities()[index];
+        Vec3 offset = partPosition[index].subtract(oldPartPosition[index]);
+        if (offset.length() <= 0) return;
         for (Entity entity : this.level().getEntities(part, part.getBoundingBox().inflate(0F, 0.01F, 0F), EntitySelector.NO_SPECTATORS.and((entity) -> (!entity.isPassenger())))) {
             if (!entity.noPhysics && !(entity instanceof HullbackPartEntity) && !(entity instanceof HullbackEntity)) {
                 double gravity = entity.isNoGravity() ? 0 : 0.08D;
@@ -524,11 +540,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     gravity = attribute.getValue();
                 }
                 float f2 = 1.0F;
-                entity.move(MoverType.SHULKER, new Vec3((double) (f2 * (float) this.getDeltaMovement().x), (double) (f2 * (float) this.getDeltaMovement().y), (double) (f2 * (float) this.getDeltaMovement().z)));
-                if(this.getDeltaMovement().y >= 0){
-                    //Vec3 offset = part.position().subtract(entity.position());
-                    entity.setDeltaMovement(entity.getDeltaMovement().add(0, gravity, 0));
-                }
+                entity.move(MoverType.SHULKER, new Vec3((double) (f2 * (float) offset.x), (double) (f2 * (float) offset.y), (double) (f2 * (float) offset.z)));
             }
         }
     }
@@ -586,7 +598,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public InteractionResult interactArmor(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         ItemStack heldItem = player.getItemInHand(hand);
 
-        //if (!this.level().isClientSide) {
             if (heldItem.getItem() instanceof SaddleItem) {
                 if (!this.isSaddled()) {
                     this.equipSaddle(SoundSource.PLAYERS);
@@ -613,27 +624,26 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     if (!player.getAbilities().instabuild) {
                         heldItem.shrink(1);
                     }
-                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                             SoundEvents.WOOD_PLACE,
                             SoundSource.PLAYERS, 1.0F, 1.0F);
-                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                             SoundEvents.ITEM_FRAME_REMOVE_ITEM,
                             SoundSource.PLAYERS, 1.0F, 0.5f + ((float) currentArmor.getCount() /64));
                     if(currentArmor.getCount()==64){
                         this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                             SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
-                            SoundSource.PLAYERS, 1.0F, 1.0F);
+                            SoundSource.PLAYERS, 2.0F, 1.0F);
                     }
                     return InteractionResult.SUCCESS;
                 }
                 return InteractionResult.PASS;
             }
-        //}
         return InteractionResult.PASS;
     }
     private InteractionResult handleVegetationRemoval(Player player, InteractionHand hand, HullbackPartEntity part, boolean top, boolean isShears) {
         BlockState[][] dirtArray = getDirtArrayForPart(part, top);
-        BlockState removedState = Blocks.AIR.defaultBlockState();
+        BlockState removedState;
 
         for (int x = 0; x < dirtArray.length; x++) {
             for (int y = 0; y < dirtArray[x].length; y++) {
@@ -658,7 +668,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                                     (p) -> p.broadcastBreakEvent(hand));
                         }
 
-                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                                 isShears ? SoundEvents.SHEEP_SHEAR : SoundEvents.AXE_STRIP,
                                 SoundSource.PLAYERS, 1.0F, 1.0f);
 
@@ -719,22 +729,25 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public void tick() {
         setOldPosAndRots();
         super.tick();
+
         rotatePassengers();
         //updateWalkerPositions();
         if(this.getControllingPassenger() instanceof Player){
-
             this.setYRot(Mth.rotLerp(0.8f, this.getYRot(), newRotY));
             //if(this.isEyeInFluidType(Fluids.WATER.getFluidType()))
                 //this.setDeltaMovement(this.getDeltaMovement().add(0, 0.1, 0));
         }
 
-        for (HullbackPartEntity part : getSubEntities()) {
+
+
+        updatePartPositions();
+
+        for (int i = 0; i < getSubEntities().length; i++) {
             //if (part.getDeltaMovement().length() > 0) {
-                moveEntitiesOnTop(part);
+            moveEntitiesOnTop(i);
             //}
         }
 
-        updatePartPositions();
         updateMouthOpening();
         if (this.tickCount % 20 == 0)
             validateAssignments();
@@ -789,6 +802,25 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         for ( HullbackPartEntity part : getSubEntities()
              ) {
             part.tick();
+            if (this.level().isClientSide && this.isInWater() && this.getDeltaMovement().length() > 0.03) {
+                Vec3 vec3 = part.getViewVector(0.0F);
+                float f = Mth.cos(part.getYRot() * 0.017453292F) * part.getSize().width;
+                float f1 = Mth.sin(part.getYRot() * 0.017453292F) * 0.3F;
+
+                Vec3 pos_left = (part.position());//.add(0,0,part.getSize().width/2).yRot(part.yRotO);
+                Vec3 pos_right = (part.position());//.add(0,0,-part.getSize().width/2).yRot(part.yRotO);
+
+                float f2 = 1.2F - this.random.nextFloat() * 0.7F;
+
+                for(int i = 0; i < 2; ++i) {
+                    //this.level().addParticle(ParticleTypes.BUBBLE, part.getX() - vec3.x * (double)f2 + (double)f, part.getY() - vec3.y, part.getZ() - vec3.z * (double)f2 + (double)f1, 0.0, 0.0, 0.0);
+                    //this.level().addParticle(ParticleTypes.BUBBLE, part.getX() - vec3.x * (double)f2 - (double)f, part.getY() - vec3.y, part.getZ() - vec3.z * (double)f2 - (double)f1, 0.0, 0.0, 0.0);
+
+
+                    this.level().addParticle(ParticleTypes.BUBBLE, pos_left.x * (double)f2, pos_left.y * (double)f2, pos_left.z * (double)f2, 0.0, 0.0, 0.0);
+                    this.level().addParticle(ParticleTypes.BUBBLE, pos_right.x * (double)f2, pos_right.y * (double)f2, pos_right.z * (double)f2, 0.0, 0.0, 0.0);
+                }
+            }
         }
     }
 
@@ -809,7 +841,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     private void randomTickDirt(BlockState[][] array, boolean bottom) {
         if(bottom){
-            if (this.random.nextInt(100) <= 10) {
+            if (this.random.nextInt(1000) <= 10) {
                 int x = this.random.nextInt(array.length);
                 if (array[x][this.random.nextInt(array[x].length)] == Blocks.SEAGRASS.defaultBlockState()) {
                     array[x][this.random.nextInt(array[x].length)] = Blocks.TALL_SEAGRASS.defaultBlockState();
@@ -829,7 +861,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
         else{
-            if (this.random.nextInt(100) <= 5) {
+            if (this.random.nextInt(1000) <= 5) {
                 int x = this.random.nextInt(array.length);
                 if (array[x][this.random.nextInt(array[x].length)] == Blocks.AIR.defaultBlockState()) {
                     array[x][this.random.nextInt(array[x].length)] = possibleTopBlocks[this.random.nextInt(possibleTopBlocks.length)];
@@ -888,13 +920,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private void updatePartPositions() {
 
         float[] partDragFactors = new float[]{1f, 0.9f, 0.2f, 0.1f, 0.09f};
-        //float[] partDragFactors = new float[]{1f, 0.9f, 0.5f, 0.3f, 0.07f};
+
         Vec3[] baseOffsets = {
-                new Vec3(0, 0, 6),   // Nose
-                new Vec3(0, 0, 2.5), // Head
+                new Vec3(0, 0, 6),      // Nose
+                new Vec3(0, 0, 2.5),    // Head
                 new Vec3(0, 0, -2.25),  // Body
-                new Vec3(0, 0, -7),  // Tail base
-                new Vec3(0, 0, -11)  // Fluke tip
+                new Vec3(0, 0, -7),     // Tail
+                new Vec3(0, 0, -11)     // Fluke
         };
 
         if (prevPartPositions[0] == null) {
@@ -1048,15 +1080,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
     }
 
-    private void onSeatAssignmentsUpdated() {
-        CompoundTag tag = this.entityData.get(DATA_SEAT_ASSIGNMENTS);
-
-        seatAssignments.clear();
-        for (String key : tag.getAllKeys()) {
-            UUID uuid = UUID.fromString(key);
-            seatAssignments.put(uuid, tag.getInt(key));
-        }
-    }
     private void syncSeatAssignments() {
         CompoundTag tag = new CompoundTag();
         for (Map.Entry<UUID, Integer> entry : seatAssignments.entrySet()) {
@@ -1205,8 +1228,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             if (!(passenger instanceof Player)) {
                 if(!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())){
-                    passenger.setYRot(Mth.rotLerp((float) (0.1 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]) + offset);
-                    passenger.setXRot(Mth.rotLerp((float) (0.1 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
+                    if(passenger instanceof SailEntity){
+                        passenger.setYRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]) + offset);
+                        passenger.setXRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
+                    }
+                    else {
+                        passenger.yRotO = passenger.getYRot();
+                        passenger.xRotO = passenger.getXRot();
+                        passenger.setYRot((partYRot[partIndex]) + offset);
+                        passenger.setXRot(partXRot[partIndex]);
+                    }
                 }
             }
         }
@@ -1241,9 +1272,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
-//        if (this.onGround() && this.playerJumpPendingScale == 0.0F && this.isStanding() && !this.allowStandSliding) {
-//            return Vec3.ZERO;
-//        } else {
         if(Mth.abs(player.xxa) > 0){
             newRotY = this.getYRot() - player.xxa;
             if(getControllingPassenger().getVehicle() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
@@ -1305,16 +1333,113 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             HullbackEntity.this.setYBodyRot(HullbackEntity.this.getYRot());
         }
     }
-
-    class HullbackRandomSwimGoal extends RandomSwimmingGoal{
-        public HullbackRandomSwimGoal(PathfinderMob p_25753_, double p_25754_, int p_25755_) {
-            super(p_25753_, p_25754_, p_25755_);
+    class HullbackRandomSwimGoal extends Goal{
+        private static int HORIZONTAL_RANGE = 11;
+        private static int VERTICAL_RANGE = 20;
+        private static float FRONT_ANGLE = 60.0f;
+        private HullbackEntity mob;
+        public HullbackRandomSwimGoal(HullbackEntity mob, double p_25754_) {
+            super();
+            this.mob = mob;
         }
 
-        @Nullable
-        @Override
         protected Vec3 getPosition() {
-            return BehaviorUtils.getRandomSwimmablePos(this.mob, 50, 20);
+//            Vec3 currentTarget = findPositionInFront();
+//            if (currentTarget != null) {
+//                return currentTarget;
+//            }
+
+            currentTarget = this.mob.getRandom().nextInt(2) > 0 ? findPositionInFront() : BehaviorUtils.getRandomSwimmablePos(this.mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
+
+            System.out.println(currentTarget==null);
+
+            return currentTarget == null ? this.mob.position() : currentTarget;
+            //currentTarget =
+            //return currentTarget;
+        }
+
+        @Override
+        public void start() {
+            super.start();
+            this.mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, 1);
+        }
+
+        @Override
+        public void stop() {
+            currentTarget = getPosition();
+        }
+
+        @Override
+        public boolean canUse() {
+            if (currentTarget == null) currentTarget = getPosition();
+            if (this.mob.position() == null) return false;
+            return this.mob.position().distanceTo(currentTarget) > 0.3;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            return canUse();
+        }
+
+        @Override
+        public void tick() {
+            super.tick();
+            if(this.mob.position().distanceTo(currentTarget) > 10)
+                currentTarget = getPosition();
+            //currentTarget = new Vec3(Mth.lerp(0.1, this.mob.getX(), currentTarget.x), Mth.lerp(0.1, this.mob.getY(), currentTarget.y), Mth.lerp(0.1, this.mob.getZ(), currentTarget.z));
+            //if(this.mob.getDeltaMovement().length() < 0.03){
+
+            //    this.mob.moveTo(Mth.lerp(0.01, this.mob.getX(), currentTarget.x), Mth.lerp(0.1, this.mob.getY(), currentTarget.y), Mth.lerp(0.1, this.mob.getZ(), currentTarget.z));
+            //} else {
+            //this.mob.getNavigation().moveTo(Mth.lerp(0.1, this.mob.getX(), currentTarget.x), Mth.lerp(0.1, this.mob.getY(), currentTarget.y), Mth.lerp(0.1, this.mob.getZ(), currentTarget.z), 1);
+            //this.mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, 1);
+            //}
+            //this.mob.getNavigation().moveTo(Mth.lerp(0.1, this.mob.getX(), currentTarget.x), Mth.lerp(0.1, this.mob.getY(), currentTarget.y), Mth.lerp(0.1, this.mob.getZ(), currentTarget.z), 1);
+            //this.mob.level().setBlock(BlockPos.containing(currentTarget), Blocks.GLOWSTONE.defaultBlockState(), 1);
+            //System.out.println(currentTarget);
+        }
+
+        private Vec3 findPositionInFront() {
+            Vec3 lookAngle = this.mob.getLookAngle();
+            Vec3 mobPos = this.mob.position();
+
+            for (int i = 0; i < 10; i++) {
+                float angle = this.mob.getRandom().nextFloat() * FRONT_ANGLE * 2 - FRONT_ANGLE;
+                Vec3 direction = lookAngle.yRot((float)Math.toRadians(angle));
+
+                float distance = 5 + this.mob.getRandom().nextFloat() * (HORIZONTAL_RANGE - 5);
+                Vec3 targetPos = mobPos.add(direction.scale(distance));
+
+                targetPos = targetPos.add(0, this.mob.getRandom().nextFloat() * VERTICAL_RANGE * 2 - VERTICAL_RANGE, 0);
+
+                if (this.isSwimmablePos(this.mob, targetPos)) {
+                    return targetPos;
+                }
+            }
+
+            return null;
+        }
+
+        private boolean isSwimmablePos(PathfinderMob entity, Vec3 targetPos){
+            return entity.level().getBlockState(BlockPos.containing(targetPos)).isPathfindable(entity.level(), BlockPos.containing(targetPos), PathComputationType.WATER);
+        }
+    }
+    public class HullbackBreathAirGoal extends BreathAirGoal {
+        HullbackEntity hullback;
+
+        public HullbackBreathAirGoal(HullbackEntity hullback) {
+            super(hullback);
+            this.hullback = hullback;
+        }
+
+        @Override
+        public void tick() {
+            super.tick();
+        }
+
+        @Override
+        public void stop() {
+            super.stop();
         }
     }
     public class HullbackApproachPlayerGoal extends Goal {
