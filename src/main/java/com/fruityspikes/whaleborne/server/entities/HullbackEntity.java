@@ -148,8 +148,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.inventory.addListener(this);
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
 
-        this.moveControl = new SmoothSwimmingMoveControl(this, 180, 180, 1, 0.5F, true);
-        this.lookControl = new SmoothSwimmingLookControl(this, 180);
+        this.moveControl = new SmoothSwimmingMoveControl(this, 1, 2, 0.1F, 0.1F, true);
+        this.lookControl = new SmoothSwimmingLookControl(this, 1);
 
         this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F);
         this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F);
@@ -518,10 +518,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected void registerGoals() {
         //this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
         //this.goalSelector.addGoal(0, new TryFindWaterGoal(this));
-        this.goalSelector.addGoal(0, new HullbackRandomSwimGoal(this, 1.1));
+        this.goalSelector.addGoal(1, new HullbackRandomSwimGoal(this, 1.0, 10));
         //this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
-        //this.goalSelector.addGoal(3, new LookAtPlayerGoal(this, Player.class, 6.0F));
-        //this.goalSelector.addGoal(2, new HullbackApproachPlayerGoal(this, 0.4f));
+        this.goalSelector.addGoal(0, new HullbackApproachPlayerGoal(this, 0.4f));
         //this.goalSelector.addGoal(6, new MeleeAttackGoal(this, 1.2000000476837158, true));
         //this.goalSelector.addGoal(5, new FollowBoatGoal(this));
         //this.goalSelector.addGoal(9, new AvoidEntityGoal<>(this, Guardian.class, 8.0F, 1.0, 1.0));
@@ -742,11 +741,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         updatePartPositions();
 
-        for (int i = 0; i < getSubEntities().length; i++) {
-            //if (part.getDeltaMovement().length() > 0) {
-            moveEntitiesOnTop(i);
-            //}
-        }
+//        for (int i = 0; i < getSubEntities().length; i++) {
+//            //if (part.getDeltaMovement().length() > 0) {
+//            moveEntitiesOnTop(i);
+//            //}
+//        }
 
         updateMouthOpening();
         if (this.tickCount % 20 == 0)
@@ -1333,95 +1332,108 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             HullbackEntity.this.setYBodyRot(HullbackEntity.this.getYRot());
         }
     }
-    class HullbackRandomSwimGoal extends Goal{
-        private static int HORIZONTAL_RANGE = 11;
-        private static int VERTICAL_RANGE = 20;
-        private static float FRONT_ANGLE = 60.0f;
-        private HullbackEntity mob;
-        public HullbackRandomSwimGoal(HullbackEntity mob, double p_25754_) {
-            super();
+    class HullbackRandomSwimGoal extends RandomSwimmingGoal {
+        private static final int HORIZONTAL_RANGE = 10;
+        private static final int VERTICAL_RANGE = 10;
+        private static final float FRONT_ANGLE = 45.0f;
+        private static final int STUCK_TIMEOUT = 100;
+        private static final double MIN_DISTANCE = 2.0;
+
+        private final HullbackEntity mob;
+        private int stuckTimer = 0;
+        private Vec3 lastPosition = Vec3.ZERO;
+        private Vec3 currentTarget = null;
+
+        public HullbackRandomSwimGoal(HullbackEntity mob, double speed, int interval) {
+            super(mob, speed, interval);
             this.mob = mob;
-        }
-
-        protected Vec3 getPosition() {
-//            Vec3 currentTarget = findPositionInFront();
-//            if (currentTarget != null) {
-//                return currentTarget;
-//            }
-
-            currentTarget = this.mob.getRandom().nextInt(2) > 0 ? findPositionInFront() : BehaviorUtils.getRandomSwimmablePos(this.mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
-
-            System.out.println(currentTarget==null);
-
-            return currentTarget == null ? this.mob.position() : currentTarget;
-            //currentTarget =
-            //return currentTarget;
-        }
-
-        @Override
-        public void start() {
-            super.start();
-            this.mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, 1);
-        }
-
-        @Override
-        public void stop() {
-            currentTarget = getPosition();
         }
 
         @Override
         public boolean canUse() {
-            if (currentTarget == null) currentTarget = getPosition();
-            if (this.mob.position() == null) return false;
-            return this.mob.position().distanceTo(currentTarget) > 0.3;
+            if (super.canUse()) {
+                currentTarget = getPosition();
+                stuckTimer = 0;
+                lastPosition = mob.position();
+                return true;
+            }
+            return false;
         }
 
         @Override
         public boolean canContinueToUse() {
-            return canUse();
+            if (currentTarget == null) {
+                return false;
+            }
+
+            Vec3 currentPos = mob.position();
+            if (currentPos.distanceTo(lastPosition) < 0.5) {
+                stuckTimer++;
+            } else {
+                stuckTimer = 0;
+            }
+            lastPosition = currentPos;
+
+            return stuckTimer < STUCK_TIMEOUT &&
+                    currentPos.distanceTo(currentTarget) > MIN_DISTANCE &&
+                    !mob.getNavigation().isDone();
+        }
+
+        @Override
+        public void start() {
+            if (currentTarget != null) {
+                mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, speedModifier);
+            }
+        }
+
+        @Override
+        public void stop() {
+            super.stop();
+            currentTarget = null;
         }
 
         @Override
         public void tick() {
             super.tick();
-            if(this.mob.position().distanceTo(currentTarget) > 10)
-                currentTarget = getPosition();
-            //currentTarget = new Vec3(Mth.lerp(0.1, this.mob.getX(), currentTarget.x), Mth.lerp(0.1, this.mob.getY(), currentTarget.y), Mth.lerp(0.1, this.mob.getZ(), currentTarget.z));
-            //if(this.mob.getDeltaMovement().length() < 0.03){
 
-            //    this.mob.moveTo(Mth.lerp(0.01, this.mob.getX(), currentTarget.x), Mth.lerp(0.1, this.mob.getY(), currentTarget.y), Mth.lerp(0.1, this.mob.getZ(), currentTarget.z));
-            //} else {
-            //this.mob.getNavigation().moveTo(Mth.lerp(0.1, this.mob.getX(), currentTarget.x), Mth.lerp(0.1, this.mob.getY(), currentTarget.y), Mth.lerp(0.1, this.mob.getZ(), currentTarget.z), 1);
-            //this.mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, 1);
-            //}
-            //this.mob.getNavigation().moveTo(Mth.lerp(0.1, this.mob.getX(), currentTarget.x), Mth.lerp(0.1, this.mob.getY(), currentTarget.y), Mth.lerp(0.1, this.mob.getZ(), currentTarget.z), 1);
-            //this.mob.level().setBlock(BlockPos.containing(currentTarget), Blocks.GLOWSTONE.defaultBlockState(), 1);
-            //System.out.println(currentTarget);
+            if(!mob.getSubEntities()[0].isEyeInFluidType(Fluids.WATER.getFluidType()))
+                mob.setDeltaMovement(0, -0.1, 0);
+
+            if (currentTarget != null && mob.getNavigation().isDone() && mob.position().distanceTo(currentTarget) > MIN_DISTANCE) {
+                mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, speedModifier);
+            }
+        }
+
+        protected Vec3 getPosition() {
+            Vec3 target = mob.getRandom().nextFloat() < 0.7f ?
+                    findPositionInFront() :
+                    BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
+            return target == null ? mob.position() : target;
         }
 
         private Vec3 findPositionInFront() {
-            Vec3 lookAngle = this.mob.getLookAngle();
-            Vec3 mobPos = this.mob.position();
+            Vec3 lookAngle = mob.getLookAngle();
+            Vec3 mobPos = mob.position();
 
             for (int i = 0; i < 10; i++) {
-                float angle = this.mob.getRandom().nextFloat() * FRONT_ANGLE * 2 - FRONT_ANGLE;
+                float angle = mob.getRandom().nextFloat() * FRONT_ANGLE * 2 - FRONT_ANGLE;
                 Vec3 direction = lookAngle.yRot((float)Math.toRadians(angle));
 
-                float distance = 5 + this.mob.getRandom().nextFloat() * (HORIZONTAL_RANGE - 5);
+                float distance = HORIZONTAL_RANGE;
                 Vec3 targetPos = mobPos.add(direction.scale(distance));
 
-                targetPos = targetPos.add(0, this.mob.getRandom().nextFloat() * VERTICAL_RANGE * 2 - VERTICAL_RANGE, 0);
+                targetPos = targetPos.add(0, mob.getRandom().nextFloat() * VERTICAL_RANGE * 2 - VERTICAL_RANGE, 0);
 
-                if (this.isSwimmablePos(this.mob, targetPos)) {
+                if (isSwimmablePos(mob, targetPos)) {
                     return targetPos;
                 }
             }
-
-            return null;
+            return BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
         }
 
-        private boolean isSwimmablePos(PathfinderMob entity, Vec3 targetPos){
-            return entity.level().getBlockState(BlockPos.containing(targetPos)).isPathfindable(entity.level(), BlockPos.containing(targetPos), PathComputationType.WATER);
+        private boolean isSwimmablePos(PathfinderMob entity, Vec3 targetPos) {
+            return entity.level().getBlockState(BlockPos.containing(targetPos))
+                    .isPathfindable(entity.level(), BlockPos.containing(targetPos), PathComputationType.WATER);
         }
     }
     public class HullbackBreathAirGoal extends BreathAirGoal {
