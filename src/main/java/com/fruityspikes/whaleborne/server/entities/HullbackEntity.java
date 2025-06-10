@@ -93,7 +93,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private float[] oldPartXRot;
     public float newRotY = this.getYRot();
     private float mouthOpenProgress;
-    private boolean isOpening;
+    private float mouthTarget;
 
     public static UUID getSailSpeedModifierUuid() {
         return SAIL_SPEED_MODIFIER_UUID;
@@ -477,7 +477,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected void handleAirSupply(int airSupply) {
     }
     public int getMaxAirSupply() {
-        return 4800;
+        return 400;
     }
 
     protected int increaseAirSupply(int currentAir) {
@@ -516,13 +516,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     protected void registerGoals() {
-        //this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
+        this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
         //this.goalSelector.addGoal(0, new TryFindWaterGoal(this));
-        this.goalSelector.addGoal(1, new HullbackRandomSwimGoal(this, 1.0, 10));
+        this.goalSelector.addGoal(2, new HullbackRandomSwimGoal(this, 1.0, 10));
         //this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
-        this.goalSelector.addGoal(0, new HullbackApproachPlayerGoal(this, 0.4f));
+        this.goalSelector.addGoal(1, new HullbackApproachPlayerGoal(this, 0.4f));
         //this.goalSelector.addGoal(6, new MeleeAttackGoal(this, 1.2000000476837158, true));
-        //this.goalSelector.addGoal(5, new FollowBoatGoal(this));
+        this.goalSelector.addGoal(3, new FollowBoatGoal(this));
         //this.goalSelector.addGoal(9, new AvoidEntityGoal<>(this, Guardian.class, 8.0F, 1.0, 1.0));
         //this.targetSelector.addGoal(1, (new HurtByTargetGoal(this, new Class[]{Guardian.class})).setAlertOthers(new Class[0]));
     }
@@ -872,16 +872,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     private void updateMouthOpening() {
-        if(isOpening){
-            mouthOpenProgress+= 0.1f;
-            if(mouthOpenProgress>=1)
-                isOpening=false;
-        }
-        else{
-            mouthOpenProgress-= 0.05f;
-            if(mouthOpenProgress<=0)
-                isOpening=true;
-        }
+        mouthOpenProgress = (float) Mth.lerp(0.05, mouthOpenProgress, mouthTarget);
     }
 
     public float getMouthOpenProgress() {
@@ -1384,12 +1375,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             if (currentTarget != null) {
                 mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, speedModifier);
             }
+            if(!this.mob.level().isClientSide)
+                this.mob.mouthTarget = 0.2f;
         }
 
         @Override
         public void stop() {
             super.stop();
             currentTarget = null;
+            if(!this.mob.level().isClientSide)
+                this.mob.mouthTarget = 0.0f;
         }
 
         @Override
@@ -1436,22 +1431,122 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     .isPathfindable(entity.level(), BlockPos.containing(targetPos), PathComputationType.WATER);
         }
     }
-    public class HullbackBreathAirGoal extends BreathAirGoal {
-        HullbackEntity hullback;
+    public class HullbackBreathAirGoal extends Goal {
+        private static final int BREACH_HEIGHT = 5; // Blocks above surface to breach
+        private static final float BREACH_SPEED = 1.2f;
+        private static final float ROTATION_SPEED = 10f;
+
+        private final HullbackEntity hullback;
+        private int breachCooldown = 0;
+        private boolean isBreaching = false;
+        private Vec3 initialPos;
 
         public HullbackBreathAirGoal(HullbackEntity hullback) {
-            super(hullback);
             this.hullback = hullback;
+            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
+        }
+
+        @Override
+        public boolean canUse() {
+            if (breachCooldown > 0) {
+                breachCooldown--;
+                return false;
+            }
+            return this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() * 0.7; // 70% air remaining
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            // Continue until fully surfaced or timeout
+            return (this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() ||
+                    !this.hullback.isInWater());
+        }
+
+        @Override
+        public void start() {
+            this.isBreaching = true;
+            this.initialPos = this.hullback.position();
+            this.hullback.getNavigation().stop();
+
+            // Calculate surface position
+            int surfaceY = this.hullback.level().getSeaLevel();
+            Vec3 breachTarget = new Vec3(
+                    this.hullback.getX(),
+                    surfaceY + BREACH_HEIGHT,
+                    this.hullback.getZ()
+            );
+
+            // Set movement
+            this.hullback.getMoveControl().setWantedPosition(
+                    breachTarget.x,
+                    breachTarget.y,
+                    breachTarget.z,
+                    BREACH_SPEED
+            );
+
+            // Animation
+            if (this.hullback.level().isClientSide) {
+                this.hullback.mouthTarget = 0.7f;
+                this.hullback.playSound(SoundEvents.ALLAY_HURT, 1.0f, 0.3f);
+            }
         }
 
         @Override
         public void tick() {
             super.tick();
+
+            // Rotate upwards during breach
+            float targetXRot = -60f; // Nose up angle
+            this.hullback.setXRot(Mth.rotLerp(ROTATION_SPEED * 0.1f, this.hullback.getXRot(), targetXRot));
+
+            // Add upward force while in water
+            if (this.hullback.isInWater()) {
+                this.hullback.setDeltaMovement(new Vec3(0.3, 0.8, 0).yRot(this.hullback.getYRot())
+                );
+            }
+
+            // Play splash effects when breaking surface
+            if (this.hullback.getY() >= this.hullback.level().getSeaLevel() &&
+                    this.hullback.level().isClientSide) {
+                for (int i = 0; i < 5; i++) {
+                    this.hullback.level().addParticle(ParticleTypes.SPLASH,
+                            this.hullback.getX() + (this.hullback.getRandom().nextFloat() - 0.5f) * 3f,
+                            this.hullback.level().getSeaLevel(),
+                            this.hullback.getZ() + (this.hullback.getRandom().nextFloat() - 0.5f) * 3f,
+                            0, 0.5, 0);
+                }
+            }
         }
 
         @Override
         public void stop() {
-            super.stop();
+            this.isBreaching = false;
+            this.breachCooldown = 200; // 10 second cooldown
+
+            // Reset air supply
+            this.hullback.setAirSupply(this.hullback.getMaxAirSupply());
+
+            // Animation and effects
+            if (this.hullback.level().isClientSide) {
+                for (int i = 0; i < 20; i++) {
+                    this.hullback.level().addParticle(ParticleTypes.BUBBLE,
+                            this.hullback.partPosition[2].x,
+                            this.hullback.partPosition[2].y,
+                            this.hullback.partPosition[2].z,
+                            (this.hullback.getRandom().nextFloat() - 0.5f) * 0.5f,
+                            this.hullback.getRandom().nextFloat() * 0.5f,
+                            (this.hullback.getRandom().nextFloat() - 0.5f) * 0.5f);
+                }
+                this.hullback.playSound(SoundEvents.LAVA_EXTINGUISH, 1.0f, 0.5f);
+                this.hullback.mouthTarget = 0.0f;
+            }
+
+            // Reset rotation gradually
+            this.hullback.setXRot(Mth.rotLerp(0.1f, this.hullback.getXRot(), 0));
+        }
+
+        public boolean isBreaching() {
+            return this.isBreaching;
         }
     }
     public class HullbackApproachPlayerGoal extends Goal {
@@ -1459,18 +1554,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         private static final float SIDE_OFFSET = 5.0f;
         private static final float ROTATION_SPEED = 0.8f;
 
-        private final HullbackEntity whale;
+        private final HullbackEntity hullback;
         private final float speedModifier;
         private Player targetPlayer;
         private int repositionCooldown;
         private boolean approachFromRight;
         private Vec3 targetPosition;
 
-        public HullbackApproachPlayerGoal(HullbackEntity whale, float speedModifier) {
-            this.whale = whale;
+        public HullbackApproachPlayerGoal(HullbackEntity hullback, float speedModifier) {
+            this.hullback = hullback;
             this.speedModifier = speedModifier;
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
-            this.repositionCooldown = 200 + whale.getRandom().nextInt(200);
+            this.repositionCooldown = 200 + hullback.getRandom().nextInt(200);
         }
 
         @Override
@@ -1479,12 +1574,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 this.repositionCooldown--;
                 return false;
             }
-            this.targetPlayer = this.whale.level().getNearestPlayer(this.whale, 30.0);
+            this.targetPlayer = this.hullback.level().getNearestPlayer(this.hullback, 30.0);
             if (this.targetPlayer == null) return false;
-            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.whale) || (this.targetPlayer.getVehicle().isPassenger() &&this.targetPlayer.getVehicle().getVehicle().is(this.whale)))) return false;
+            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() &&this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
 
-            Vec3 toPlayer = targetPlayer.position().subtract(whale.position());
-            Vec3 whaleRight = Vec3.directionFromRotation(0, whale.getYRot() - 90);
+            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
+            Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() - 90);
             this.approachFromRight = toPlayer.dot(whaleRight) > 0;
 
             return true;
@@ -1492,16 +1587,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canContinueToUse() {
-            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.whale) || (this.targetPlayer.getVehicle().isPassenger() &&this.targetPlayer.getVehicle().getVehicle().is(this.whale)))) return false;
+            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() &&this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
             return this.targetPlayer != null
                     && this.targetPlayer.isAlive()
-                    && this.whale.distanceToSqr(this.targetPlayer) < 225.0; // 15^2
+                    && this.hullback.distanceToSqr(this.targetPlayer) < 225.0; // 15^2
         }
 
         @Override
         public void start() {
             super.start();
-            this.whale.setTarget(this.targetPlayer);
+            this.hullback.setTarget(this.targetPlayer);
             Vec3 playerLook = this.targetPlayer.getLookAngle();
 
             Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
@@ -1512,15 +1607,17 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     .add(playerLook.scale(-APPROACH_DISTANCE));
 
             playSound(SoundEvents.AMETHYST_BLOCK_BREAK);
+            this.hullback.mouthTarget = 0.2f;
         }
 
         @Override
         public void stop() {
             this.targetPlayer = null;
             this.targetPosition = null;
-            this.whale.setTarget(null);
-            this.repositionCooldown = 200 + whale.getRandom().nextInt(200);
-            this.whale.getNavigation().stop();
+            this.hullback.setTarget(null);
+            this.repositionCooldown = 200 + hullback.getRandom().nextInt(200);
+            this.hullback.getNavigation().stop();
+            this.hullback.mouthTarget = 0.0f;
         }
 
         @Override
@@ -1532,20 +1629,20 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.targetPosition = this.targetPlayer.position()
                     .add(sideOffset)
                     .add(playerLook.scale(-APPROACH_DISTANCE));
-            this.whale.getNavigation().moveTo(
+            this.hullback.getNavigation().moveTo(
                     targetPosition.x,
                     targetPosition.y,
                     targetPosition.z,
                     this.speedModifier
             );
 
-            Vec3 toPlayer = targetPlayer.position().subtract(whale.position());
+            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
             float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
             float sideYawOffset = approachFromRight ? -90f : 90f;
             float targetYaw = desiredYaw + sideYawOffset;
 
-            this.whale.setYRot(Mth.rotLerp(0.2f, this.whale.getYRot(), targetYaw));
-            this.whale.yBodyRot = this.whale.getYRot();
+            this.hullback.setYRot(Mth.rotLerp(0.2f, this.hullback.getYRot(), targetYaw));
+            this.hullback.yBodyRot = this.hullback.getYRot();
         }
     }
 }
