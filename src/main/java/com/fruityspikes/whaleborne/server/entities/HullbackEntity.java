@@ -23,12 +23,15 @@ import net.minecraft.world.entity.ai.control.*;
 import net.minecraft.world.entity.ai.goal.*;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.ai.navigation.WaterBoundPathNavigation;
+import net.minecraft.world.entity.ai.targeting.TargetingConditions;
 import net.minecraft.world.entity.animal.WaterAnimal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.*;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -503,7 +506,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected void handleAirSupply(int airSupply) {
     }
     public int getMaxAirSupply() {
-        return 400;
+        return 12000;
     }
 
     protected int increaseAirSupply(int currentAir) {
@@ -543,10 +546,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
+        //this.goalSelector.addGoal(0, new TemptGoal(this, 1.2, Ingredient.of(new ItemLike[]{Items.SHEARS, Items.NETHERITE_AXE, Items.DARK_OAK_PLANKS}), false));
         //this.goalSelector.addGoal(0, new TryFindWaterGoal(this));
         this.goalSelector.addGoal(2, new HullbackRandomSwimGoal(this, 1.0, 10));
         //this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
-        this.goalSelector.addGoal(1, new HullbackApproachPlayerGoal(this, 0.4f));
+        this.goalSelector.addGoal(0, new HullbackApproachPlayerGoal(this, 0.4f));
         //this.goalSelector.addGoal(6, new MeleeAttackGoal(this, 1.2000000476837158, true));
         this.goalSelector.addGoal(3, new FollowBoatGoal(this));
         //this.goalSelector.addGoal(9, new AvoidEntityGoal<>(this, Guardian.class, 8.0F, 1.0, 1.0));
@@ -574,7 +578,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (this.isVehicle()) {
             return super.mobInteract(player, hand);
         }
-
         return super.mobInteract(player, hand);
     }
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
@@ -628,6 +631,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         ItemStack heldItem = player.getItemInHand(hand);
+        mouthTarget = 0.2f;
         return handleVegetationRemoval(player, hand, part, top, heldItem.getItem() instanceof ShearsItem);
     }
     public InteractionResult interactArmor(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
@@ -708,6 +712,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                                 isShears ? SoundEvents.SHEEP_SHEAR : SoundEvents.AXE_STRIP,
                                 SoundSource.PLAYERS, 1.0F, 1.0f);
 
+                        mouthTarget = 1.0f;
                         return InteractionResult.SUCCESS;
                     } else {
                         dirtArray[x][y] = Blocks.AIR.defaultBlockState();
@@ -766,9 +771,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         setOldPosAndRots();
         super.tick();
 
-
-        System.out.println(this.entityData.get(DATA_MOUTH_PROGRESS));
-
         rotatePassengers();
         //updateWalkerPositions();
         if(this.getControllingPassenger() instanceof Player){
@@ -777,8 +779,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 //this.setDeltaMovement(this.getDeltaMovement().add(0, 0.1, 0));
         }
 
-        updatePartPositions();
+        if(this.getSubEntities()[1].isEyeInFluidType(Fluids.WATER.getFluidType()) && this.tickCount % 80 == 0)
+            this.heal(0.25f);
 
+        updatePartPositions();
+        if (this.getDeltaMovement().length() > 0.3) {
+            mouthTarget = 0.8f;
+        }
 //        for (int i = 0; i < getSubEntities().length; i++) {
 //            //if (part.getDeltaMovement().length() > 0) {
 //            moveEntitiesOnTop(i);
@@ -786,6 +793,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 //        }
 
         updateMouthOpening();
+        if (this.tickCount % 80 == 0)
+            mouthTarget = 0;
+
         if (this.tickCount % 20 == 0)
             validateAssignments();
 
@@ -902,14 +912,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     private void updateMouthOpening() {
-        mouthOpenProgress = (float) Mth.lerp(0.05, mouthOpenProgress, mouthTarget);
+        mouthOpenProgress = (float) Mth.lerp(0.3, mouthOpenProgress, mouthTarget);
         if(!this.level().isClientSide){
             this.entityData.set(DATA_MOUTH_PROGRESS, mouthOpenProgress);
         }
     }
 
     public float getMouthOpenProgress() {
-        System.out.println(this.entityData.get(DATA_MOUTH_PROGRESS));
         return this.entityData.get(DATA_MOUTH_PROGRESS);
     }
 
@@ -1498,7 +1507,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 breachCooldown--;
                 return false;
             }
-            return this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() * 0.7;
+            return this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() * 0.2;
         }
 
         @Override
@@ -1590,8 +1599,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         private static final float SIDE_OFFSET = 5.0f;
         private static final float ROTATION_SPEED = 0.8f;
 
+        private static Ingredient TEMPT_ITEMS = Ingredient.of(Items.SHEARS, Items.NETHERITE_AXE, Items.DARK_OAK_PLANKS);
         private final HullbackEntity hullback;
         private final float speedModifier;
+        private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(10.0).ignoreLineOfSight();
+        private final TargetingConditions targetingConditions;
         private Player targetPlayer;
         private int repositionCooldown;
         private boolean approachFromRight;
@@ -1602,6 +1614,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.speedModifier = speedModifier;
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
             this.repositionCooldown = 200 + hullback.getRandom().nextInt(200);
+            this.targetingConditions = TEMP_TARGETING.copy().selector(this::shouldFollow);
+        }
+
+        private boolean shouldFollow(LivingEntity entity) {
+            return TEMPT_ITEMS.test(entity.getMainHandItem()) || TEMPT_ITEMS.test(entity.getOffhandItem());
         }
 
         @Override
@@ -1610,28 +1627,28 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 this.repositionCooldown--;
                 return false;
             }
-            this.targetPlayer = this.hullback.level().getNearestPlayer(this.hullback, 30.0);
+            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 20, 30);
             if (this.targetPlayer == null) return false;
             if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() &&this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
-
-            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-            Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() - 90);
-            this.approachFromRight = toPlayer.dot(whaleRight) > 0;
 
             return true;
         }
 
         @Override
         public boolean canContinueToUse() {
-            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() &&this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
-            return this.targetPlayer != null
-                    && this.targetPlayer.isAlive()
-                    && this.hullback.distanceToSqr(this.targetPlayer) < 225.0; // 15^2
+            if(this.targetPlayer != null && this.targetPlayer.isAlive() && this.hullback.distanceToSqr(this.targetPlayer) < 225.0) return canUse();
+            return false;
         }
 
         @Override
         public void start() {
             super.start();
+
+            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
+            Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() - 90);
+            this.approachFromRight = toPlayer.dot(whaleRight) > 0;
+
+
             this.hullback.setTarget(this.targetPlayer);
             Vec3 playerLook = this.targetPlayer.getLookAngle();
 
@@ -1651,7 +1668,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.targetPlayer = null;
             this.targetPosition = null;
             this.hullback.setTarget(null);
-            this.repositionCooldown = 200 + hullback.getRandom().nextInt(200);
+            this.repositionCooldown = 100 + hullback.getRandom().nextInt(200);
             this.hullback.getNavigation().stop();
             this.hullback.mouthTarget = 0.0f;
         }
@@ -1679,6 +1696,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             this.hullback.setYRot(Mth.rotLerp(0.2f, this.hullback.getYRot(), targetYaw));
             this.hullback.yBodyRot = this.hullback.getYRot();
+            this.hullback.mouthTarget = 0.6f;
         }
     }
 }
