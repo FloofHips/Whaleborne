@@ -106,6 +106,7 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
         this.left_pupil.resetPose();
         this.right_pupil.resetPose();
 
+
         this.lip.y=Mth.lerp(entity.getMouthOpenProgress(), this.lip.getInitialPose().y, this.lip.getInitialPose().y+27);
         this.jaw_0.y=Math.min(Mth.lerp(entity.getMouthOpenProgress(), this.jaw_0.getInitialPose().y, this.jaw_0.getInitialPose().y+27), this.jaw_0.getInitialPose().y+10);
         this.jaw_1.y=Math.min(Mth.lerp(entity.getMouthOpenProgress(), this.jaw_1.getInitialPose().y, this.jaw_1.getInitialPose().y+27), this.jaw_1.getInitialPose().y+20);

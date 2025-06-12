@@ -3,7 +3,6 @@ package com.fruityspikes.whaleborne.server.entities;
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -15,7 +14,6 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.*;
 import net.minecraft.world.entity.*;
@@ -23,13 +21,10 @@ import net.minecraft.world.entity.ai.attributes.*;
 import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.control.*;
 import net.minecraft.world.entity.ai.goal.*;
-import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.ai.navigation.WaterBoundPathNavigation;
-import net.minecraft.world.entity.animal.Dolphin;
 import net.minecraft.world.entity.animal.WaterAnimal;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.monster.Guardian;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -38,7 +33,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.AABB;
@@ -50,6 +44,7 @@ import net.minecraftforge.fluids.FluidType;
 import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.wrapper.InvWrapper;
 import net.minecraftforge.network.NetworkHooks;
+import net.minecraftforge.network.PacketDistributor;
 
 import javax.annotation.Nullable;
 import java.util.*;
@@ -74,9 +69,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public static final int INV_SLOT_CROWN = 0;
     public static final int INV_SLOT_SADDLE = 1;
     public static final int INV_SLOT_ARMOR = 2;
-    private static final EntityDataAccessor<Boolean> DATA_SADDLE_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BOOLEAN);
-    private static final EntityDataAccessor<Integer> DATA_ARMOR_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<ItemStack> DATA_CROWN_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
+    private static final EntityDataAccessor<ItemStack> DATA_ARMOR_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
     private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<Float> DATA_MOUTH_PROGRESS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<CompoundTag> DATA_SEAT_ASSIGNMENTS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.COMPOUND_TAG);
     public final HullbackPartEntity head;
     public final HullbackPartEntity nose;
@@ -140,7 +136,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     public Vec3[] seats = new Vec3[7];
     public Vec3[] oldSeats = new Vec3[7];
-    private final Map<UUID, Integer> seatAssignments = new HashMap<>();
+    private final Map<Integer, UUID> seatAssignments = new HashMap<>();
 
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
@@ -174,6 +170,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         this.mouthOpenProgress = 0.0f;
         this.currentTarget = this.position();
+        //createInventory();
         initDirt();
     }
 
@@ -259,23 +256,35 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         this.inventory.addListener(this);
         this.updateContainerEquipment();
-        this.itemHandler = LazyOptional.of(() -> {
-            return new InvWrapper(this.inventory);
-        });
+        this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
     }
     protected void updateContainerEquipment() {
+        this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR));
         if (!this.level().isClientSide) {
-            this.setFlag(4, !this.inventory.getItem(0).isEmpty());
+            this.setFlag(4, !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty());
+
+            if (this.inventory != null) {
+                this.entityData.set(DATA_CROWN_ID, this.inventory.getItem(INV_SLOT_CROWN));
+            }
         }
     }
     public void containerChanged(Container invBasic) {
+        ItemStack itemstack = this.getArmor();
         boolean flag = this.isSaddled();
         this.updateContainerEquipment();
+        ItemStack itemstack1 = this.getArmor();
         if (this.tickCount > 20 && !flag && this.isSaddled()) {
             this.playSound(this.getSaddleSoundEvent(), 0.5F, 1.0F);
         }
-
+        if (this.tickCount > 20 && itemstack != itemstack1) {
+            this.playSound(SoundEvents.HORSE_ARMOR, 0.5F, 1.0F);
+        }
     }
+
+    private ItemStack getArmor() {
+        return this.inventory.getItem(INV_SLOT_ARMOR);
+    }
+
     public boolean isTamed() {
         return this.getFlag(2);
     }
@@ -295,7 +304,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.inventory.setItem(INV_SLOT_SADDLE, new ItemStack(Items.SADDLE));
     }
     public boolean isSaddled() {
-        return !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty();
+        return this.getFlag(4);
     }
 
     protected boolean getFlag(int flagId) {
@@ -314,6 +323,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         super.defineSynchedData();
         this.entityData.define(DATA_ID_FLAGS, (byte)0);
         this.entityData.define(DATA_SEAT_ASSIGNMENTS, new CompoundTag());
+        this.entityData.define(DATA_CROWN_ID, ItemStack.EMPTY);
+        this.entityData.define(DATA_ARMOR_ID, ItemStack.EMPTY);
+        this.entityData.define(DATA_MOUTH_PROGRESS, 0f);
     }
     public void addAdditionalSaveData(CompoundTag compound) {
         super.addAdditionalSaveData(compound);
@@ -330,11 +342,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
         compound.put("Items", listtag);
 
+        ItemStack crown = this.inventory.getItem(INV_SLOT_CROWN);
+        ItemStack armor = this.inventory.getItem(INV_SLOT_ARMOR);
+        this.entityData.set(DATA_CROWN_ID, crown);
+        this.entityData.set(DATA_ARMOR_ID, armor);
+
         compound.putByte("Flags", this.entityData.get(DATA_ID_FLAGS));
 
         CompoundTag seatAssignmentsTag = new CompoundTag();
-        for (Map.Entry<UUID, Integer> entry : seatAssignments.entrySet()) {
-            seatAssignmentsTag.putInt(entry.getKey().toString(), entry.getValue());
+        for (Map.Entry<Integer, UUID> entry : seatAssignments.entrySet()) {
+            seatAssignmentsTag.putUUID(entry.getKey().toString(), entry.getValue());
         }
         compound.put("SeatAssignments", seatAssignmentsTag);
 
@@ -344,28 +361,37 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
     public void readAdditionalSaveData(CompoundTag compound) {
         super.readAdditionalSaveData(compound);
-        //this.createInventory();
+        this.createInventory();
         ListTag items = compound.getList("Items", 10);
 
         for(int i = 0; i < items.size(); i++) {
             CompoundTag itemTag = items.getCompound(i);
             int slot = itemTag.getByte("Slot") & 255;
-            if (slot >= 0 && slot < this.inventory.getContainerSize()) {
+            if (slot < this.inventory.getContainerSize()) {
                 this.inventory.setItem(slot, ItemStack.of(itemTag));
             }
         }
 
         this.entityData.set(DATA_ID_FLAGS, compound.getByte("Flags"));
 
+        ItemStack crown = this.entityData.get(DATA_CROWN_ID);
+        ItemStack armor = this.entityData.get(DATA_ARMOR_ID);
+        if (!crown.isEmpty()) {
+            this.inventory.setItem(INV_SLOT_CROWN, crown);
+        }
+        if (!armor.isEmpty()) {
+            this.inventory.setItem(INV_SLOT_ARMOR, armor);
+        }
+
         seatAssignments.clear();
         if (compound.contains("SeatAssignments")) {
             CompoundTag seatAssignmentsTag = compound.getCompound("SeatAssignments");
             for (String key : seatAssignmentsTag.getAllKeys()) {
-                    UUID uuid = UUID.fromString(key);
-                    int seatIndex = seatAssignmentsTag.getInt(key);
-                    if (seatIndex >= 0 && seatIndex < seats.length) {
-                        seatAssignments.put(uuid, seatIndex);
-                    }
+                int seatIndex = Integer.parseInt(key);
+                UUID uuid = seatAssignmentsTag.getUUID(key);
+                if (seatIndex >= 0 && seatIndex < seats.length) {
+                    seatAssignments.put(seatIndex, uuid);
+                }
             }
         }
 
@@ -374,21 +400,21 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 //            this.headDirt = loadDirtArray(compound.getCompound("HeadDirt"), this.level().holderLookup(Registries.BLOCK));
 //        }
 
-        if (compound.contains("Passengers")) {
-            ListTag passengers = compound.getList("Passengers", 10);
-            for (int i = 0; i < passengers.size(); i++) {
-                CompoundTag passengerTag = passengers.getCompound(i);
-                UUID passengerUUID = passengerTag.getUUID("UUID");
-
-                if (!seatAssignments.containsKey(passengerUUID)) {
-                    int seat = IntStream.range(0, seats.length)
-                            .filter(idx -> !seatAssignments.containsValue(idx))
-                            .findFirst()
-                            .orElse(0);
-                    seatAssignments.put(passengerUUID, seat);
-                }
-            }
-        }
+//        if (compound.contains("Passengers")) {
+//            ListTag passengers = compound.getList("Passengers", 10);
+//            for (int i = 0; i < passengers.size(); i++) {
+//                CompoundTag passengerTag = passengers.getCompound(i);
+//                UUID passengerUUID = passengerTag.getUUID("UUID");
+//
+//                if (!seatAssignments.containsKey(passengerUUID)) {
+//                    int seat = IntStream.range(0, seats.length)
+//                            .filter(idx -> !seatAssignments.containsValue(idx))
+//                            .findFirst()
+//                            .orElse(0);
+//                    seatAssignments.put(passengerUUID, seat);
+//                }
+//            }
+//        }
 
         syncSeatAssignments();
         this.updateContainerEquipment();
@@ -396,12 +422,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     private void validateAfterLoad() {
         getPassengers().forEach(passenger -> {
-            if (!seatAssignments.containsKey(passenger.getUUID())) {
+            if (!seatAssignments.containsValue(passenger.getUUID())) {
                 int seat = IntStream.range(0, seats.length)
-                        .filter(i -> !seatAssignments.containsValue(i))
+                        .filter(i -> !seatAssignments.containsKey(i))
                         .findFirst()
                         .orElse(0);
-                seatAssignments.put(passenger.getUUID(), seat);
+                seatAssignments.put(seat, passenger.getUUID());
             }
         });
 
@@ -409,7 +435,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 .map(Entity::getUUID)
                 .collect(Collectors.toSet());
 
-        seatAssignments.keySet().removeIf(uuid -> !passengerUUIDs.contains(uuid));
+        seatAssignments.values().removeIf(uuid -> !passengerUUIDs.contains(uuid));
         syncSeatAssignments();
     }
     @Override
@@ -419,19 +445,19 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             CompoundTag tag = this.entityData.get(DATA_SEAT_ASSIGNMENTS);
             seatAssignments.clear();
             for (String k : tag.getAllKeys()) {
-                UUID uuid = UUID.fromString(k);
-                int index = tag.getInt(k);
-                seatAssignments.put(uuid, index);
+                int seatIndex = Integer.parseInt(k);
+                UUID uuid = tag.getUUID(k);
+                seatAssignments.put(seatIndex, uuid);
             }
         }
     }
-    private UUID findUUIDForSeat(int seatIndex) {
-        return seatAssignments.entrySet().stream()
-                .filter(entry -> entry.getValue() == seatIndex)
-                .map(Map.Entry::getKey)
-                .findFirst()
-                .orElse(null);
-    }
+//    private UUID findUUIDForSeat(int seatIndex) {
+//        return seatAssignments.entrySet().stream()
+//                .filter(entry -> entry.getValue() == seatIndex)
+//                .map(Map.Entry::getKey)
+//                .findFirst()
+//                .orElse(null);
+//    }
 //    private CompoundTag saveDirtArray(BlockState[][] array) {
 //        CompoundTag tag = new CompoundTag();
 //        for (int x = 0; x < array.length; x++) {
@@ -460,7 +486,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 //        return array;
 //    }
     public float getArmorProgress() {
-        return (float) this.inventory.getItem(INV_SLOT_ARMOR).getCount() /64;
+        return (float) this.entityData.get(DATA_ARMOR_ID).getCount() /64;
     }
     public float getLeftEyeYaw() { return leftEyeYaw; }
     public float getRightEyeYaw() { return rightEyeYaw; }
@@ -552,22 +578,30 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return super.mobInteract(player, hand);
     }
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
-        if (seatAssignments.containsValue(seatIndex)) {
-            return InteractionResult.PASS;
+
+        if (seatIndex < 0 || seatIndex >= seats.length) {
+            return InteractionResult.FAIL;
         }
 
-        seatAssignments.remove(player.getUUID());
-
+        // Check if seat is occupied
+        if (seatAssignments.containsKey(seatIndex)) {
+            return InteractionResult.PASS;
+        }
+        UUID entityUUID = (entityType != null) ? null : player.getUUID();
+        if (entityUUID != null) {
+            seatAssignments.values().removeIf(entityUUID::equals);
+        }
         if (entityType != null) {
             Entity entity = entityType.create(this.level());
 
             if (entity != null) {
                 entity.moveTo(seats[seatIndex].x + 0.5, seats[seatIndex].y + 1, seats[seatIndex].z + 0.5, this.getYRot(), 0);
 
+                seatAssignments.values().removeIf(uuid -> uuid.equals(entity.getUUID()));
                 this.level().addFreshEntity(entity);
 
+                seatAssignments.put(seatIndex, entity.getUUID());
                 entity.startRiding(this, true);
-                seatAssignments.put(entity.getUUID(), seatIndex);
                 syncSeatAssignments();
 
                 if (!player.getAbilities().instabuild) {
@@ -580,8 +614,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             return InteractionResult.FAIL;
         }
 
+        seatAssignments.values().removeIf(uuid -> uuid.equals(player.getUUID()));
+
+        seatAssignments.put(seatIndex, player.getUUID());
         player.startRiding(this, true);
-        seatAssignments.put(player.getUUID(), seatIndex);
         syncSeatAssignments();
 
         if (this.level().isClientSide) {
@@ -634,6 +670,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                             SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
                             SoundSource.PLAYERS, 2.0F, 1.0F);
                     }
+                    updateContainerEquipment();
                     return InteractionResult.SUCCESS;
                 }
                 return InteractionResult.PASS;
@@ -729,6 +766,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         setOldPosAndRots();
         super.tick();
 
+
+        System.out.println(this.entityData.get(DATA_MOUTH_PROGRESS));
+
         rotatePassengers();
         //updateWalkerPositions();
         if(this.getControllingPassenger() instanceof Player){
@@ -736,8 +776,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             //if(this.isEyeInFluidType(Fluids.WATER.getFluidType()))
                 //this.setDeltaMovement(this.getDeltaMovement().add(0, 0.1, 0));
         }
-
-
 
         updatePartPositions();
 
@@ -805,19 +843,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 Vec3 vec3 = part.getViewVector(0.0F);
                 float f = Mth.cos(part.getYRot() * 0.017453292F) * part.getSize().width;
                 float f1 = Mth.sin(part.getYRot() * 0.017453292F) * 0.3F;
-
-                Vec3 pos_left = (part.position());//.add(0,0,part.getSize().width/2).yRot(part.yRotO);
-                Vec3 pos_right = (part.position());//.add(0,0,-part.getSize().width/2).yRot(part.yRotO);
-
                 float f2 = 1.2F - this.random.nextFloat() * 0.7F;
 
                 for(int i = 0; i < 2; ++i) {
-                    //this.level().addParticle(ParticleTypes.BUBBLE, part.getX() - vec3.x * (double)f2 + (double)f, part.getY() - vec3.y, part.getZ() - vec3.z * (double)f2 + (double)f1, 0.0, 0.0, 0.0);
-                    //this.level().addParticle(ParticleTypes.BUBBLE, part.getX() - vec3.x * (double)f2 - (double)f, part.getY() - vec3.y, part.getZ() - vec3.z * (double)f2 - (double)f1, 0.0, 0.0, 0.0);
-
-
-                    this.level().addParticle(ParticleTypes.BUBBLE, pos_left.x * (double)f2, pos_left.y * (double)f2, pos_left.z * (double)f2, 0.0, 0.0, 0.0);
-                    this.level().addParticle(ParticleTypes.BUBBLE, pos_right.x * (double)f2, pos_right.y * (double)f2, pos_right.z * (double)f2, 0.0, 0.0, 0.0);
+                    this.level().addParticle(ParticleTypes.BUBBLE, part.getX() - vec3.x * (double)f2 + (double)f, part.getY() - vec3.y, part.getZ() - vec3.z * (double)f2 + (double)f1, 0.0, 0.0, 0.0);
+                    this.level().addParticle(ParticleTypes.BUBBLE, part.getX() - vec3.x * (double)f2 - (double)f, part.getY() - vec3.y, part.getZ() - vec3.z * (double)f2 - (double)f1, 0.0, 0.0, 0.0);
                 }
             }
         }
@@ -873,10 +903,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     private void updateMouthOpening() {
         mouthOpenProgress = (float) Mth.lerp(0.05, mouthOpenProgress, mouthTarget);
+        if(!this.level().isClientSide){
+            this.entityData.set(DATA_MOUTH_PROGRESS, mouthOpenProgress);
+        }
     }
 
     public float getMouthOpenProgress() {
-        return mouthOpenProgress;
+        System.out.println(this.entityData.get(DATA_MOUTH_PROGRESS));
+        return this.entityData.get(DATA_MOUTH_PROGRESS);
     }
 
     public Vec3 getPartPos(int i){
@@ -1056,10 +1090,24 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (!this.hasPassenger(passenger)) return;
         if (seatAssignments.isEmpty()) return;
 
-        Integer seatIndex = seatAssignments.get(passenger.getUUID());
-        if (seatIndex == null || seatIndex < 0 || seatIndex >= seats.length) {
-            seatIndex = 0;
-            seatAssignments.put(passenger.getUUID(), seatIndex);
+        int seatIndex = seatAssignments.entrySet().stream()
+                .filter(entry -> entry.getValue().equals(passenger.getUUID()))
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse(-1);
+
+        if(seatIndex == -1){
+            passenger.unRide();
+            return;
+        }
+        if (seatIndex < 0 || seatIndex >= seats.length) {
+            seatIndex = IntStream.range(0, seats.length)
+                    .filter(i -> !seatAssignments.containsKey(i))
+                    .findFirst()
+                    .orElse(0);
+
+            seatAssignments.entrySet().removeIf(entry -> entry.getValue().equals(passenger.getUUID()));
+            seatAssignments.put(seatIndex, passenger.getUUID());
         }
         if (seatIndex < seats.length) {
             if(seats[seatIndex] != null)
@@ -1072,10 +1120,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     private void syncSeatAssignments() {
         CompoundTag tag = new CompoundTag();
-        for (Map.Entry<UUID, Integer> entry : seatAssignments.entrySet()) {
-            tag.putInt(entry.getKey().toString(), entry.getValue());
-        }
+        seatAssignments.forEach((seat, uuid) ->
+                tag.putUUID(String.valueOf(seat), uuid));
         updateModifiers();
+
         this.entityData.set(DATA_SEAT_ASSIGNMENTS, tag);
     }
 
@@ -1105,26 +1153,30 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
     }
     public int getSeatByEntity(Entity entity){
-        if(entity!=null && seatAssignments.containsKey(entity.getUUID())){
-            return seatAssignments.get(entity.getUUID());
+        if (entity != null) {
+            return seatAssignments.entrySet().stream()
+                    .filter(entry -> entry.getValue().equals(entity.getUUID()))
+                    .map(Map.Entry::getKey)
+                    .findFirst()
+                    .orElse(-1);
         }
         return -1;
     }
 
     private void validateAssignments() {
-        Map<UUID, Integer> assignmentsCopy = new HashMap<>(seatAssignments);
+        Map<Integer, UUID> assignmentsCopy = new HashMap<>(seatAssignments);
         Set<UUID> currentPassengers = this.getPassengers().stream()
                 .map(Entity::getUUID)
                 .collect(Collectors.toSet());
 
-        assignmentsCopy.forEach((uuid, seat) -> {
+        assignmentsCopy.forEach((seat, uuid) -> {
             if (seat < 0 || seat >= seats.length) {
-                seatAssignments.remove(uuid);
+                seatAssignments.remove(seat);
                 return;
             }
 
             if (!currentPassengers.contains(uuid)) {
-                seatAssignments.remove(uuid);
+                seatAssignments.remove(seat);
                 return;
             }
 
@@ -1136,18 +1188,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             if (entity != null) {
                 AABB seatArea = new AABB(seats[seat], seats[seat]).inflate(1.0);
                 if (!seatArea.contains(entity.position())) {
-                    seatAssignments.remove(uuid);
+                    seatAssignments.remove(seat);
                 }
             }
         });
 
         this.getPassengers().forEach(passenger -> {
-            if (!seatAssignments.containsKey(passenger.getUUID())) {
+            if (!seatAssignments.containsValue(passenger.getUUID())) {
                 int availableSeat = IntStream.range(0, seats.length)
-                        .filter(i -> !seatAssignments.containsValue(i))
+                        .filter(i -> !seatAssignments.containsKey(i))
                         .findFirst()
                         .orElse(0);
-                seatAssignments.put(passenger.getUUID(), availableSeat);
+                seatAssignments.put(availableSeat, passenger.getUUID());
             }
         });
     }
@@ -1155,43 +1207,39 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected void addPassenger(Entity passenger) {
         super.addPassenger(passenger);
 
-        if (!seatAssignments.containsKey(passenger.getUUID())) {
-            if (passenger instanceof Player) {
-                return;
-            }
+        if (!seatAssignments.containsValue(passenger.getUUID())) {
+//            if (passenger instanceof Player) {
+//                return;
+//            }
+
 
             int availableSeat = IntStream.range(0, seats.length)
-                    .filter(i -> !seatAssignments.containsValue(i))
+                    .filter(i -> !seatAssignments.containsKey(i))
                     .findFirst()
                     .orElse(0);
 
-            seatAssignments.put(passenger.getUUID(), availableSeat);
+            seatAssignments.put(availableSeat, passenger.getUUID());
         }
     }
     @Override
     protected void removePassenger(Entity passenger) {
-        if(passenger.isRemoved())
-            if (!seatAssignments.isEmpty()){
-                seatAssignments.remove(passenger.getUUID());
-            }
+        if (passenger.isRemoved()) {
+            seatAssignments.values().removeIf(uuid -> uuid.equals(passenger.getUUID()));
+        }
         syncSeatAssignments();
         super.removePassenger(passenger);
     }
 
     @Override
     public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
-
-        if (!seatAssignments.isEmpty()){
-            int seatIndex = seatAssignments.get(passenger.getUUID());
-            seatAssignments.remove(passenger.getUUID());
+        int seatIndex = getSeatByEntity(passenger);
+        if (seatIndex != -1) {
+            seatAssignments.remove(seatIndex);
             syncSeatAssignments();
 
             if (seatIndex >= 0 && seatIndex < seats.length) {
                 Vec3 seatPos = seats[seatIndex];
-                return new Vec3(
-                        seatPos.x,
-                        seatPos.y,
-                        seatPos.z);
+                return new Vec3(seatPos.x, seatPos.y, seatPos.z);
             }
         }
         return super.getDismountLocationForPassenger(passenger);
@@ -1236,15 +1284,15 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Nullable
     @Override
     public LivingEntity getControllingPassenger() {
-        Stream<Map.Entry<UUID, Integer>> sorted = seatAssignments.entrySet().stream().sorted(Map.Entry.comparingByValue());
-
-        for (Map.Entry<UUID, Integer> passenger: sorted.toList()) {
-            if(getEntityByUUID(passenger.getKey()) instanceof HelmEntity helm && helm.hasControllingPassenger()){
-                return helm.getControllingPassenger();
-            }
-        }
-
-        return super.getControllingPassenger();
+        return seatAssignments.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    Entity entity = getEntityByUUID(entry.getValue());
+                    return (entity instanceof HelmEntity helm) ? helm.getControllingPassenger() : null;
+                })
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElseGet(super::getControllingPassenger);
     }
 
     public Entity getEntityByUUID(UUID uuid) {
@@ -1314,6 +1362,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }, buf -> buf.writeInt(this.getId()));
         }
     }
+
     class HullbackBodyRotationControl extends BodyRotationControl {
         public HullbackBodyRotationControl(HullbackEntity hullBack) {
             super(hullBack);
@@ -1375,16 +1424,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             if (currentTarget != null) {
                 mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, speedModifier);
             }
-            if(!this.mob.level().isClientSide)
-                this.mob.mouthTarget = 0.2f;
         }
 
         @Override
         public void stop() {
             super.stop();
             currentTarget = null;
-            if(!this.mob.level().isClientSide)
-                this.mob.mouthTarget = 0.0f;
         }
 
         @Override
@@ -1397,6 +1442,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             if (currentTarget != null && mob.getNavigation().isDone() && mob.position().distanceTo(currentTarget) > MIN_DISTANCE) {
                 mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, speedModifier);
             }
+            if(this.mob.getDeltaMovement().length() > 0.5) mouthTarget = 1;
         }
 
         protected Vec3 getPosition() {
@@ -1452,12 +1498,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 breachCooldown--;
                 return false;
             }
-            return this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() * 0.7; // 70% air remaining
+            return this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() * 0.7;
         }
 
         @Override
         public boolean canContinueToUse() {
-            // Continue until fully surfaced or timeout
             return (this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() ||
                     !this.hullback.isInWater());
         }
@@ -1468,7 +1513,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.initialPos = this.hullback.position();
             this.hullback.getNavigation().stop();
 
-            // Calculate surface position
             int surfaceY = this.hullback.level().getSeaLevel();
             Vec3 breachTarget = new Vec3(
                     this.hullback.getX(),
@@ -1476,7 +1520,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     this.hullback.getZ()
             );
 
-            // Set movement
             this.hullback.getMoveControl().setWantedPosition(
                     breachTarget.x,
                     breachTarget.y,
@@ -1484,7 +1527,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     BREACH_SPEED
             );
 
-            // Animation
             if (this.hullback.level().isClientSide) {
                 this.hullback.mouthTarget = 0.7f;
                 this.hullback.playSound(SoundEvents.ALLAY_HURT, 1.0f, 0.3f);
@@ -1495,17 +1537,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         public void tick() {
             super.tick();
 
-            // Rotate upwards during breach
-            float targetXRot = -60f; // Nose up angle
+            float targetXRot = -60f;
             this.hullback.setXRot(Mth.rotLerp(ROTATION_SPEED * 0.1f, this.hullback.getXRot(), targetXRot));
 
-            // Add upward force while in water
             if (this.hullback.isInWater()) {
                 this.hullback.setDeltaMovement(new Vec3(0.3, 0.8, 0).yRot(this.hullback.getYRot())
                 );
             }
 
-            // Play splash effects when breaking surface
             if (this.hullback.getY() >= this.hullback.level().getSeaLevel() &&
                     this.hullback.level().isClientSide) {
                 for (int i = 0; i < 5; i++) {
@@ -1521,12 +1560,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         @Override
         public void stop() {
             this.isBreaching = false;
-            this.breachCooldown = 200; // 10 second cooldown
+            this.breachCooldown = 200;
 
-            // Reset air supply
             this.hullback.setAirSupply(this.hullback.getMaxAirSupply());
 
-            // Animation and effects
             if (this.hullback.level().isClientSide) {
                 for (int i = 0; i < 20; i++) {
                     this.hullback.level().addParticle(ParticleTypes.BUBBLE,
@@ -1541,7 +1578,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 this.hullback.mouthTarget = 0.0f;
             }
 
-            // Reset rotation gradually
             this.hullback.setXRot(Mth.rotLerp(0.1f, this.hullback.getXRot(), 0));
         }
 
