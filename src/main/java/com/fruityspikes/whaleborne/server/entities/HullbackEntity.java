@@ -1623,21 +1623,20 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canUse() {
-            if (this.repositionCooldown > 0) {
-                this.repositionCooldown--;
-                return false;
-            }
-            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 20, 30);
+//            if (this.repositionCooldown > 0) {
+//                this.repositionCooldown--;
+//                return false;
+//            }
+            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 50, 30);
             if (this.targetPlayer == null) return false;
-            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() &&this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
+            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
 
             return true;
         }
 
         @Override
         public boolean canContinueToUse() {
-            if(this.targetPlayer != null && this.targetPlayer.isAlive() && this.hullback.distanceToSqr(this.targetPlayer) < 225.0) return canUse();
-            return false;
+            return canUse();
         }
 
         @Override
@@ -1645,7 +1644,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             super.start();
 
             Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-            Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() - 90);
+            Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
             this.approachFromRight = toPlayer.dot(whaleRight) > 0;
 
 

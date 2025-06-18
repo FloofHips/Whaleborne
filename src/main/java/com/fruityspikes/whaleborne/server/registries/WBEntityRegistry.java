@@ -53,7 +53,7 @@ public class WBEntityRegistry {
     public static final RegistryObject<EntityType<AnchorEntity>> ANCHOR = ENTITY_TYPES.register(
             "anchor", () ->
                     EntityType.Builder.of(AnchorEntity::new, MobCategory.MISC)
-                            .sized(1F, 4.5F)
+                            .sized(1.5F, 1.75F)
                             .clientTrackingRange(20)
                             .build(new ResourceLocation(Whaleborne.MODID, "anchor").toString())
     );
