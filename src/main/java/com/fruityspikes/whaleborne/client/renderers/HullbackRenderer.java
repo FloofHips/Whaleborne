@@ -37,6 +37,8 @@ import java.util.List;
 
 public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<HullbackEntity, HullbackModel<HullbackEntity>> {
     public static final ResourceLocation MOB_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback.png");
+    public static final ResourceLocation STEEN_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/steen.png");
+    public static final ResourceLocation MOBIUS_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/mobius.png");
     public static final ResourceLocation SADDLE_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback_saddle.png");
     public static final ResourceLocation ARMOR_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback_dark_oak_armor.png");
     public static final ResourceLocation ARMOR_PROGRESS = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback_armor_progress.png");
@@ -166,7 +168,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             poseStack.popPose();
         }
 
-        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(MOB_TEXTURE)), packedLight, OverlayTexture.pack(0.0F, flag));
+        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(getTextureLocation(pEntity))), packedLight, OverlayTexture.pack(0.0F, flag));
 
         if(pEntity.isSaddled()) {
             poseStack.pushPose();
@@ -278,6 +280,10 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     }
     @Override
     public ResourceLocation getTextureLocation(HullbackEntity entity) {
+        if(entity.getDisplayName().getString().equals("Mobius"))
+            return MOBIUS_TEXTURE;
+        if(entity.getDisplayName().getString().equals("Steen"))
+            return STEEN_TEXTURE;
         return MOB_TEXTURE;
     }
 

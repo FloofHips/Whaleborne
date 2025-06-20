@@ -14,8 +14,10 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.*;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.*;
 import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
@@ -72,6 +74,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public static final int INV_SLOT_CROWN = 0;
     public static final int INV_SLOT_SADDLE = 1;
     public static final int INV_SLOT_ARMOR = 2;
+    public static boolean HAS_MOBIUS_SPAWNED = false;
     private static final EntityDataAccessor<ItemStack> DATA_CROWN_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
     private static final EntityDataAccessor<ItemStack> DATA_ARMOR_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
     private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
@@ -177,6 +180,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         initDirt();
     }
 
+
     private void initDirt() {
         headDirt = new BlockState[8][5];
         fillDirtArray(headDirt, true);
@@ -262,12 +266,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
     }
     protected void updateContainerEquipment() {
-        this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR));
         if (!this.level().isClientSide) {
-            this.setFlag(4, !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty());
-
             if (this.inventory != null) {
                 this.entityData.set(DATA_CROWN_ID, this.inventory.getItem(INV_SLOT_CROWN));
+                this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR));
+                this.setFlag(4, !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty());
             }
         }
     }
@@ -352,6 +355,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         compound.putByte("Flags", this.entityData.get(DATA_ID_FLAGS));
 
+        CompoundTag hasMobiusSpawned = new CompoundTag();
+        hasMobiusSpawned.putBoolean("HasMobiusSpawned", HAS_MOBIUS_SPAWNED);
+
         CompoundTag seatAssignmentsTag = new CompoundTag();
         for (Map.Entry<Integer, UUID> entry : seatAssignments.entrySet()) {
             seatAssignmentsTag.putUUID(entry.getKey().toString(), entry.getValue());
@@ -385,6 +391,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (!armor.isEmpty()) {
             this.inventory.setItem(INV_SLOT_ARMOR, armor);
         }
+
+        HAS_MOBIUS_SPAWNED = compound.getBoolean("HasMobiusSpawned");
 
         seatAssignments.clear();
         if (compound.contains("SeatAssignments")) {
@@ -674,7 +682,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                             SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
                             SoundSource.PLAYERS, 2.0F, 1.0F);
                     }
-                    updateContainerEquipment();
+                    this.updateContainerEquipment();
                     return InteractionResult.SUCCESS;
                 }
                 return InteractionResult.PASS;
@@ -764,6 +772,32 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             return new ItemStack(Items.SEAGRASS, 2);
         }
         return ItemStack.EMPTY;
+    }
+
+    @Override
+    public boolean hurt(DamageSource source, float amount) {
+        ItemStack armorStack = this.inventory.getItem(INV_SLOT_ARMOR);
+
+        if (!armorStack.isEmpty()) {
+            int armorDamage = Math.min(armorStack.getCount(), (int)Math.ceil(amount));
+
+            armorStack.shrink(armorDamage);
+
+            if (!this.level().isClientSide) {
+                this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.random.nextFloat() * 0.4F);
+            }
+
+            this.inventory.setChanged();
+
+            float remainingDamage = amount - armorDamage;
+            if (remainingDamage > 0) {
+                return super.hurt(source, remainingDamage);
+            }
+
+            return true;
+        }
+
+        return super.hurt(source, amount);
     }
 
     @Override
@@ -1599,7 +1633,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         private static final float SIDE_OFFSET = 5.0f;
         private static final float ROTATION_SPEED = 0.8f;
 
-        private static Ingredient TEMPT_ITEMS = Ingredient.of(Items.SHEARS, Items.NETHERITE_AXE, Items.DARK_OAK_PLANKS);
+        private static Ingredient TEMPT_ITEMS = Ingredient.of(Items.SHEARS, Items.DARK_OAK_PLANKS);
+        private static Ingredient TEMPT_AXES = Ingredient.of(ItemTags.AXES);
         private final HullbackEntity hullback;
         private final float speedModifier;
         private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(10.0).ignoreLineOfSight();
@@ -1618,7 +1653,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
 
         private boolean shouldFollow(LivingEntity entity) {
-            return TEMPT_ITEMS.test(entity.getMainHandItem()) || TEMPT_ITEMS.test(entity.getOffhandItem());
+            return TEMPT_ITEMS.test(entity.getMainHandItem()) || TEMPT_ITEMS.test(entity.getOffhandItem()) || TEMPT_AXES.test(entity.getMainHandItem()) || TEMPT_AXES.test(entity.getOffhandItem());
         }
 
         @Override

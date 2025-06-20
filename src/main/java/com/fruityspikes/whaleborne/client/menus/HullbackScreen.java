@@ -16,6 +16,8 @@ import net.minecraft.world.entity.player.Inventory;
 
 public class HullbackScreen extends AbstractContainerScreen<HullbackMenu> {
     private static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/gui/hullback.png");
+    private static final ResourceLocation STEEN = new ResourceLocation(Whaleborne.MODID, "textures/gui/steen.png");
+    private static final ResourceLocation MOBIUS = new ResourceLocation(Whaleborne.MODID, "textures/gui/mobius.png");
     private static final ResourceLocation GUI_TEXTURE = new ResourceLocation("minecraft", "textures/gui/icons.png");
     private float xMouse;
     private float yMouse;
@@ -29,9 +31,9 @@ public class HullbackScreen extends AbstractContainerScreen<HullbackMenu> {
         int j = (this.height - this.imageHeight) / 2;
         int eyeOffset = Mth.clamp((mouseX + (imageWidth / 2) - this.width / 2) / 10, 0, 17);
 
-        guiGraphics.blit(TEXTURE, leftPos, topPos, 0, 0, imageWidth, imageHeight);
-        guiGraphics.blit(TEXTURE, leftPos + 102 + eyeOffset, topPos + 46, imageWidth, 17, 17, 17);
-        renderMultiplicativeQuad(guiGraphics, TEXTURE, leftPos + 102, topPos + 46, imageWidth, 0, 34, 17);
+        guiGraphics.blit(getTextureLocation(), leftPos, topPos, 0, 0, imageWidth, imageHeight);
+        guiGraphics.blit(getTextureLocation(), leftPos + 102 + eyeOffset, topPos + 46, imageWidth, 17, 17, 17);
+        renderMultiplicativeQuad(guiGraphics, getTextureLocation(), leftPos + 102, topPos + 46, imageWidth, 0, 34, 17);
 
         //InventoryScreen.renderEntityInInventoryFollowsMouse(guiGraphics, i + 51, j + 60, 5, (float)(i + 51) - this.xMouse, (float)(j + 75 - 50) - this.yMouse, this.menu.hullback);
 
@@ -139,5 +141,13 @@ public class HullbackScreen extends AbstractContainerScreen<HullbackMenu> {
 
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         RenderSystem.defaultBlendFunc();
+    }
+
+    public ResourceLocation getTextureLocation() {
+        if(menu.getName().equals("Mobius"))
+            return MOBIUS;
+        if(menu.getName().equals("Steen"))
+            return STEEN;
+        return TEXTURE;
     }
 }

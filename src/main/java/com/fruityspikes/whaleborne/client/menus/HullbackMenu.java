@@ -139,6 +139,8 @@ public class HullbackMenu extends AbstractContainerMenu {
         return 0;
     }
 
+    public String getName() { return this.hullback.getDisplayName().getString();}
+
     public boolean isVehicleAlive() {
         return this.hullback.isAlive();
     }
