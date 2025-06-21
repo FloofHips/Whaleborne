@@ -76,7 +76,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public static final int INV_SLOT_ARMOR = 2;
     public static boolean HAS_MOBIUS_SPAWNED = false;
     private static final EntityDataAccessor<ItemStack> DATA_CROWN_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
-    private static final EntityDataAccessor<ItemStack> DATA_ARMOR_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
+    private static final EntityDataAccessor<Integer> DATA_ARMOR_COUNT = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<Float> DATA_MOUTH_PROGRESS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<CompoundTag> DATA_SEAT_ASSIGNMENTS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.COMPOUND_TAG);
@@ -266,13 +266,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
     }
     protected void updateContainerEquipment() {
-        if (!this.level().isClientSide) {
-            if (this.inventory != null) {
+        //if (!this.level().isClientSide) {
+            //if (this.inventory != null) {
                 this.entityData.set(DATA_CROWN_ID, this.inventory.getItem(INV_SLOT_CROWN));
-                this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR));
+                this.entityData.set(DATA_ARMOR_COUNT, this.inventory.getItem(INV_SLOT_ARMOR).getCount());
                 this.setFlag(4, !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty());
-            }
-        }
+            //}
+        //}
     }
     public void containerChanged(Container invBasic) {
         ItemStack itemstack = this.getArmor();
@@ -330,7 +330,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.entityData.define(DATA_ID_FLAGS, (byte)0);
         this.entityData.define(DATA_SEAT_ASSIGNMENTS, new CompoundTag());
         this.entityData.define(DATA_CROWN_ID, ItemStack.EMPTY);
-        this.entityData.define(DATA_ARMOR_ID, ItemStack.EMPTY);
+        this.entityData.define(DATA_ARMOR_COUNT, 0);
         this.entityData.define(DATA_MOUTH_PROGRESS, 0f);
     }
     public void addAdditionalSaveData(CompoundTag compound) {
@@ -351,7 +351,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         ItemStack crown = this.inventory.getItem(INV_SLOT_CROWN);
         ItemStack armor = this.inventory.getItem(INV_SLOT_ARMOR);
         this.entityData.set(DATA_CROWN_ID, crown);
-        this.entityData.set(DATA_ARMOR_ID, armor);
+        this.entityData.set(DATA_ARMOR_COUNT, armor.getCount());
 
         compound.putByte("Flags", this.entityData.get(DATA_ID_FLAGS));
 
@@ -383,14 +383,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         this.entityData.set(DATA_ID_FLAGS, compound.getByte("Flags"));
 
-        ItemStack crown = this.entityData.get(DATA_CROWN_ID);
-        ItemStack armor = this.entityData.get(DATA_ARMOR_ID);
-        if (!crown.isEmpty()) {
-            this.inventory.setItem(INV_SLOT_CROWN, crown);
-        }
-        if (!armor.isEmpty()) {
-            this.inventory.setItem(INV_SLOT_ARMOR, armor);
-        }
+//        ItemStack crown = this.entityData.get(DATA_CROWN_ID);
+//        ItemStack armor = this.entityData.get(DATA_ARMOR_ID);
+//        if (!crown.isEmpty()) {
+//            this.inventory.setItem(INV_SLOT_CROWN, crown);
+//        }
+//        if (!armor.isEmpty()) {
+//            this.inventory.setItem(INV_SLOT_ARMOR, armor);
+//        }
 
         HAS_MOBIUS_SPAWNED = compound.getBoolean("HasMobiusSpawned");
 
@@ -497,7 +497,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 //        return array;
 //    }
     public float getArmorProgress() {
-        return (float) this.entityData.get(DATA_ARMOR_ID).getCount() /64;
+        return (float) this.entityData.get(DATA_ARMOR_COUNT) /64;
     }
     public float getLeftEyeYaw() { return leftEyeYaw; }
     public float getRightEyeYaw() { return rightEyeYaw; }
@@ -589,7 +589,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return super.mobInteract(player, hand);
     }
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
-
+        if (!isSaddled()){
+            playSound(SoundEvents.ENDER_DRAGON_GROWL);
+            return InteractionResult.SUCCESS;
+        }
         if (seatIndex < 0 || seatIndex >= seats.length) {
             return InteractionResult.FAIL;
         }
@@ -640,7 +643,30 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         ItemStack heldItem = player.getItemInHand(hand);
         mouthTarget = 0.2f;
-        return handleVegetationRemoval(player, hand, part, top, heldItem.getItem() instanceof ShearsItem);
+        if((handleVegetationRemoval(player, hand, part, top, heldItem.getItem() instanceof ShearsItem)) == InteractionResult.PASS) {
+
+            for (BlockState[] states : headTopDirt) {
+                for (BlockState state : states) {
+                    if (state != Blocks.AIR.defaultBlockState()) {
+                        playSound(SoundEvents.HORSE_ANGRY);
+                        return InteractionResult.SUCCESS;
+                    }
+                }
+            }
+            for (BlockState[] blockStates : bodyTopDirt) {
+                for (BlockState blockState : blockStates) {
+                    if (blockState != Blocks.AIR.defaultBlockState()) {
+                        playSound(SoundEvents.HORSE_ANGRY);
+                        return InteractionResult.SUCCESS;
+                    }
+                }
+            }
+
+            setTamed(true);
+            playSound(SoundEvents.SNIFFER_HAPPY);
+            return InteractionResult.SUCCESS;
+        }
+        return InteractionResult.SUCCESS;
     }
     public InteractionResult interactArmor(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         ItemStack heldItem = player.getItemInHand(hand);
@@ -659,6 +685,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 return InteractionResult.PASS;
             }
             else if (heldItem.is(Items.DARK_OAK_PLANKS)) {
+                if (!isSaddled()) {
+                    playSound(SoundEvents.PANDA_AGGRESSIVE_AMBIENT);
+                    return InteractionResult.PASS;
+                }
                 ItemStack currentArmor = this.inventory.getItem(INV_SLOT_ARMOR);
                 System.out.println(currentArmor.getCount());
                 if (currentArmor.getCount() < 64) {
@@ -776,26 +806,58 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     @Override
     public boolean hurt(DamageSource source, float amount) {
+//        if(level().isClientSide){
+//            return super.hurt(source, amount);
+//        }
         ItemStack armorStack = this.inventory.getItem(INV_SLOT_ARMOR);
 
         if (!armorStack.isEmpty()) {
-            int armorDamage = Math.min(armorStack.getCount(), (int)Math.ceil(amount));
+            int originalCount = armorStack.getCount();
+            int armorDamage = Math.min(originalCount, (int)Math.ceil(amount));
 
             armorStack.shrink(armorDamage);
+            this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.random.nextFloat() * 0.4F);
 
-            if (!this.level().isClientSide) {
-                this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.random.nextFloat() * 0.4F);
-            }
-
-            this.inventory.setChanged();
+            System.out.println("pre: " + this.entityData.get(DATA_ARMOR_COUNT));
+            updateContainerEquipment();
+            System.out.println("post: " + this.entityData.get(DATA_ARMOR_COUNT));
 
             float remainingDamage = amount - armorDamage;
             if (remainingDamage > 0) {
                 return super.hurt(source, remainingDamage);
             }
-
-            return true;
+            return super.hurt(source, remainingDamage);
         }
+
+        //ItemStack armorStack = this.inventory.getItem(INV_SLOT_ARMOR);
+
+        //System.out.println(level() + ": " + amount);
+
+//        if (!armorStack.isEmpty()) {
+//
+//            int armorDamage = Math.min(armorStack.getCount(), (int)Math.ceil(amount));
+//
+//            armorStack.shrink(armorDamage);
+//            this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.random.nextFloat() * 0.4F);
+//            //this.inventory.setChanged();
+//            System.out.println("pre: " + level() + ": ");
+//            System.out.println(this.entityData.get(DATA_ARMOR_ID).getCount());
+//            System.out.println(" and ");
+//            System.out.println(this.inventory.getItem(INV_SLOT_ARMOR).getCount());
+//            if(!level().isClientSide)
+//                this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR));
+//            System.out.println("post: " + level() + ": ");
+//            System.out.println(this.entityData.get(DATA_ARMOR_ID).getCount());
+//            System.out.println(" and ");
+//            System.out.println(this.inventory.getItem(INV_SLOT_ARMOR).getCount());
+//            System.out.println("  ");
+//            float remainingDamage = amount - armorDamage;
+//            if (remainingDamage > 0) {
+//                return super.hurt(source, remainingDamage);
+//            }
+//
+//            return super.hurt(source, 0);
+//        }
 
         return super.hurt(source, amount);
     }
@@ -864,7 +926,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         randomTickDirt(tailDirt, true);
         randomTickDirt(flukeDirt, true);
 
-        if(!isSaddled()){
+        if(!isTamed()){
             randomTickDirt(headTopDirt, false);
             randomTickDirt(bodyTopDirt, false);
         } else {
@@ -1133,6 +1195,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (!this.hasPassenger(passenger)) return;
         if (seatAssignments.isEmpty()) return;
 
+        float yOffset = 0;
+        if(this.getArmorProgress() == 0)
+            yOffset = 0.5F;
+
         int seatIndex = seatAssignments.entrySet().stream()
                 .filter(entry -> entry.getValue().equals(passenger.getUUID()))
                 .map(Map.Entry::getKey)
@@ -1156,7 +1222,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             if(seats[seatIndex] != null)
                 callback.accept(passenger,
                         seats[seatIndex].x,
-                        seats[seatIndex].y + passenger.getMyRidingOffset(),
+                        seats[seatIndex].y - yOffset + passenger.getMyRidingOffset(),
                         seats[seatIndex].z);
         }
     }

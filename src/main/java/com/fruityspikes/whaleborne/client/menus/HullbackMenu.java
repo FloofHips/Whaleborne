@@ -59,12 +59,22 @@ public class HullbackMenu extends AbstractContainerMenu {
             public boolean mayPlace(ItemStack stack) {
                 return stack.getItem() == Items.SADDLE;
             }
+
+            @Override
+            public boolean mayPickup(Player player) {
+                return hullback.getArmorProgress() == 0;
+            }
         });
 
         this.addSlot(new Slot(hullbackContainer, HullbackEntity.INV_SLOT_ARMOR, 152, 54) {
             @Override
             public boolean mayPlace(ItemStack stack) {
-                return true;
+                return false;
+            }
+
+            @Override
+            public boolean mayPickup(Player player) {
+                return player.isCreative();
             }
         });
 
@@ -98,8 +108,8 @@ public class HullbackMenu extends AbstractContainerMenu {
                     return ItemStack.EMPTY;
                 }
             } else {
-                if (itemstack1.getItem() == Items.GUNPOWDER) {
-                    if (!this.moveItemStackTo(itemstack1, 1, 2, false)) {
+                if (itemstack1.getItem() == Items.SADDLE) {
+                    if (!this.moveItemStackTo(itemstack1, 1, 2, true)) {
                         return ItemStack.EMPTY;
                     }
                 } else if (!this.moveItemStackTo(itemstack1, 0, 1, false)) {
