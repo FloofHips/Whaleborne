@@ -5,6 +5,7 @@ import com.fruityspikes.whaleborne.client.models.HullbackArmorModel;
 import com.fruityspikes.whaleborne.client.models.HullbackModel;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackPartEntity;
+import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;

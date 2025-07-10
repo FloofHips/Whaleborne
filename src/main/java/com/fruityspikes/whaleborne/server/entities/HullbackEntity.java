@@ -2,6 +2,8 @@ package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
+import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -113,16 +115,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             Blocks.KELP.defaultBlockState(),
             Blocks.TALL_SEAGRASS.defaultBlockState(),
             Blocks.KELP_PLANT.defaultBlockState(),
-            Blocks.ACACIA_LOG.defaultBlockState()
+            WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState(),
+            WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()
     };
     public BlockState[] possibleFreshBlocks = {
             Blocks.SEAGRASS.defaultBlockState(),
             Blocks.KELP.defaultBlockState(),
-            Blocks.ACACIA_LOG.defaultBlockState(),
+            WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState(),
             Blocks.MOSS_CARPET.defaultBlockState()
     };
     public BlockState[] possibleTopBlocks = {
-            Blocks.ACACIA_LOG.defaultBlockState(),
+            WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState(),
+            WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState(),
             Blocks.MOSS_CARPET.defaultBlockState()
     };
     public final Vec3[] seatOffsets = {
@@ -782,7 +786,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     block == Blocks.KELP || block == Blocks.KELP_PLANT ||
                     block == Blocks.MOSS_CARPET;
         } else {
-            return block == Blocks.ACACIA_LOG;
+            return block == WBBlockRegistry.WHALE_BARNACLE_0.get() || block == WBBlockRegistry.WHALE_BARNACLE_1.get() ||
+                    block == WBBlockRegistry.WHALE_BARNACLE_2.get();
         }
     }
 
@@ -794,8 +799,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             return new ItemStack(Items.KELP);
         } else if (block == Blocks.MOSS_CARPET) {
             return new ItemStack(Items.MOSS_CARPET);
-        } else if (block == Blocks.ACACIA_LOG) {
-            return new ItemStack(Items.ACACIA_LOG);
+        } else if (block == WBBlockRegistry.WHALE_BARNACLE_0.get()) {
+            return new ItemStack(WBItemRegistry.BARNACLE.get());
+        } else if (block == WBBlockRegistry.WHALE_BARNACLE_1.get()) {
+            return new ItemStack(WBItemRegistry.BARNACLE.get(), 2);
+        } else if (block == WBBlockRegistry.WHALE_BARNACLE_2.get()) {
+            return new ItemStack(WBItemRegistry.BARNACLE.get(), 5);
         } else if (block == Blocks.KELP_PLANT) {
             return new ItemStack(Items.KELP, 2);
         } else if (block == Blocks.TALL_SEAGRASS) {
@@ -988,6 +997,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     playSound(SoundEvents.BONE_MEAL_USE);
                     return;
                 }
+                if (array[x][this.random.nextInt(array[x].length)] == WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState()) {
+                    array[x][this.random.nextInt(array[x].length)] = WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState();
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+                if (array[x][this.random.nextInt(array[x].length)] == WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()) {
+                    array[x][this.random.nextInt(array[x].length)] = WBBlockRegistry.WHALE_BARNACLE_2.get().defaultBlockState();
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
                 if (array[x][this.random.nextInt(array[x].length)] == Blocks.AIR.defaultBlockState()) {
                     array[x][this.random.nextInt(array[x].length)] = possibleFreshBlocks[this.random.nextInt(possibleFreshBlocks.length)];
                     playSound(SoundEvents.BONE_MEAL_USE);
@@ -1000,6 +1019,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 int x = this.random.nextInt(array.length);
                 if (array[x][this.random.nextInt(array[x].length)] == Blocks.AIR.defaultBlockState()) {
                     array[x][this.random.nextInt(array[x].length)] = possibleTopBlocks[this.random.nextInt(possibleTopBlocks.length)];
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+                if (array[x][this.random.nextInt(array[x].length)] == WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState()) {
+                    array[x][this.random.nextInt(array[x].length)] = WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState();
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+                if (array[x][this.random.nextInt(array[x].length)] == WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()) {
+                    array[x][this.random.nextInt(array[x].length)] = WBBlockRegistry.WHALE_BARNACLE_2.get().defaultBlockState();
                     playSound(SoundEvents.BONE_MEAL_USE);
                     return;
                 }

@@ -1,0 +1,11 @@
+{
+	"block.barnacle.organ": {
+    "sounds": [
+      {
+        "name": "whaleborne:block/barnacle/organ",
+        "volume": 0.5,
+        "volume": 0.5
+      }
+    ]
+  }
+}

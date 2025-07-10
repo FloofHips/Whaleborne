@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.registries;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.server.items.WhaleEquipment;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.common.ForgeSpawnEggItem;
@@ -18,5 +19,7 @@ public class WBItemRegistry {
     public static final RegistryObject<WhaleEquipment> HELM = ITEMS.register("helm", () -> new WhaleEquipment(WBEntityRegistry.HELM::get, new Item.Properties()));
     public static final RegistryObject<WhaleEquipment> ANCHOR = WBItemRegistry.ITEMS.register("anchor", () -> new WhaleEquipment(WBEntityRegistry.ANCHOR::get, new Item.Properties()));
     public static final RegistryObject<ForgeSpawnEggItem> HULLBACK_SPAWN_EGG = WBItemRegistry.ITEMS.register("hullback_spawn_egg", () -> new ForgeSpawnEggItem(WBEntityRegistry.HULLBACK, 564554,  534545, new Item.Properties()));
+
+    public static final RegistryObject<Item> BARNACLE = ITEMS.register("barnacle", () -> new BlockItem(WBBlockRegistry.BARNACLE.get(), new Item.Properties()));
 
 }
