@@ -563,18 +563,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (random.nextDouble() < 0.3) {
             mouthTarget = 0.2f;
             for (int side : new int[]{-1, 1}) {
-                Vec3 particlePos = partPosition[1].add(new Vec3(3.5*side, 1, 0).yRot(partYRot[1]));
+                Vec3 particlePos = partPosition[1].add(new Vec3(3.5*side, 2, 0).xRot(partXRot[1]).yRot(partYRot[1]));
                 double x = particlePos.x;
                 double y = particlePos.y;
                 double z = particlePos.z;
 
                 if (this.level() instanceof ServerLevel serverLevel) {
                     serverLevel.sendParticles(
-                            ParticleTypes.BUBBLE,
+                            ParticleTypes.FIREWORK,
                             x,
                             y,
                             z,
-                            10,
+                            100,
                             0.1,
                             0.1,
                             0.1,
@@ -999,16 +999,22 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         for (int i=0; i < subEntities.length; i++) {
             subEntities[i].tick();
-            if (this.level().isClientSide && this.isInWater() && this.getDeltaMovement().length() > 0.03) {
-                for (int side : new int[]{-1, 1}) {
-                    Vec3 particlePos = partPosition[i].add(new Vec3(subEntities[i].getSize().width*side, 1, 0).yRot(partYRot[i]));
-                    double x = particlePos.x;
-                    double y = particlePos.y;
-                    double z = particlePos.z;
 
-                    for(int j = 0; j < 2; ++j) {
-                        this.level().addParticle(ParticleTypes.BUBBLE, x, y, z, 0.0, 0.1, 0.0);
-                        this.level().addParticle(ParticleTypes.BUBBLE, x, y, z, 0.0, 0.1, 0.0);
+            if(i == 2 || i == 4) {
+                float offset = 0;
+                if (this.level().isClientSide && this.isInWater() && this.getDeltaMovement().length() > 0.03) {
+                    for (int side : new int[]{-1, 1}) {
+                        if(i == 2)
+                            offset = 4;
+                        Vec3 particlePos = partPosition[i].add(new Vec3((offset + subEntities[i].getSize().width / 2)*side, 0, subEntities[i].getSize().width / 2).yRot(partYRot[i]));
+                        double x = particlePos.x;
+                        double y = particlePos.y;
+                        double z = particlePos.z;
+
+                        for(int j = 0; j < 4; ++j) {
+                            this.level().addParticle(ParticleTypes.BUBBLE, x, y, z, 0.0, 0.1, 0.0);
+                            this.level().addParticle(ParticleTypes.BUBBLE, x, y, z, 0.0, 0.1, 0.0);
+                        }
                     }
                 }
             }
