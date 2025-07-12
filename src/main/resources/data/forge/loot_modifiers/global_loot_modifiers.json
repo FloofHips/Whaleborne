@@ -1,0 +1,8 @@
+{
+  "replace": false,
+  "entries": [
+    "whaleborne:add_shipwreck_widgets",
+    "whaleborne:add_treasure_widgets",
+    "whaleborne:add_ruin_widgets"
+  ]
+}

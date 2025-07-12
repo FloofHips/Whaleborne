@@ -77,6 +77,7 @@ public class Whaleborne
         WBItemRegistry.ITEMS.register(modEventBus);
         WBMenuRegistry.MENUS.register(modEventBus);
         WBSoundRegistry.SOUND_EVENTS.register(modEventBus);
+        WBLootModifierRegistry.LOOT_MODIFIER_SERIALIZERS.register(modEventBus);
         WhaleborneNetwork.init();
         CREATIVE_MODE_TABS.register(modEventBus);
 

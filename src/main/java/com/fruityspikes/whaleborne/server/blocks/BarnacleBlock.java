@@ -103,8 +103,7 @@ public class BarnacleBlock extends Block {
     }
 
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-
-        level.addParticle(ParticleTypes.EXPLOSION, pos.getX(), pos.getY(), pos.getZ(), 0.0, 0.005, 0.0);
+        this.playNote(player, state, level, pos);
         return InteractionResult.SUCCESS;
     }
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {

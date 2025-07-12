@@ -13,7 +13,9 @@ import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.ItemTags;
@@ -125,9 +127,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             Blocks.MOSS_CARPET.defaultBlockState()
     };
     public BlockState[] possibleTopBlocks = {
+            Blocks.MOSS_CARPET.defaultBlockState(),
             WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState(),
-            WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState(),
-            Blocks.MOSS_CARPET.defaultBlockState()
+            WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()
     };
     public final Vec3[] seatOffsets = {
             //head
@@ -211,7 +213,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 for (int y = 0; y < array[x].length; y++) {
                     array[x][y] = Blocks.AIR.defaultBlockState();
                     if (random.nextDouble() < 0.5) {
-                        array[x][y] = possibleBottomBlocks[random.nextInt(possibleBottomBlocks.length)];
+                        array[x][y] = possibleBottomBlocks[getWeightedIndex(possibleBottomBlocks.length, false)];
                     }
                 }
             }
@@ -219,8 +221,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             for (int x = 0; x < array.length; x++) {
                 for (int y = 0; y < array[x].length; y++) {
                     array[x][y] = Blocks.AIR.defaultBlockState();
-                    if (random.nextDouble() < 0.5) {
-                        array[x][y] = possibleTopBlocks[random.nextInt(possibleTopBlocks.length)];
+                    if (random.nextDouble() < 0.3) {
+                        array[x][y] = possibleTopBlocks[getWeightedIndex(possibleTopBlocks.length, false)];;
                     }
                 }
             }
@@ -556,6 +558,39 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         super.recreateFromPacket(packet);
     }
 
+    @Override
+    protected void playSwimSound(float volume) {
+        if (random.nextDouble() < 0.3) {
+            mouthTarget = 0.2f;
+            for (int side : new int[]{-1, 1}) {
+                Vec3 particlePos = partPosition[1].add(new Vec3(3.5*side, 1, 0).yRot(partYRot[1]));
+                double x = particlePos.x;
+                double y = particlePos.y;
+                double z = particlePos.z;
+
+                if (this.level() instanceof ServerLevel serverLevel) {
+                    serverLevel.sendParticles(
+                            ParticleTypes.BUBBLE,
+                            x,
+                            y,
+                            z,
+                            10,
+                            0.1,
+                            0.1,
+                            0.1,
+                            0.02
+                    );
+                }
+            }
+        }
+        super.playSwimSound(volume);
+    }
+
+    @Override
+    protected SoundEvent getSwimSound() {
+        return super.getSwimSound();
+    }
+
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
         //this.goalSelector.addGoal(0, new TemptGoal(this, 1.2, Ingredient.of(new ItemLike[]{Items.SHEARS, Items.NETHERITE_AXE, Items.DARK_OAK_PLANKS}), false));
@@ -594,6 +629,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
         if (!isSaddled()){
+            mouthTarget = 1.0f;
             playSound(SoundEvents.ENDER_DRAGON_GROWL);
             return InteractionResult.SUCCESS;
         }
@@ -652,6 +688,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             for (BlockState[] states : headTopDirt) {
                 for (BlockState state : states) {
                     if (state != Blocks.AIR.defaultBlockState()) {
+                        mouthTarget = 0.5f;
                         playSound(SoundEvents.HORSE_ANGRY);
                         return InteractionResult.SUCCESS;
                     }
@@ -660,6 +697,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             for (BlockState[] blockStates : bodyTopDirt) {
                 for (BlockState blockState : blockStates) {
                     if (blockState != Blocks.AIR.defaultBlockState()) {
+                        mouthTarget = 0.5f;
                         playSound(SoundEvents.HORSE_ANGRY);
                         return InteractionResult.SUCCESS;
                     }
@@ -667,6 +705,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
 
             setTamed(true);
+            mouthTarget = 0.1f;
             playSound(SoundEvents.SNIFFER_HAPPY);
             return InteractionResult.SUCCESS;
         }
@@ -677,24 +716,31 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             if (heldItem.getItem() instanceof SaddleItem) {
                 if (!this.isSaddled()) {
-                    this.equipSaddle(SoundSource.PLAYERS);
-                    if (!player.getAbilities().instabuild) {
-                        heldItem.shrink(1);
+                    if (this.isTamed()) {
+                        this.equipSaddle(SoundSource.PLAYERS);
+                        if (!player.getAbilities().instabuild) {
+                            heldItem.shrink(1);
+                        }
+                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                                SoundEvents.HORSE_SADDLE,
+                                SoundSource.PLAYERS, 1.0F, 0.1F);
+                        return InteractionResult.SUCCESS;
+                    } else {
+                        mouthTarget = 0.3f;
+                        playSound(SoundEvents.PANDA_AGGRESSIVE_AMBIENT);
+                        return InteractionResult.PASS;
                     }
-                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                            SoundEvents.HORSE_SADDLE,
-                            SoundSource.PLAYERS, 1.0F, 0.1F);
-                    return InteractionResult.SUCCESS;
                 }
                 return InteractionResult.PASS;
             }
             else if (heldItem.is(Items.DARK_OAK_PLANKS)) {
                 if (!isSaddled()) {
+                    mouthTarget = 0.3f;
                     playSound(SoundEvents.PANDA_AGGRESSIVE_AMBIENT);
                     return InteractionResult.PASS;
                 }
                 ItemStack currentArmor = this.inventory.getItem(INV_SLOT_ARMOR);
-                System.out.println(currentArmor.getCount());
+
                 if (currentArmor.getCount() < 64) {
                     if (currentArmor.isEmpty()) {
                         this.inventory.setItem(INV_SLOT_ARMOR, new ItemStack(Items.DARK_OAK_PLANKS, 1));
@@ -951,18 +997,19 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        for ( HullbackPartEntity part : getSubEntities()
-             ) {
-            part.tick();
+        for (int i=0; i < subEntities.length; i++) {
+            subEntities[i].tick();
             if (this.level().isClientSide && this.isInWater() && this.getDeltaMovement().length() > 0.03) {
-                Vec3 vec3 = part.getViewVector(0.0F);
-                float f = Mth.cos(part.getYRot() * 0.017453292F) * part.getSize().width;
-                float f1 = Mth.sin(part.getYRot() * 0.017453292F) * 0.3F;
-                float f2 = 1.2F - this.random.nextFloat() * 0.7F;
+                for (int side : new int[]{-1, 1}) {
+                    Vec3 particlePos = partPosition[i].add(new Vec3(subEntities[i].getSize().width*side, 1, 0).yRot(partYRot[i]));
+                    double x = particlePos.x;
+                    double y = particlePos.y;
+                    double z = particlePos.z;
 
-                for(int i = 0; i < 2; ++i) {
-                    this.level().addParticle(ParticleTypes.BUBBLE, part.getX() - vec3.x * (double)f2 + (double)f, part.getY() - vec3.y, part.getZ() - vec3.z * (double)f2 + (double)f1, 0.0, 0.0, 0.0);
-                    this.level().addParticle(ParticleTypes.BUBBLE, part.getX() - vec3.x * (double)f2 - (double)f, part.getY() - vec3.y, part.getZ() - vec3.z * (double)f2 - (double)f1, 0.0, 0.0, 0.0);
+                    for(int j = 0; j < 2; ++j) {
+                        this.level().addParticle(ParticleTypes.BUBBLE, x, y, z, 0.0, 0.1, 0.0);
+                        this.level().addParticle(ParticleTypes.BUBBLE, x, y, z, 0.0, 0.1, 0.0);
+                    }
                 }
             }
         }
@@ -984,56 +1031,92 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 //    }
 
     private void randomTickDirt(BlockState[][] array, boolean bottom) {
-        if(bottom){
-            if (this.random.nextInt(1000) <= 10) {
-                int x = this.random.nextInt(array.length);
-                if (array[x][this.random.nextInt(array[x].length)] == Blocks.SEAGRASS.defaultBlockState()) {
-                    array[x][this.random.nextInt(array[x].length)] = Blocks.TALL_SEAGRASS.defaultBlockState();
+        if (bottom) {
+            if (this.random.nextInt(10000) <= 10) {
+                int x = getWeightedIndex(array.length, true);
+                int y = getWeightedIndex(array[x].length, true);
+
+                BlockState currentState = array[x][y];
+
+                if (currentState == Blocks.SEAGRASS.defaultBlockState()) {
+                    array[x][y] = Blocks.TALL_SEAGRASS.defaultBlockState();
                     playSound(SoundEvents.BONE_MEAL_USE);
                     return;
                 }
-                if (array[x][this.random.nextInt(array[x].length)] == Blocks.KELP.defaultBlockState()) {
-                    array[x][this.random.nextInt(array[x].length)] = Blocks.KELP_PLANT.defaultBlockState();
+                if (currentState == Blocks.KELP.defaultBlockState()) {
+                    array[x][y] = Blocks.KELP_PLANT.defaultBlockState();
                     playSound(SoundEvents.BONE_MEAL_USE);
                     return;
                 }
-                if (array[x][this.random.nextInt(array[x].length)] == WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState()) {
-                    array[x][this.random.nextInt(array[x].length)] = WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState();
+                if (currentState == WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState()) {
+                    array[x][y] = WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState();
                     playSound(SoundEvents.BONE_MEAL_USE);
                     return;
                 }
-                if (array[x][this.random.nextInt(array[x].length)] == WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()) {
-                    array[x][this.random.nextInt(array[x].length)] = WBBlockRegistry.WHALE_BARNACLE_2.get().defaultBlockState();
+                if (currentState == WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()) {
+                    array[x][y] = WBBlockRegistry.WHALE_BARNACLE_2.get().defaultBlockState();
                     playSound(SoundEvents.BONE_MEAL_USE);
                     return;
                 }
-                if (array[x][this.random.nextInt(array[x].length)] == Blocks.AIR.defaultBlockState()) {
-                    array[x][this.random.nextInt(array[x].length)] = possibleFreshBlocks[this.random.nextInt(possibleFreshBlocks.length)];
+                if (currentState == Blocks.AIR.defaultBlockState()) {
+                    int index = getWeightedIndex(possibleFreshBlocks.length, false);
+                    array[x][y] = possibleFreshBlocks[index];
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+            }
+        } else {
+            if (this.random.nextInt(10000) <= 5) {
+
+                int x = getWeightedIndex(array.length, true);
+                int y = getWeightedIndex(array[x].length, true);
+
+                BlockState currentState = array[x][y];
+
+                if (currentState == Blocks.AIR.defaultBlockState()) {
+                    int index = getWeightedIndex(possibleTopBlocks.length, false);
+                    array[x][y] = possibleTopBlocks[index];
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+                if (currentState == WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState()) {
+                    array[x][y] = WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState();
+                    playSound(SoundEvents.BONE_MEAL_USE);
+                    return;
+                }
+                if (currentState == WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()) {
+                    array[x][y] = WBBlockRegistry.WHALE_BARNACLE_2.get().defaultBlockState();
                     playSound(SoundEvents.BONE_MEAL_USE);
                     return;
                 }
             }
         }
-        else{
-            if (this.random.nextInt(1000) <= 5) {
-                int x = this.random.nextInt(array.length);
-                if (array[x][this.random.nextInt(array[x].length)] == Blocks.AIR.defaultBlockState()) {
-                    array[x][this.random.nextInt(array[x].length)] = possibleTopBlocks[this.random.nextInt(possibleTopBlocks.length)];
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
-                }
-                if (array[x][this.random.nextInt(array[x].length)] == WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState()) {
-                    array[x][this.random.nextInt(array[x].length)] = WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState();
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
-                }
-                if (array[x][this.random.nextInt(array[x].length)] == WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()) {
-                    array[x][this.random.nextInt(array[x].length)] = WBBlockRegistry.WHALE_BARNACLE_2.get().defaultBlockState();
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
-                }
+    }
+
+    private int getWeightedIndex(int length, boolean higherWeight) {
+        double[] weights = new double[length];
+        double totalWeight = 0;
+
+        for (int i = 0; i < length; i++) {
+            if (higherWeight) {
+                weights[i] = i + 1;
+            } else {
+                weights[i] = length - i;
+            }
+            totalWeight += weights[i];
+        }
+
+        double randomValue = random.nextDouble() * totalWeight;
+        double cumulativeWeight = 0;
+
+        for (int i = 0; i < length; i++) {
+            cumulativeWeight += weights[i];
+            if (randomValue <= cumulativeWeight) {
+                return i;
             }
         }
+
+        return length - 1;
     }
 
     private void updateMouthOpening() {
