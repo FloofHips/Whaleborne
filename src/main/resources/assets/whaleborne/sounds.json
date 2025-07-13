@@ -1,11 +1,170 @@
 {
-	"block.barnacle.organ": {
+"block.barnacle.organ": {
     "sounds": [
       {
         "name": "whaleborne:block/barnacle/organ",
         "volume": 0.5,
-        "volume": 0.5
+        "attenuation_distance": 64
       }
-    ]
+    ],
+  "subtitle": "subtitles.block.barnacle.organ"
+  },
+  "entity.hullback.ambient": {
+    "sounds": [
+      {
+        "name": "whaleborne:entity/hullback/ambient_1",
+        "attenuation_distance": 64,
+        "volume": 5
+      },
+      {
+        "name": "whaleborne:entity/hullback/ambient_2",
+        "attenuation_distance": 64,
+        "volume": 5
+      },
+      {
+        "name": "whaleborne:entity/hullback/ambient_3",
+        "attenuation_distance": 64,
+        "volume": 5
+      },
+      {
+        "name": "whaleborne:entity/hullback/ambient_4",
+        "attenuation_distance": 64,
+        "volume": 5
+      },
+      {
+        "name": "whaleborne:entity/hullback/ambient_5",
+        "attenuation_distance": 64,
+        "volume": 5
+      },
+      {
+        "name": "whaleborne:entity/hullback/ambient_6",
+        "attenuation_distance": 64,
+        "volume": 5
+      }
+    ],
+    "subtitle": "subtitles.entity.hullback.ambient"
+  },
+  "entity.hullback.breathe": {
+    "sounds": [
+      {
+        "name": "whaleborne:entity/hullback/breathe_1",
+        "attenuation_distance": 64,
+        "volume": 6
+      },
+      {
+        "name": "whaleborne:entity/hullback/breathe_2",
+        "attenuation_distance": 64,
+        "volume": 6
+      },
+      {
+        "name": "whaleborne:entity/hullback/breathe_3",
+        "attenuation_distance": 64,
+        "volume": 6
+      },
+      {
+        "name": "whaleborne:entity/hullback/breathe_4",
+        "attenuation_distance": 64,
+        "volume": 6
+      }
+    ],
+    "subtitle": "subtitles.entity.hullback.breathe"
+  },
+  "entity.hullback.happy": {
+    "sounds": [
+      {
+        "name": "whaleborne:entity/hullback/happy_1"
+      },
+      {
+        "name": "whaleborne:entity/hullback/happy_2"
+      },
+      {
+        "name": "whaleborne:entity/hullback/happy_3"
+      },
+      {
+        "name": "whaleborne:entity/hullback/happy_4"
+      },
+      {
+        "name": "whaleborne:entity/hullback/happy_5"
+      }
+    ],
+    "subtitle": "subtitles.entity.hullback.happy"
+  },
+  "entity.hullback.hurt": {
+    "sounds": [
+      {
+        "name": "whaleborne:entity/hullback/hurt_1"
+      },
+      {
+        "name": "whaleborne:entity/hullback/hurt_2"
+      },
+      {
+        "name": "whaleborne:entity/hullback/hurt_3"
+      }
+    ],
+    "subtitle": "subtitles.entity.hullback.hurt"
+  },
+  "entity.hullback.mad": {
+    "sounds": [
+      {
+        "name": "whaleborne:entity/hullback/mad_1"
+      },
+      {
+        "name": "whaleborne:entity/hullback/mad_2"
+      },
+      {
+        "name": "whaleborne:entity/hullback/mad_3"
+      },
+      {
+        "name": "whaleborne:entity/hullback/mad_4"
+      },
+      {
+        "name": "whaleborne:entity/hullback/mad_5"
+      }
+    ],
+    "subtitle": "subtitles.entity.hullback.mad"
+  },
+  "entity.hullback.swim": {
+    "sounds": [
+      {
+        "name": "whaleborne:entity/hullback/swim_1"
+      },
+      {
+        "name": "whaleborne:entity/hullback/swim_2"
+      },
+      {
+        "name": "whaleborne:entity/hullback/swim_3"
+      },
+      {
+        "name": "whaleborne:entity/hullback/swim_4"
+      }
+    ],
+    "subtitle": "subtitles.entity.hullback.swim"
+  },
+  "entity.hullback.tame": {
+    "sounds": [
+      {
+        "name": "whaleborne:entity/hullback/tame_1",
+        "attenuation_distance": 64
+      },
+      {
+        "name": "whaleborne:entity/hullback/tame_2",
+        "attenuation_distance": 64
+      },
+      {
+        "name": "whaleborne:entity/hullback/tame_3",
+        "attenuation_distance": 64
+      }
+    ],
+    "subtitle": "subtitles.entity.hullback.tame"
+  },
+  "entity.hullback.death": {
+    "sounds": [
+      {
+        "name": "whaleborne:entity/hullback/death",
+        "attenuation_distance": 64,
+        "volume": 3
+      }
+    ],
+    "subtitle": "subtitles.entity.hullback.death"
   }
 }

@@ -98,7 +98,7 @@ public class BarnacleBlock extends Block {
 
         level.addParticle(ParticleTypes.NOTE, (double)checkPos.getX() + 0.5, (double)checkPos.getY() + 0.5, (double)checkPos.getZ() + 0.5, 0.0, 0.01, 0.0);
         level.addParticle(ParticleTypes.CAMPFIRE_SIGNAL_SMOKE, (double)checkPos.getX() + 0.5, (double)checkPos.getY() + 0.5, (double)checkPos.getZ() + 0.5, 0.0, 0.1, 0.0);
-        level.playSeededSound((Player)null, (double)pos.getX() + 0.5, (double)pos.getY() + 0.5, (double)pos.getZ() + 0.5, WBSoundRegistry.ORGAN.get(), SoundSource.RECORDS, 0.5F, pitch, level.random.nextLong());
+        level.playSeededSound((Player)null, (double)pos.getX() + 0.5, (double)pos.getY() + 0.5, (double)pos.getZ() + 0.5, WBSoundRegistry.ORGAN.get(), SoundSource.RECORDS, 2F, pitch, level.random.nextLong());
         return true;
     }
 

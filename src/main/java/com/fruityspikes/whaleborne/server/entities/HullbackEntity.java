@@ -4,6 +4,7 @@ import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -520,7 +521,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected void handleAirSupply(int airSupply) {
     }
     public int getMaxAirSupply() {
-        return 12000;
+        return 10000;
     }
 
     protected int increaseAirSupply(int currentAir) {
@@ -559,36 +560,56 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     @Override
-    protected void playSwimSound(float volume) {
-        if (random.nextDouble() < 0.3) {
-            mouthTarget = 0.2f;
-            for (int side : new int[]{-1, 1}) {
-                Vec3 particlePos = partPosition[1].add(new Vec3(3.5*side, 2, 0).xRot(partXRot[1]).yRot(partYRot[1]));
-                double x = particlePos.x;
-                double y = particlePos.y;
-                double z = particlePos.z;
+    public void playAmbientSound() {
+        mouthTarget = 0.2f;
 
-                if (this.level() instanceof ServerLevel serverLevel) {
-                    serverLevel.sendParticles(
-                            ParticleTypes.FIREWORK,
-                            x,
-                            y,
-                            z,
-                            100,
-                            0.1,
-                            0.1,
-                            0.1,
-                            0.02
-                    );
-                }
+        for (int side : new int[]{-1, 1}) {
+            Vec3 particlePos = partPosition[1].add(new Vec3(3.5*side, 2, 0).yRot(partYRot[1]));
+            double x = particlePos.x;
+            double y = particlePos.y;
+            double z = particlePos.z;
+
+            if (this.level() instanceof ServerLevel serverLevel) {
+                serverLevel.sendParticles(
+                        ParticleTypes.FIREWORK,
+                        x,
+                        y,
+                        z,
+                        100,
+                        0.1,
+                        0.1,
+                        0.1,
+                        0.02
+                );
             }
         }
-        super.playSwimSound(volume);
+
+        playSound(WBSoundRegistry.HULLBACK_AMBIENT.get(), 5, 1);
+    }
+
+    @Override
+    protected void playSwimSound(float volume) {
+        super.playSwimSound(2);
     }
 
     @Override
     protected SoundEvent getSwimSound() {
-        return super.getSwimSound();
+        return WBSoundRegistry.HULLBACK_SWIM.get();
+    }
+    @Nullable
+    @Override
+    protected SoundEvent getHurtSound(DamageSource damageSource) {
+        return WBSoundRegistry.HULLBACK_HURT.get();
+    }
+    @Nullable
+    @Override
+    protected SoundEvent getDeathSound() {
+        return WBSoundRegistry.HULLBACK_DEATH.get();
+    }
+    @Nullable
+    @Override
+    protected SoundEvent getAmbientSound() {
+        return WBSoundRegistry.HULLBACK_AMBIENT.get();
     }
 
     protected void registerGoals() {
@@ -630,7 +651,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
         if (!isSaddled()){
             mouthTarget = 1.0f;
-            playSound(SoundEvents.ENDER_DRAGON_GROWL);
+            playSound(WBSoundRegistry.HULLBACK_MAD.get());
             return InteractionResult.SUCCESS;
         }
         if (seatIndex < 0 || seatIndex >= seats.length) {
@@ -689,7 +710,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 for (BlockState state : states) {
                     if (state != Blocks.AIR.defaultBlockState()) {
                         mouthTarget = 0.5f;
-                        playSound(SoundEvents.HORSE_ANGRY);
+                        playSound(WBSoundRegistry.HULLBACK_MAD.get());
                         return InteractionResult.SUCCESS;
                     }
                 }
@@ -698,7 +719,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 for (BlockState blockState : blockStates) {
                     if (blockState != Blocks.AIR.defaultBlockState()) {
                         mouthTarget = 0.5f;
-                        playSound(SoundEvents.HORSE_ANGRY);
+                        playSound(WBSoundRegistry.HULLBACK_MAD.get());
                         return InteractionResult.SUCCESS;
                     }
                 }
@@ -706,7 +727,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             setTamed(true);
             mouthTarget = 0.1f;
-            playSound(SoundEvents.SNIFFER_HAPPY);
+            playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
             return InteractionResult.SUCCESS;
         }
         return InteractionResult.SUCCESS;
@@ -727,7 +748,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                         return InteractionResult.SUCCESS;
                     } else {
                         mouthTarget = 0.3f;
-                        playSound(SoundEvents.PANDA_AGGRESSIVE_AMBIENT);
+                        playSound(WBSoundRegistry.HULLBACK_MAD.get());
                         return InteractionResult.PASS;
                     }
                 }
@@ -736,7 +757,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             else if (heldItem.is(Items.DARK_OAK_PLANKS)) {
                 if (!isSaddled()) {
                     mouthTarget = 0.3f;
-                    playSound(SoundEvents.PANDA_AGGRESSIVE_AMBIENT);
+                    playSound(WBSoundRegistry.HULLBACK_MAD.get());
                     return InteractionResult.PASS;
                 }
                 ItemStack currentArmor = this.inventory.getItem(INV_SLOT_ARMOR);
@@ -761,6 +782,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                         this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                             SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
                             SoundSource.PLAYERS, 2.0F, 1.0F);
+                        playSound(WBSoundRegistry.HULLBACK_TAME.get());
                     }
                     this.updateContainerEquipment();
                     return InteractionResult.SUCCESS;
@@ -867,15 +889,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         ItemStack armorStack = this.inventory.getItem(INV_SLOT_ARMOR);
 
         if (!armorStack.isEmpty()) {
+            mouthTarget = 0.8f;
             int originalCount = armorStack.getCount();
             int armorDamage = Math.min(originalCount, (int)Math.ceil(amount));
 
             armorStack.shrink(armorDamage);
             this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.random.nextFloat() * 0.4F);
 
-            System.out.println("pre: " + this.entityData.get(DATA_ARMOR_COUNT));
             updateContainerEquipment();
-            System.out.println("post: " + this.entityData.get(DATA_ARMOR_COUNT));
+
+            playSound(WBSoundRegistry.HULLBACK_MAD.get());
 
             float remainingDamage = amount - armorDamage;
             if (remainingDamage > 0) {
@@ -884,36 +907,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             return super.hurt(source, remainingDamage);
         }
 
-        //ItemStack armorStack = this.inventory.getItem(INV_SLOT_ARMOR);
-
-        //System.out.println(level() + ": " + amount);
-
-//        if (!armorStack.isEmpty()) {
-//
-//            int armorDamage = Math.min(armorStack.getCount(), (int)Math.ceil(amount));
-//
-//            armorStack.shrink(armorDamage);
-//            this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.random.nextFloat() * 0.4F);
-//            //this.inventory.setChanged();
-//            System.out.println("pre: " + level() + ": ");
-//            System.out.println(this.entityData.get(DATA_ARMOR_ID).getCount());
-//            System.out.println(" and ");
-//            System.out.println(this.inventory.getItem(INV_SLOT_ARMOR).getCount());
-//            if(!level().isClientSide)
-//                this.entityData.set(DATA_ARMOR_ID, this.inventory.getItem(INV_SLOT_ARMOR));
-//            System.out.println("post: " + level() + ": ");
-//            System.out.println(this.entityData.get(DATA_ARMOR_ID).getCount());
-//            System.out.println(" and ");
-//            System.out.println(this.inventory.getItem(INV_SLOT_ARMOR).getCount());
-//            System.out.println("  ");
-//            float remainingDamage = amount - armorDamage;
-//            if (remainingDamage > 0) {
-//                return super.hurt(source, remainingDamage);
-//            }
-//
-//            return super.hurt(source, 0);
-//        }
-
+        mouthTarget = 0;
         return super.hurt(source, amount);
     }
 
@@ -1801,10 +1795,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                             this.hullback.getRandom().nextFloat() * 0.5f,
                             (this.hullback.getRandom().nextFloat() - 0.5f) * 0.5f);
                 }
-                this.hullback.playSound(SoundEvents.LAVA_EXTINGUISH, 1.0f, 0.5f);
                 this.hullback.mouthTarget = 0.0f;
             }
 
+            this.hullback.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), 6, 1);
             this.hullback.setXRot(Mth.rotLerp(0.1f, this.hullback.getXRot(), 0));
         }
 
@@ -1877,7 +1871,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     .add(sideOffset)
                     .add(playerLook.scale(-APPROACH_DISTANCE));
 
-            playSound(SoundEvents.AMETHYST_BLOCK_BREAK);
+            playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
             this.hullback.mouthTarget = 0.2f;
         }
 

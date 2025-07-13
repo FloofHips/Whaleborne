@@ -112,11 +112,11 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
         this.jaw_1.y=Math.min(Mth.lerp(entity.getMouthOpenProgress(), this.jaw_1.getInitialPose().y, this.jaw_1.getInitialPose().y+27), this.jaw_1.getInitialPose().y+20);
         this.jaw_2.y=Math.min(Mth.lerp(entity.getMouthOpenProgress(), this.jaw_2.getInitialPose().y, this.jaw_2.getInitialPose().y+27), this.jaw_2.getInitialPose().y+30);
 
-        //this.left_lower_eyelid.y=Mth.lerp(entity.getMouthOpenProgress(), this.left_lower_eyelid.getInitialPose().y, this.left_lower_eyelid.getInitialPose().y-2.25f);
-        //this.right_lower_eyelid.y=Mth.lerp(entity.getMouthOpenProgress(), this.right_lower_eyelid.getInitialPose().y, this.right_lower_eyelid.getInitialPose().y-2.25f);
+        this.left_lower_eyelid.y=Mth.lerp(entity.getMouthOpenProgress(), this.left_lower_eyelid.getInitialPose().y, this.left_lower_eyelid.getInitialPose().y-2.25f);
+        this.right_lower_eyelid.y=Mth.lerp(entity.getMouthOpenProgress(), this.right_lower_eyelid.getInitialPose().y, this.right_lower_eyelid.getInitialPose().y-2.25f);
 
-        //this.left_upper_eyelid.y=Mth.lerp(entity.getMouthOpenProgress(), this.left_upper_eyelid.getInitialPose().y, this.left_upper_eyelid.getInitialPose().y+2.25f);
-        //this.right_upper_eyelid.y=Mth.lerp(entity.getMouthOpenProgress(), this.right_upper_eyelid.getInitialPose().y, this.right_upper_eyelid.getInitialPose().y+2.25f);
+        this.left_upper_eyelid.y=Mth.lerp(entity.getMouthOpenProgress(), this.left_upper_eyelid.getInitialPose().y, this.left_upper_eyelid.getInitialPose().y+2.25f);
+        this.right_upper_eyelid.y=Mth.lerp(entity.getMouthOpenProgress(), this.right_upper_eyelid.getInitialPose().y, this.right_upper_eyelid.getInitialPose().y+2.25f);
 
         float perpendicularYaw = netHeadYaw + 90;
         // Normalize to 0-1 range where 0 = forward, 0.5 = perpendicular, 1 = backward
