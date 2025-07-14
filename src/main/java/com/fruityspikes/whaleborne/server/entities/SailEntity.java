@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.sounds.SoundEvents;
@@ -13,7 +14,7 @@ public class SailEntity extends WhaleWidgetEntity{
     private float SPEED_MODIFIER = 1.0F;
 
     public SailEntity(EntityType<?> entityType, Level level) {
-        super(entityType, level, Items.PAPER);
+        super(entityType, level, WBItemRegistry.SAIL.get());
     }
 
     public float getSpeedModifier() {
@@ -28,7 +29,7 @@ public class SailEntity extends WhaleWidgetEntity{
 
             if (whale.getDeltaMovement().length()>0.1f){
                 if (this.tickCount % 500 == 0)
-                    this.level().playSound(this, BlockPos.containing(this.position()), SoundEvents.ELYTRA_FLYING, SoundSource.NEUTRAL, (float) whale.getDeltaMovement().length(), (float) whale.getDeltaMovement().length());
+                    this.level().playSound(this, BlockPos.containing(this.position()), SoundEvents.ELYTRA_FLYING, SoundSource.NEUTRAL, 1, (float) whale.getDeltaMovement().length());
             }
         }
     }

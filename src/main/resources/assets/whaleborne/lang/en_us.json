@@ -1,5 +1,23 @@
 {
-  "itemGroup.examplemod": "Example Mod Tab",
-  "block.examplemod.example_block": "Example Block",
-  "item.examplemod.example_item": "Example Item"
+  "itemGroup.whaleborne.whaleborne": "Whaleborne",
+
+  "block.whaleborne.barnacle": "Barnacle Block",
+  "item.whaleborne.barnacle": "Barnacle Block",
+  "subtitles.block.barnacle.organ": "Barnacle sings",
+
+  "item.whaleborne.sail": "Sail",
+  "item.whaleborne.anchor": "Anchor",
+  "item.whaleborne.mast": "Mast",
+  "item.whaleborne.helm": "Helm",
+  "item.whaleborne.cannon": "Cannon",
+
+  "item.whaleborne.hullback_spawn_egg": "Hullback Spawn Egg",
+  "entity.whaleborne.hullback": "Hullback",
+
+  "subtitles.entity.hullback.ambient": "Hullback sings",
+  "subtitles.entity.hullback.hurt": "Hullback hurts",
+  "subtitles.entity.hullback.death": "Hullback dies",
+  "subtitles.entity.hullback.happy": "Hullback sings happily",
+  "subtitles.entity.hullback.mad": "Hullback groans",
+  "subtitles.entity.hullback.swim": "Hullback swims"
 }

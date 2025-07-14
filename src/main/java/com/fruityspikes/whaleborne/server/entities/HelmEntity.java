@@ -1,11 +1,14 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
@@ -13,7 +16,7 @@ import javax.annotation.Nullable;
 public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRideableJumping, HasCustomInventoryScreen {
 
     public HelmEntity(EntityType<?> entityType, Level level) {
-        super(entityType, level, Items.STICK);
+        super(entityType, level, WBItemRegistry.HELM.get());
     }
     public float wheelRotation;
     public float prevWheelRotation;
@@ -50,7 +53,10 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     }
     @Override
     public void onPlayerJump(int i) {
-        this.getVehicle().setDeltaMovement(this.getFirstPassenger().getLookAngle().multiply(1.5, 2, 1.5));
+        if (this.getVehicle().isEyeInFluidType(Fluids.WATER.getFluidType())){
+            this.getVehicle().setDeltaMovement(this.getControllingPassenger().getLookAngle().multiply(1.5, 2, 1.5));
+            this.getVehicle().playSound(WBSoundRegistry.HULLBACK_TAME.get());
+        }
     }
 
     @Override
@@ -60,7 +66,7 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
 
     @Override
     public void handleStartJump(int i) {
-
+        this.getVehicle().playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
     }
 
     @Override

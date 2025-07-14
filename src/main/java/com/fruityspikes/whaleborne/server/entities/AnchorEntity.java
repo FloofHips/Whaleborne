@@ -1,11 +1,15 @@
 package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBParticleRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
@@ -15,6 +19,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 
 import java.util.List;
@@ -35,7 +40,7 @@ public class AnchorEntity extends WhaleWidgetEntity{
     private static final EntityDataAccessor<Optional<UUID>> DATA_ANCHOR_HEAD_UUID = SynchedEntityData.defineId(AnchorEntity.class, EntityDataSerializers.OPTIONAL_UUID);
 
     public AnchorEntity(EntityType<?> entityType, Level level) {
-        super(entityType, level, Items.PAPER);
+        super(entityType, level, WBItemRegistry.ANCHOR.get());
     }
     public void setDown(boolean down) {
         isDown = down;
@@ -118,6 +123,31 @@ public class AnchorEntity extends WhaleWidgetEntity{
                 this.hasHitTheBottom = false;
             } else if (!this.hasHitTheBottom) {
                 playSound(SoundEvents.ANVIL_LAND, 1.0f, 0.9f);
+
+                if(this.getVehicle() != null && this.getVehicle() instanceof HullbackEntity hullback){
+                    for (int side : new int[]{-1, 1}) {
+                        Vec3 particlePos = hullback.getPartPos(1).add(new Vec3(3.5*side, 2, 0).yRot(hullback.getPartYRot(1)));
+                        double x = particlePos.x;
+                        double y = particlePos.y;
+                        double z = particlePos.z;
+
+                        if (this.level() instanceof ServerLevel serverLevel) {
+                            serverLevel.sendParticles(
+                                    WBParticleRegistry.SMOKE.get(),
+                                    x,
+                                    y,
+                                    z,
+                                    20,
+                                    0.2,
+                                    0.2,
+                                    0.2,
+                                    0.02
+                            );
+                        }
+                    }
+                    hullback.playSound(WBSoundRegistry.HULLBACK_MAD.get());
+                }
+
                 this.hasHitTheBottom = true;
             }
         } else {
@@ -144,6 +174,19 @@ public class AnchorEntity extends WhaleWidgetEntity{
 
     public void toggleDown() {
         if (isClosed()) {
+            if (this.level() instanceof ServerLevel serverLevel) {
+                serverLevel.sendParticles(
+                        WBParticleRegistry.SMOKE.get(),
+                        this.getX(),
+                        this.getY() + 1,
+                        this.getZ(),
+                        5,
+                        0.1,
+                        0.1,
+                        0.1,
+                        0.02
+                );
+            }
             deployAnchor();
         } else {
             toggleAnchorState();

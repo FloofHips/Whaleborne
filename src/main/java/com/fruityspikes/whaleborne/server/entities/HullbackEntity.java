@@ -4,6 +4,7 @@ import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBParticleRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
@@ -515,7 +516,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public void setEyePitch(float pitch) { this.eyePitch = pitch; }
 
     public boolean canBreatheUnderwater() {
-        return false;
+        return isVehicle();
     }
 
     protected void handleAirSupply(int airSupply) {
@@ -571,14 +572,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             if (this.level() instanceof ServerLevel serverLevel) {
                 serverLevel.sendParticles(
-                        ParticleTypes.FIREWORK,
+                        WBParticleRegistry.SMOKE.get(),
                         x,
                         y,
                         z,
-                        100,
-                        0.1,
-                        0.1,
-                        0.1,
+                        20,
+                        0.2,
+                        0.2,
+                        0.2,
                         0.02
                 );
             }
@@ -728,6 +729,28 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             setTamed(true);
             mouthTarget = 0.1f;
             playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
+
+            for (int side : new int[]{-1, 1}) {
+                Vec3 particlePos = partPosition[1].add(new Vec3(4*side, 2, 0).yRot(partYRot[1]));
+                double x = particlePos.x;
+                double y = particlePos.y;
+                double z = particlePos.z;
+
+                if (this.level() instanceof ServerLevel serverLevel) {
+                    serverLevel.sendParticles(
+                            ParticleTypes.HEART,
+                            x,
+                            y,
+                            z,
+                            10,
+                            0.5,
+                            0.5,
+                            0.5,
+                            0.02
+                    );
+                }
+            }
+
             return InteractionResult.SUCCESS;
         }
         return InteractionResult.SUCCESS;
@@ -902,6 +925,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             float remainingDamage = amount - armorDamage;
             if (remainingDamage > 0) {
+                this.unRide();
                 return super.hurt(source, remainingDamage);
             }
             return super.hurt(source, remainingDamage);
@@ -916,12 +940,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         setOldPosAndRots();
         super.tick();
 
-        rotatePassengers();
-        //updateWalkerPositions();
+        boolean hasAnchorDown = seatAssignments.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> getEntityByUUID(entry.getValue()))
+                .filter(entity -> entity instanceof AnchorEntity)
+                .map(entity -> (AnchorEntity) entity)
+                .anyMatch(AnchorEntity::isDown);
+
+        if(!hasAnchorDown)
+            rotatePassengers();
+
         if(this.getControllingPassenger() instanceof Player){
             this.setYRot(Mth.rotLerp(0.8f, this.getYRot(), newRotY));
-            //if(this.isEyeInFluidType(Fluids.WATER.getFluidType()))
-                //this.setDeltaMovement(this.getDeltaMovement().add(0, 0.1, 0));
         }
 
         if(this.getSubEntities()[1].isEyeInFluidType(Fluids.WATER.getFluidType()) && this.tickCount % 80 == 0)
@@ -951,7 +981,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         yHeadRot = yBodyRot + (partYRot[0] - partYRot[4]) * 1.5f;
 
-        if (partPosition!=null && partYRot!=null && partXRot!=null){
+        if (isTamed() && partPosition!=null && partYRot!=null && partXRot!=null){
             seats[0] = partPosition[0].add((seatOffsets[0]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
             seats[1] = partPosition[0].add((seatOffsets[1]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
             seats[2] = partPosition[2].add((seatOffsets[2]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
@@ -1279,7 +1309,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     @Override
     public void onPlayerJump(int i) {
-        this.setDeltaMovement(this.getControllingPassenger().getLookAngle().multiply(1.5, 2, 1.5));
+
     }
 
     @Override
@@ -1525,13 +1555,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return null;
     }
 
-    @Override
-    protected void tickRidden(Player player, Vec3 travelVector) {
-        super.tickRidden(player, travelVector);
-    }
-
     protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
         if(Mth.abs(player.xxa) > 0){
+            if (tickCount % 2 == 0)
+                this.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON);
             newRotY = this.getYRot() - player.xxa;
             if(getControllingPassenger().getVehicle() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
                 helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / 10);
@@ -1612,13 +1639,41 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canUse() {
-            if (super.canUse()) {
-                currentTarget = getPosition();
-                stuckTimer = 0;
-                lastPosition = mob.position();
+
+            boolean hasAnchorDown = seatAssignments.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(entry -> getEntityByUUID(entry.getValue()))
+                    .filter(entity -> entity instanceof AnchorEntity)
+                    .map(entity -> (AnchorEntity) entity)
+                    .anyMatch(AnchorEntity::isDown);
+
+            if (hasAnchorDown) {
+                return false;
+            }
+
+            if (!this.forceTrigger) {
+                if (this.mob.getNoActionTime() >= 100) {
+                    return false;
+                }
+
+                if (this.mob.getRandom().nextInt(reducedTickDelay(this.interval)) != 0) {
+                    return false;
+                }
+            }
+
+            Vec3 vec3 = this.getPosition();
+            if (vec3 == null) {
+                return false;
+            } else {
+                this.wantedX = vec3.x;
+                this.wantedY = vec3.y;
+                this.wantedZ = vec3.z;
+                this.forceTrigger = false;
+                this.currentTarget = getPosition();
+                this.stuckTimer = 0;
+                this.lastPosition = mob.position();
                 return true;
             }
-            return false;
         }
 
         @Override
@@ -1798,6 +1853,25 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 this.hullback.mouthTarget = 0.0f;
             }
 
+            Vec3 particlePos = partPosition[1].add(new Vec3(0, 7, 0));
+            double x = particlePos.x;
+            double y = particlePos.y;
+            double z = particlePos.z;
+
+            if (this.hullback.level() instanceof ServerLevel serverLevel) {
+                serverLevel.sendParticles(
+                        WBParticleRegistry.SMOKE.get(),
+                        x,
+                        y,
+                        z,
+                        50,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.02
+                );
+            }
+
             this.hullback.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), 6, 1);
             this.hullback.setXRot(Mth.rotLerp(0.1f, this.hullback.getXRot(), 0));
         }
@@ -1836,10 +1910,17 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canUse() {
-//            if (this.repositionCooldown > 0) {
-//                this.repositionCooldown--;
-//                return false;
-//            }
+
+            boolean hasAnchorDown = seatAssignments.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(entry -> getEntityByUUID(entry.getValue()))
+                    .filter(entity -> entity instanceof AnchorEntity)
+                    .map(entity -> (AnchorEntity) entity)
+                    .anyMatch(AnchorEntity::isDown);
+
+            if (hasAnchorDown)
+                return false;
+
             this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 50, 30);
             if (this.targetPlayer == null) return false;
             if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;

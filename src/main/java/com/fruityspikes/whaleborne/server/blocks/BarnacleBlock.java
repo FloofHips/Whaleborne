@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.blocks;
 
+import com.fruityspikes.whaleborne.server.registries.WBParticleRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -97,7 +98,7 @@ public class BarnacleBlock extends Block {
         float pitch = Math.min(2f, stackHeight * 0.22f);
 
         level.addParticle(ParticleTypes.NOTE, (double)checkPos.getX() + 0.5, (double)checkPos.getY() + 0.5, (double)checkPos.getZ() + 0.5, 0.0, 0.01, 0.0);
-        level.addParticle(ParticleTypes.CAMPFIRE_SIGNAL_SMOKE, (double)checkPos.getX() + 0.5, (double)checkPos.getY() + 0.5, (double)checkPos.getZ() + 0.5, 0.0, 0.1, 0.0);
+        level.addParticle(WBParticleRegistry.SMOKE.get(), (double)checkPos.getX() + 0.5, (double)checkPos.getY() + 0.5, (double)checkPos.getZ() + 0.5, 0.0, 0.01, 0.0);
         level.playSeededSound((Player)null, (double)pos.getX() + 0.5, (double)pos.getY() + 0.5, (double)pos.getZ() + 0.5, WBSoundRegistry.ORGAN.get(), SoundSource.RECORDS, 2F, pitch, level.random.nextLong());
         return true;
     }

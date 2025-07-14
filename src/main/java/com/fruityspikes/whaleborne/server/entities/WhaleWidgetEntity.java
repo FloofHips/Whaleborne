@@ -8,6 +8,8 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageSources;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -72,10 +74,8 @@ public abstract class WhaleWidgetEntity extends Entity {
             this.setDamage(this.getDamage() - 1.0F);
         }
         if(!this.isPassenger()){
-            if (this.tickCount % 100 == 0)
-                kill();
+            destroy(null);
         }
-
     }
     @Override
     public boolean isPickable() {
@@ -93,6 +93,7 @@ public abstract class WhaleWidgetEntity extends Entity {
     }
     protected void destroy(DamageSource damageSource) {
         this.spawnAtLocation(this.getDropItem());
+        this.kill();
     }
 
     public Item getDropItem() {

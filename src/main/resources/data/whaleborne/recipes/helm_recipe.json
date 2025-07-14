@@ -1,0 +1,22 @@
+{
+    "type": "minecraft:crafting_shaped",
+    "pattern": [
+        "/O/",
+        "OLO",
+        "/O/"
+    ],
+    "key": {
+        "/": {
+            "item": "minecraft:stick"
+        },
+        "O": {
+            "tag": "minecraft:logs"
+        },
+        "L": {
+            "item": "minecraft:lead"
+        }
+    },
+    "result": {"item": "whaleborne:helm"
+  },
+  "show_notification": false
+}

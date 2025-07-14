@@ -3,6 +3,7 @@ package com.fruityspikes.whaleborne.server.entities;
 import com.fruityspikes.whaleborne.client.menus.CannonMenu;
 import com.fruityspikes.whaleborne.network.CannonFirePacket;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
+import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import net.minecraft.core.dispenser.DispenseItemBehavior;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -53,7 +54,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
     private final Map<Item, EntityType> itemToProjectileMap = new HashMap<>();
 
     public CannonEntity(EntityType<?> entityType, Level level) {
-        super(entityType, level, Items.FIREWORK_ROCKET);
+        super(entityType, level, WBItemRegistry.CANNON.get());
         cannonXRot = this.getXRot();
         this.inventory.addListener(this);
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));

@@ -7,11 +7,16 @@ import com.fruityspikes.whaleborne.client.renderers.*;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
 import com.fruityspikes.whaleborne.server.entities.HelmEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
+import com.fruityspikes.whaleborne.server.particles.WBSmokeParticle;
+import com.fruityspikes.whaleborne.server.particles.WBSmokeProvider;
 import com.fruityspikes.whaleborne.server.registries.*;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.MenuScreens;
+import net.minecraft.client.particle.SmokeParticle;
+import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.CreativeModeTab;
@@ -20,6 +25,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
+import net.minecraftforge.client.event.RegisterParticleProvidersEvent;
 import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
@@ -58,6 +64,7 @@ public class Whaleborne
     // Creates a creative tab with the id "examplemod:example_tab" for the example item, that is placed after the combat tab
     public static final RegistryObject<CreativeModeTab> WHALEBORNE = CREATIVE_MODE_TABS.register("whaleborne", () -> CreativeModeTab.builder()
             .withTabsBefore(CreativeModeTabs.COMBAT)
+            .title(Component.translatable("itemGroup.whaleborne.whaleborne"))
             .icon(() -> WBItemRegistry.SAIL.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
                 WBItemRegistry.ITEMS.getEntries().forEach((i) -> {
@@ -78,6 +85,7 @@ public class Whaleborne
         WBMenuRegistry.MENUS.register(modEventBus);
         WBSoundRegistry.SOUND_EVENTS.register(modEventBus);
         WBLootModifierRegistry.LOOT_MODIFIER_SERIALIZERS.register(modEventBus);
+        WBParticleRegistry.PARTICLE_TYPES.register(modEventBus);
         WhaleborneNetwork.init();
         CREATIVE_MODE_TABS.register(modEventBus);
 
@@ -124,6 +132,7 @@ public class Whaleborne
         {
             MenuScreens.register(WBMenuRegistry.CANNON_MENU.get(), CannonScreen::new);
             MenuScreens.register(WBMenuRegistry.HULLBACK_MENU.get(), HullbackScreen::new);
+
             LOGGER.info("HELLO FROM CLIENT SETUP");
             LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
         }
@@ -148,6 +157,11 @@ public class Whaleborne
             event.registerEntityRenderer(WBEntityRegistry.HELM.get(), HelmRenderer::new);
             event.registerEntityRenderer(WBEntityRegistry.ANCHOR.get(), AnchorRenderer::new);
             event.registerEntityRenderer(WBEntityRegistry.ANCHOR_HEAD.get(), AnchorHeadRenderer::new);
+        }
+
+        @SubscribeEvent
+        public static void registerParticleFactories(RegisterParticleProvidersEvent event) {
+            event.registerSpriteSet(WBParticleRegistry.SMOKE.get(), WBSmokeProvider::new);
         }
     }
 }
