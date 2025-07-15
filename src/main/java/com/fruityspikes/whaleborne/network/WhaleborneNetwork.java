@@ -22,6 +22,12 @@ public class WhaleborneNetwork {
                 CannonFirePacket::encode,
                 CannonFirePacket::decode,
                 CannonFirePacket::handle);
+
+        INSTANCE.registerMessage(getPacketID(),
+                SyncHullbackDirtPacket.class,
+                SyncHullbackDirtPacket::encode,
+                SyncHullbackDirtPacket::decode,
+                SyncHullbackDirtPacket::handle);
     }
 
     public static int getPacketID() {

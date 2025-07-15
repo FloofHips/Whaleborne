@@ -97,12 +97,10 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                 return tryInsertItem(player, hand, heldItem, 0); // Ammo slot
             }
         }
-
-//        if (heldItem.isEmpty() && this.isVehicle() && this.getFirstPassenger() == player) {
+//        else {
 //            openCannonMenu(player);
 //            return InteractionResult.SUCCESS;
 //        }
-
         return super.interact(player, hand);
     }
 
@@ -226,6 +224,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                 projectile = new ItemEntity(
                         this.level(), this.getX(), this.getY(), this.getZ(),
                         ammo);
+                ((ItemEntity) projectile).setPickUpDelay(10);
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.ITEM_BREAK, SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);

@@ -197,7 +197,7 @@ public class AnchorEntity extends WhaleWidgetEntity{
         if (!level().isClientSide && anchorHead != null) {
             this.entityData.set(DATA_HEAD_POSITION, new Vector3f((float) anchorHead.getX(), (float) anchorHead.getY(), (float) anchorHead.getZ()));
         } else if (anchorHead == null) {
-            this.entityData.set(DATA_HEAD_POSITION, null);
+            this.entityData.set(DATA_HEAD_POSITION, new Vector3f((float)this.getX(), (float)this.getY(), (float)this.getZ()));
         }
     }
     private void deployAnchor() {
@@ -231,8 +231,11 @@ public class AnchorEntity extends WhaleWidgetEntity{
         this.entityData.set(DATA_IS_CLOSED, true);
         this.entityData.set(DATA_IS_DOWN, false);
         this.entityData.set(DATA_ANCHOR_HEAD_UUID, Optional.empty());
-
-        playSound(SoundEvents.NETHER_BRICKS_HIT, 0.7f, 1.2f);
+        this.entityData.set(DATA_HEAD_POSITION,
+                new Vector3f((float)this.getX(),
+                        (float)this.getY(),
+                        (float)this.getZ()));
+        playSound(SoundEvents.NETHERITE_BLOCK_HIT, 0.7f, 1.2f);
     }
 
     @Override

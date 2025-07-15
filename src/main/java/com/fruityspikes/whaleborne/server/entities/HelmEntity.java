@@ -12,6 +12,7 @@ import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
+import java.util.Map;
 
 public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRideableJumping, HasCustomInventoryScreen {
 
@@ -53,10 +54,9 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     }
     @Override
     public void onPlayerJump(int i) {
-        if (this.getVehicle().isEyeInFluidType(Fluids.WATER.getFluidType())){
-            this.getVehicle().setDeltaMovement(this.getControllingPassenger().getLookAngle().multiply(1.5, 2, 1.5));
-            this.getVehicle().playSound(WBSoundRegistry.HULLBACK_TAME.get());
-        }
+        //if (this.getVehicle() instanceof HullbackEntity hullback){
+        this.getVehicle().playSound(WBSoundRegistry.ORGAN.get());
+        //}
     }
 
     @Override
@@ -66,7 +66,8 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
 
     @Override
     public void handleStartJump(int i) {
-        this.getVehicle().playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
+        this.getVehicle().playSound(WBSoundRegistry.ORGAN.get(), 2, 2);
+        this.getVehicle().playSound(WBSoundRegistry.ORGAN.get(), 1.5f, 1.5f);
     }
 
     @Override

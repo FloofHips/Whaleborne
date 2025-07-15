@@ -13,12 +13,14 @@ import com.mojang.math.Axis;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 
@@ -101,9 +103,18 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
 
         poseStack.popPose();
     }
-
     @Override
     public ResourceLocation getTextureLocation(WhaleWidgetEntity whaleWidgetEntity) {
         return TEXTURE;
+    }
+
+    @Override
+    public boolean shouldRender(Entity livingEntity, Frustum camera, double camX, double camY, double camZ) {
+        if(livingEntity instanceof AnchorEntity anchor) {
+            if (!anchor.isClosed() && anchor.getHeadPos() != null) {
+                return true;
+            }
+        }
+        return super.shouldRender(livingEntity, camera, camX, camY, camZ);
     }
 }

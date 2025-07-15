@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -17,11 +18,13 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.phys.HitResult;
 
 public abstract class WhaleWidgetEntity extends Entity {
     private static final EntityDataAccessor<Integer> DATA_ID_HURT = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.INT);
@@ -73,13 +76,18 @@ public abstract class WhaleWidgetEntity extends Entity {
         if (this.getDamage() > 0.0F) {
             this.setDamage(this.getDamage() - 1.0F);
         }
-        if(!this.isPassenger()){
+        if(this.tickCount > 10 && !this.isPassenger()){
             destroy(null);
         }
     }
     @Override
     public boolean isPickable() {
         return true;
+    }
+
+    @Override
+    public ItemStack getPickedResult(HitResult target) {
+        return this.item.getDefaultInstance();
     }
 
     @Override
