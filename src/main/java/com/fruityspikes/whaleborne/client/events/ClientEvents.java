@@ -2,23 +2,61 @@ package com.fruityspikes.whaleborne.client.events;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.server.entities.HelmEntity;
+import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
+import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
+import net.minecraftforge.client.event.RenderPlayerEvent;
 import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-@OnlyIn(Dist.CLIENT)
-@Mod.EventBusSubscriber(modid = Whaleborne.MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = Whaleborne.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ClientEvents {
+
     @SubscribeEvent
-    public void computeCameraAngles(ViewportEvent.ComputeCameraAngles event) {
-        Minecraft mc = Minecraft.getInstance();
-        Player player = mc.player;
-        System.out.println("ahh!");
-        if(player.isPassenger() && player.getVehicle() instanceof HelmEntity helmEntity){
-            event.setRoll(20);
+    public static void onCameraSetup(ViewportEvent.ComputeCameraAngles event) {
+        Player player = Minecraft.getInstance().player;
+
+        if (player != null && player.getRootVehicle() instanceof HullbackEntity hullback) {
+
+            double baseDistance = 8.0;
+            double verticalOffset = 1.5;
+
+            Vec3 offset = Vec3.directionFromRotation(
+                    event.getCamera().getXRot(),
+                    event.getCamera().getYRot()
+            ).scale(-baseDistance).add(0, verticalOffset, 0);
+
+            event.setRoll(Mth.clamp((float) ((hullback.getPartYRot(3) - hullback.getPartYRot(0)) * 0.25f * Minecraft.getInstance().options.fovEffectScale().get()), -2.23f, 2.23f));
+        }
+    }
+
+    @SubscribeEvent
+    public static void onFovUpdate(ViewportEvent.ComputeFov event) {
+        Player player = Minecraft.getInstance().player;
+        if (player != null && player.getRootVehicle() instanceof HullbackEntity hullback) {
+            if (hullback.getDeltaMovement().length() > 0.2) {
+                event.setFOV(event.getFOV() + hullback.getDeltaMovement().length() * (Minecraft.getInstance().options.getCameraType() == CameraType.THIRD_PERSON_BACK ? 50 : 20) * Minecraft.getInstance().options.fovEffectScale().get());
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public static void onRenderPlayer(RenderPlayerEvent.Pre event) {
+        Player player = event.getEntity();
+        if (player.getVehicle() instanceof HelmEntity) {
+            if (player.getRootVehicle() instanceof HullbackEntity hullback) {
+                if (hullback.getDeltaMovement().length() > 0.2) {
+                    event.getRenderer().getModel().rightArmPose = HumanoidModel.ArmPose.CROSSBOW_CHARGE;
+                    event.getRenderer().getModel().leftArmPose = HumanoidModel.ArmPose.CROSSBOW_CHARGE;
+                }
+            }
         }
     }
 }

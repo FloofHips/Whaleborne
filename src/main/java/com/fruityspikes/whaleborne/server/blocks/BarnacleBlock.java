@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.blocks;
 
 import com.fruityspikes.whaleborne.server.registries.WBParticleRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
@@ -12,12 +13,15 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.vehicle.Minecart;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
@@ -29,18 +33,25 @@ import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.NoteBlockInstrument;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraftforge.common.ForgeHooks;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.level.NoteBlockEvent;
 
 import javax.annotation.Nullable;
+import java.util.List;
 
 public class BarnacleBlock extends Block {
     public static final BooleanProperty POWERED;
     public BarnacleBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any().setValue(POWERED, false));
+    }
+
+    @Override
+    public boolean isSignalSource(BlockState state) {
+        return false;
     }
 
     public void neighborChanged(BlockState state, Level level, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
@@ -97,9 +108,24 @@ public class BarnacleBlock extends Block {
         int stackHeight = count;
         float pitch = Math.min(2f, stackHeight * 0.22f);
 
-        level.addParticle(ParticleTypes.NOTE, (double)checkPos.getX() + 0.5, (double)checkPos.getY() + 0.5, (double)checkPos.getZ() + 0.5, 0.0, 0.01, 0.0);
+        AABB boundingBox = new AABB(checkPos).inflate(0, 2,0).move(0, 0.5, 0);
+
+        List<Entity> entities = level.getEntities(null, boundingBox);
+        entities.removeIf(entity1 -> (!entity1.isPushable() && !(entity1 instanceof ItemEntity)));
+
+        for (Entity entity2 : entities) {
+            if(entity2 instanceof Player player)
+                player.hurtMarked = true;
+            entity2.setDeltaMovement(entity2.getDeltaMovement().add(0, (double) count / 10, 0));
+        }
+
         level.addParticle(WBParticleRegistry.SMOKE.get(), (double)checkPos.getX() + 0.5, (double)checkPos.getY() + 0.5, (double)checkPos.getZ() + 0.5, 0.0, 0.01, 0.0);
-        level.playSeededSound((Player)null, (double)pos.getX() + 0.5, (double)pos.getY() + 0.5, (double)pos.getZ() + 0.5, WBSoundRegistry.ORGAN.get(), SoundSource.RECORDS, 2F, pitch, level.random.nextLong());
+
+        if(!level.getBlockState(pos.below()).is(BlockTags.WOOL)){
+            level.addParticle(ParticleTypes.NOTE, (double)checkPos.getX() + 0.5, (double)checkPos.getY() + 0.5, (double)checkPos.getZ() + 0.5, 0.0, 0.01, 0.0);
+            level.playSeededSound((Player)null, (double)pos.getX() + 0.5, (double)pos.getY() + 0.5, (double)pos.getZ() + 0.5, WBSoundRegistry.ORGAN.get(), SoundSource.RECORDS, 2F, pitch, level.random.nextLong());
+        }
+
         return true;
     }
 

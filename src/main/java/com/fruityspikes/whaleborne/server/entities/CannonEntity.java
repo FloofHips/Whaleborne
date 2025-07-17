@@ -4,10 +4,13 @@ import com.fruityspikes.whaleborne.client.menus.CannonMenu;
 import com.fruityspikes.whaleborne.network.CannonFirePacket;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBParticleRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.core.dispenser.DispenseItemBehavior;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
@@ -66,6 +69,15 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
         itemToProjectileMap.put(Items.TRIDENT, EntityType.TRIDENT);
         itemToProjectileMap.put(Items.TNT, EntityType.TNT);
 
+    }
+
+    @Override
+    public void remove(Entity.RemovalReason reason) {
+        if (!this.level().isClientSide && reason.shouldDestroy()) {
+            Containers.dropContents(this.level(), this.blockPosition(), this.inventory);
+        }
+
+        super.remove(reason);
     }
 
     public void setCannonXRot(float cannonXRot) {
@@ -148,7 +160,9 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
 
             if (gunpowder.isEmpty()) {
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.LAVA_EXTINGUISH, SoundSource.BLOCKS, 1.0F, 1.0F);
+                        SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 1.0F, 1.0F);
+                level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.NETHERITE_BLOCK_BREAK, SoundSource.NEUTRAL, 1.0F, 0.0F);
                 return;
             }
 
@@ -157,7 +171,9 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
 
             if (ammo.isEmpty()) {
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.DISPENSER_FAIL, SoundSource.BLOCKS, 1.0F, 1.0F);
+                        SoundEvents.DISPENSER_FAIL, SoundSource.NEUTRAL, 1.0F, 1.0F);
+                level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.NETHERITE_BLOCK_BREAK, SoundSource.NEUTRAL, 1.0F, 0.0F);
                 return;
             } else {
                 inventory.getItem(0).shrink(1);
@@ -174,7 +190,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                         SoundEvents.ENDER_PEARL_THROW, SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);
             }
-            else if(ammo.is(Items.PAPER)){
+            else if(ammo.is(WBItemRegistry.BARNACLE.get())){
                 Entity passenger = this.getFirstPassenger();
                 if (passenger != null) {
                     this.ejectPassengers();
@@ -186,7 +202,9 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                     );
                     passenger.hurtMarked = true;
                     passenger.setPose(Pose.CROUCHING);
-
+                    level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            WBSoundRegistry.ORGAN.get(), SoundSource.BLOCKS, 1.0F,
+                            (float) power / 50);
                     level().playSound(null, this.getX(), this.getY(), this.getZ(),
                             SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
                             (float) power / 50);
@@ -242,8 +260,21 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
             //tnt.setPickUpDelay(20);
             this.level().addFreshEntity(projectile);
 
+            if (this.level() instanceof ServerLevel serverLevel) {
+                serverLevel.sendParticles(
+                        WBParticleRegistry.SMOKE.get(),
+                        this.getX(),
+                        this.getY() + 2,
+                        this.getZ(),
+                        5,
+                        0.1,
+                        0.1,
+                        0.1,
+                        0.02
+                );
+            }
             level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                    SoundEvents.FIREWORK_ROCKET_SHOOT, SoundSource.BLOCKS, 1.0F,
+                    SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS, 1.0F,
                     power / 100 + (this.random.nextFloat() * 0.4F));
     }
 

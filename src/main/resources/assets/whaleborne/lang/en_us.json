@@ -21,5 +21,6 @@
   "subtitles.entity.hullback.death": "Hullback dies",
   "subtitles.entity.hullback.happy": "Hullback sings happily",
   "subtitles.entity.hullback.mad": "Hullback groans",
-  "subtitles.entity.hullback.swim": "Hullback swims"
+  "subtitles.entity.hullback.swim": "Hullback swims",
+  "subtitles.entity.hullback.breathe": "Hullback breaches"
 }

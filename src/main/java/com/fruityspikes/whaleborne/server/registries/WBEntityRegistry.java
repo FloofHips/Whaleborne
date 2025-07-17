@@ -17,9 +17,9 @@ public class WBEntityRegistry {
     public static final DeferredRegister<EntityType<?>> ENTITY_TYPES = DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, Whaleborne.MODID);
     public static final RegistryObject<EntityType<HullbackEntity>> HULLBACK = ENTITY_TYPES.register(
             "hullback", () ->
-                    EntityType.Builder.of(HullbackEntity::new, MobCategory.UNDERGROUND_WATER_CREATURE)
+                    EntityType.Builder.of(HullbackEntity::new, WBMobCategories.HULLBACK)
                             .sized(2F, 2F)
-                            .clientTrackingRange(20)
+                            .clientTrackingRange(128)
                             .build(new ResourceLocation(Whaleborne.MODID, "hullback").toString())
     );
     public static final RegistryObject<EntityType<SailEntity>> SAIL = ENTITY_TYPES.register(

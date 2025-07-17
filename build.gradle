@@ -50,6 +50,12 @@ legacyForge {
             systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
         }
 
+        client2 {
+            client()
+
+            programArguments.addAll '--username', 'Dev2', '--user', 'Dev2', '--uuid', '67752848-2bae-4c88-ae42-150fab05fea8'
+        }
+
         server {
             server()
             programArgument '--nogui'

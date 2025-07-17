@@ -50,51 +50,14 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
         return size;
     }
 
-    protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
-        if (this.hasPassenger(passenger)) {
-            float f = 0;
-            float f1 = (float)((this.isRemoved() ? 0.009999999776482582 : this.getPassengersRidingOffset()) + passenger.getMyRidingOffset());
-            if (this.getPassengers().size() > 1) {
-                int i = this.getPassengers().indexOf(passenger);
-                if (i == 0) {
-                    f = 0.2F;
-                } else {
-                    f = -0.6F;
-                }
-
-                if (passenger instanceof Animal) {
-                    f += 0.2F;
-                }
-            }
-
-            Vec3 vec3 = (new Vec3((double)f, 0.0, 0.0)).yRot(-this.getYRot() * 0.017453292F - 1.5707964F);
-            callback.accept(passenger, this.getX() + vec3.x, this.getY() + (double)f1, this.getZ() + vec3.z);
-            passenger.setYRot(passenger.getYRot() + this.getYRot());
-            passenger.setYHeadRot(passenger.getYHeadRot() + this.getYRot());
-
-            if (passenger instanceof Animal && this.getPassengers().size() == this.getMaxPassengers()) {
-                int j = passenger.getId() % 2 == 0 ? 90 : 270;
-                passenger.setYBodyRot(((Animal)passenger).yBodyRot + (float)j);
-                passenger.setYHeadRot(passenger.getYHeadRot() + (float)j);
-            }
-        }
-    }
-    protected boolean canAddPassenger(Entity passenger) {
-        return this.getPassengers().size() < this.getMaxPassengers();
-    }
-    protected int getMaxPassengers() {
-        return 2;
-    }
-    public double getPassengersRidingOffset() {
-        return size.height;
-    }
-    public boolean dismountsUnderwater() {
-        return false;
-    }
     @Override
     public InteractionResult interactAt(Player player, Vec3 vec, InteractionHand hand) {
         boolean topClicked = vec.y > size.height * 0.6f;
         ItemStack heldItem = player.getItemInHand(hand);
+
+        if (heldItem.getItem() instanceof DebugStickItem) {
+            return parent.interactDebug(player, hand);
+        }
 
         if (heldItem.getItem() instanceof ShearsItem || heldItem.getItem() instanceof AxeItem) {
             return parent.interactClean(player, hand, this, topClicked);

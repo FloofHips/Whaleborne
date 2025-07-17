@@ -255,6 +255,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 }
             }
         }
+        syncDirtToClients();
     }
 
     public BlockState[][] getDirtArray(int index, boolean bottom){
@@ -339,6 +340,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (this.tickCount > 20 && itemstack != itemstack1) {
             this.playSound(SoundEvents.HORSE_ARMOR, 0.5F, 1.0F);
         }
+    }
+
+    @Override
+    public void onInsideBubbleColumn(boolean downwards) {
+
     }
 
     private ItemStack getArmor() {
@@ -593,6 +599,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return this.getMaxAirSupply();
     }
 
+    public boolean isPushable() {
+        return false;
+    }
     public void setId(int p_20235_) {
         super.setId(p_20235_);
 
@@ -622,6 +631,47 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     public void recreateFromPacket(ClientboundAddEntityPacket packet) {
         super.recreateFromPacket(packet);
+    }
+
+    //    private void updateWalkerPositions() {
+//        for ( HullbackPartEntity part : getSubEntities()) {
+//            AABB boundingBox = part.getBoundingBoxForCulling().move(0, 0.5f, 0);
+//
+//            List<Entity> riders = level().getEntities(part, boundingBox);
+//            riders.removeIf(rider -> rider.isPassenger());
+//
+//            for (Entity entity : riders) {
+//                if (entity instanceof HullbackEntity || entity instanceof HullbackPartEntity)
+//                    return;
+//                Vec3 offset = new Vec3
+//            }
+//        }
+//    }
+
+    private boolean scanPlayerAbove() {
+        for (HullbackPartEntity part : getSubEntities()) {
+            AABB box = part.getBoundingBox();
+            AABB topSurface = new AABB(
+                    box.minX,
+                    box.maxY,
+                    box.minZ,
+                    box.maxX,
+                    box.maxY + 2.0,
+                    box.maxZ
+            );
+
+            List<Entity> entities = level().getEntitiesOfClass(Entity.class, topSurface,
+                    entity -> entity instanceof Player &&
+                            !entity.isSpectator() &&
+                            !entity.isPassenger()
+            );
+
+            if (!entities.isEmpty()) {
+                playSound(SoundEvents.AMETHYST_BLOCK_CHIME);
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -680,8 +730,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
         this.goalSelector.addGoal(2, new HullbackRandomSwimGoal(this, 1.0, 10));
-        this.goalSelector.addGoal(0, new HullbackApproachPlayerGoal(this, 0.4f));
-        this.goalSelector.addGoal(0, new HullbackArmorPlayerGoal(this, 0.04f));
+        this.goalSelector.addGoal(0, new HullbackApproachPlayerGoal(this, 0.01f));
+        this.goalSelector.addGoal(0, new HullbackArmorPlayerGoal(this, 0.005f));
         this.goalSelector.addGoal(3, new FollowBoatGoal(this));
     }
 
@@ -708,9 +758,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
         return super.mobInteract(player, hand);
     }
+
+    public InteractionResult interactDebug(Player player, InteractionHand hand){
+        if(!isTamed())
+            setTamed(true);
+        System.out.println(level() + ": Seat Assignments: " + this.seatAssignments);
+        System.out.println(level() + ": Seat Data: " + this.entityData.get(DATA_SEAT_ASSIGNMENTS));
+        return InteractionResult.SUCCESS;
+    }
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
         validateAfterLoad();
 
+        syncSeatAssignments();
         if(getArmorProgress() < 0.5)
             return InteractionResult.FAIL;
 
@@ -746,8 +805,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     PacketDistributor.TRACKING_ENTITY.with(() -> this).send(new ClientboundAddEntityPacket(entity));
                 }
                 seatAssignments.put(seatIndex, entity.getUUID());
-                entity.startRiding(this, true);
-                syncSeatAssignments();
+                if(entity.startRiding(this, true))
+                    syncSeatAssignments();
+                else {
+                    entity.stopRiding();
+                    syncSeatAssignments();
+                    return InteractionResult.FAIL;
+                }
 
                 if (!player.getAbilities().instabuild) {
                     player.getItemInHand(hand).shrink(1);
@@ -763,8 +827,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         syncSeatAssignments();
 
         seatAssignments.put(seatIndex, player.getUUID());
-        player.startRiding(this, true);
-        syncSeatAssignments();
+        if(player.startRiding(this, true))
+            syncSeatAssignments();
+        else {
+            player.stopRiding();
+            syncSeatAssignments();
+            return InteractionResult.FAIL;
+        }
 
         if (this.level().isClientSide) {
             return InteractionResult.SUCCESS;
@@ -879,6 +948,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                         playSound(WBSoundRegistry.HULLBACK_TAME.get());
                     }
                     this.updateContainerEquipment();
+                    this.syncSeatAssignments();
                     return InteractionResult.SUCCESS;
                 }
                 return InteractionResult.PASS;
@@ -997,7 +1067,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             float remainingDamage = amount - armorDamage;
             if (remainingDamage > 0) {
-                this.unRide();
+                //this.unRide();
                 return super.hurt(source, remainingDamage);
             }
             return super.hurt(source, remainingDamage);
@@ -1009,7 +1079,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     @Override
     public void tick() {
-        setOldPosAndRots();
         super.tick();
 
         if(!this.isEyeInFluidType(Fluids.WATER.getFluidType()))
@@ -1022,23 +1091,31 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 .map(entity -> (AnchorEntity) entity)
                 .anyMatch(AnchorEntity::isDown);
 
-        if(!isSaddled())
-            unRide();
+        if(!isSaddled()){
+            if(!getPassengers().isEmpty())
+                ejectPassengers();
+        }
         else {
-            if(this.getArmorProgress() < 0.5)
-                unRide();
+            if(this.getArmorProgress() < 0.5 && !getPassengers().isEmpty())
+                ejectPassengers();
         }
 
-        if(!hasAnchorDown)
+        setOldPosAndRots();
+
+        if(!hasAnchorDown){
+            updatePartPositions();
             rotatePassengers();
+        }
 
         if(this.getSubEntities()[1].isEyeInFluidType(Fluids.WATER.getFluidType()) && this.tickCount % 80 == 0)
             this.heal(0.25f);
 
-        updatePartPositions();
         if (this.getDeltaMovement().length() > 0.3) {
             mouthTarget = 0.8f;
         }
+
+        if (this.tickCount % 80 == 0)
+            validateAfterLoad();
 //        for (int i = 0; i < getSubEntities().length; i++) {
 //            //if (part.getDeltaMovement().length() > 0) {
 //            moveEntitiesOnTop(i);
@@ -1070,6 +1147,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             validateAfterLoad();
             validatedAfterLoad = true;
         }
+
+        if (tickCount == 10)
+            syncDirtToClients();
 
         yHeadRot = yBodyRot + (partYRot[0] - partYRot[4]) * 1.5f;
 
@@ -1137,6 +1217,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 }
             }
         }
+    }
+
+    public void stopMoving(){
+        this.getNavigation().stop();
+
+        this.setPos(this.xo, this.yo, this.zo);
+        this.setYRot(yRotO);
+        this.setXRot(xRotO);
+        this.setXxa(0.0F);
+        this.setYya(0.0F);
     }
 
 //    private void updateWalkerPositions() {
@@ -1843,9 +1933,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 target = mob.getRandom().nextFloat() < 0.7f ?
                         findPositionInFront() :
                         BehaviorUtils.getRandomSwimmablePos(mob, 2, 2);
-            target = mob.getRandom().nextFloat() < 0.7f ?
-                    findPositionInFront() :
-                    BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
+            else
+                target = mob.getRandom().nextFloat() < 0.7f ?
+                        findPositionInFront() :
+                        BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
             return target == null ? mob.position() : target;
         }
 
@@ -2117,9 +2208,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
             float sideYawOffset = approachFromRight ? -90f : 90f;
             float targetYaw = desiredYaw + sideYawOffset;
-
-            this.hullback.setYRot(Mth.rotLerp(0.05f, this.hullback.getYRot(), targetYaw));
-            this.hullback.yBodyRot = this.hullback.getYRot();
+            if (this.hullback.tickCount % 200 == 0){
+                this.hullback.setYRot(Mth.rotLerp(0.05f, this.hullback.getYRot(), targetYaw));
+                this.hullback.yBodyRot = this.hullback.getYRot();
+            }
             this.hullback.mouthTarget = 0.6f;
         }
     }
@@ -2238,4 +2330,22 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.hullback.mouthTarget = 0.6f;
         }
     }
+
+//    static class HullbackMoveControl extends SmoothSwimmingMoveControl{
+//
+//        public HullbackMoveControl(Mob mob, int maxTurnX, int maxTurnY, float inWaterSpeedModifier, float outsideWaterSpeedModifier, boolean applyGravity) {
+//            super(mob, maxTurnX, maxTurnY, inWaterSpeedModifier, outsideWaterSpeedModifier, applyGravity);
+//        }
+//
+//        @Override
+//        public void tick() {
+//
+//            if (this.shouldBeStopped.getAsBoolean()) {
+//                this.operation = Operation.WAIT;
+//                this.ghast.stopInPlace();
+//            }
+//
+//            super.tick();
+//        }
+//    }
 }

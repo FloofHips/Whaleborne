@@ -76,7 +76,7 @@ public abstract class WhaleWidgetEntity extends Entity {
         if (this.getDamage() > 0.0F) {
             this.setDamage(this.getDamage() - 1.0F);
         }
-        if(this.tickCount > 10 && !this.isPassenger()){
+        if(this.tickCount > 100 && !this.isPassenger()){
             destroy(null);
         }
     }
@@ -134,22 +134,7 @@ public abstract class WhaleWidgetEntity extends Entity {
 
     @Override
     public InteractionResult interact(Player player, InteractionHand hand) {
-        if (player.isSecondaryUseActive()) {
-            if (this.isVehicle()) {
-                this.ejectPassengers();
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.ITEM_FRAME_REMOVE_ITEM, SoundSource.PLAYERS,
-                        0.5F, 1.5F);
-                return InteractionResult.sidedSuccess(this.level().isClientSide);
-            }
-            if (this.isPassenger()) {
-                this.stopRiding();
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.ITEM_FRAME_REMOVE_ITEM, SoundSource.PLAYERS,
-                        0.5F, 0.8F);
-                return InteractionResult.sidedSuccess(this.level().isClientSide);
-            }
-        }
+
         return super.interact(player, hand);
     }
 }

@@ -23,6 +23,7 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.client.event.RegisterParticleProvidersEvent;
@@ -163,5 +164,7 @@ public class Whaleborne
         public static void registerParticleFactories(RegisterParticleProvidersEvent event) {
             event.registerSpriteSet(WBParticleRegistry.SMOKE.get(), WBSmokeProvider::new);
         }
+
+
     }
 }

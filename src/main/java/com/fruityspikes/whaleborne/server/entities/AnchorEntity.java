@@ -69,13 +69,17 @@ public class AnchorEntity extends WhaleWidgetEntity{
     }
 
     @Override
+    public boolean canRiderInteract() {
+        return true;
+    }
+
+    @Override
     public void tick() {
         super.tick();
 
-        if (!isClosed() && getVehicle() != null) {
-            getVehicle().setPos(getVehicle().xo, getVehicle().yo, getVehicle().zo);
-            getVehicle().setYRot(getVehicle().yRotO);
-            getVehicle().setXRot(getVehicle().xRotO);
+        if (!isClosed() && getVehicle() != null && getVehicle() instanceof HullbackEntity hullback) {
+            //hullback.setPos(getVehicle().xo, getVehicle().yo, getVehicle().zo);
+            hullback.stopMoving();
         }
 
         if (this.coolDown > 0) {
