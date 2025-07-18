@@ -32,8 +32,9 @@ public class ClientEvents {
                     event.getCamera().getXRot(),
                     event.getCamera().getYRot()
             ).scale(-baseDistance).add(0, verticalOffset, 0);
+            double newRoll = Mth.lerp(0.5f, event.getRoll(), Mth.clamp((float) ((hullback.getPartYRot(3) - hullback.getPartYRot(0)) * 0.25f * Minecraft.getInstance().options.fovEffectScale().get()), -2.23f, 2.23f));
 
-            event.setRoll(Mth.clamp((float) ((hullback.getPartYRot(3) - hullback.getPartYRot(0)) * 0.25f * Minecraft.getInstance().options.fovEffectScale().get()), -2.23f, 2.23f));
+            event.setRoll((float) newRoll);
         }
     }
 
@@ -42,7 +43,8 @@ public class ClientEvents {
         Player player = Minecraft.getInstance().player;
         if (player != null && player.getRootVehicle() instanceof HullbackEntity hullback) {
             if (hullback.getDeltaMovement().length() > 0.2) {
-                event.setFOV(event.getFOV() + hullback.getDeltaMovement().length() * (Minecraft.getInstance().options.getCameraType() == CameraType.THIRD_PERSON_BACK ? 50 : 20) * Minecraft.getInstance().options.fovEffectScale().get());
+                double newFOV = Mth.lerp(0.5f, event.getFOV(), event.getFOV() + hullback.getDeltaMovement().length() * (Minecraft.getInstance().options.getCameraType() == CameraType.THIRD_PERSON_BACK ? 50 : 20) * Minecraft.getInstance().options.fovEffectScale().get());
+                event.setFOV(newFOV);
             }
         }
     }

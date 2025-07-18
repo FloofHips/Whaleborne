@@ -19,7 +19,8 @@
   "subtitles.entity.hullback.ambient": "Hullback sings",
   "subtitles.entity.hullback.hurt": "Hullback hurts",
   "subtitles.entity.hullback.death": "Hullback dies",
-  "subtitles.entity.hullback.happy": "Hullback sings happily",
+  "subtitles.entity.hullback.happy": "Hullback amused",
+  "subtitles.entity.hullback.tame": "Hullback sings happily",
   "subtitles.entity.hullback.mad": "Hullback groans",
   "subtitles.entity.hullback.swim": "Hullback swims",
   "subtitles.entity.hullback.breathe": "Hullback breaches"

@@ -25,6 +25,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.*;
@@ -90,7 +91,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private static final EntityDataAccessor<Integer> DATA_ARMOR_COUNT = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<Float> DATA_MOUTH_PROGRESS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.FLOAT);
-    private static final EntityDataAccessor<CompoundTag> DATA_SEAT_ASSIGNMENTS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.COMPOUND_TAG);
+    private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_0 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_1 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_2 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_3 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_4 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_5 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_6 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
     public final HullbackPartEntity head;
     public final HullbackPartEntity nose;
     public final HullbackPartEntity body;
@@ -155,8 +162,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     public Vec3[] seats = new Vec3[7];
     public Vec3[] oldSeats = new Vec3[7];
-    private final Map<Integer, UUID> seatAssignments = new HashMap<>();
-
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
@@ -365,7 +370,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     public boolean isSaddleable() {
-        return this.isAlive();// && this.isTamed();
+        return this.isAlive() && this.isTamed();
     }
 
     public void equipSaddle(@Nullable SoundSource source) {
@@ -390,7 +395,15 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_ID_FLAGS, (byte)0);
-        this.entityData.define(DATA_SEAT_ASSIGNMENTS, new CompoundTag());
+
+        this.entityData.define(DATA_SEAT_0, Optional.empty());
+        this.entityData.define(DATA_SEAT_1, Optional.empty());
+        this.entityData.define(DATA_SEAT_2, Optional.empty());
+        this.entityData.define(DATA_SEAT_3, Optional.empty());
+        this.entityData.define(DATA_SEAT_4, Optional.empty());
+        this.entityData.define(DATA_SEAT_5, Optional.empty());
+        this.entityData.define(DATA_SEAT_6, Optional.empty());
+
         this.entityData.define(DATA_CROWN_ID, ItemStack.EMPTY);
         this.entityData.define(DATA_ARMOR_COUNT, 0);
         this.entityData.define(DATA_MOUTH_PROGRESS, 0f);
@@ -420,12 +433,22 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         CompoundTag hasMobiusSpawned = new CompoundTag();
         hasMobiusSpawned.putBoolean("HasMobiusSpawned", HAS_MOBIUS_SPAWNED);
 
-        CompoundTag seatAssignmentsTag = new CompoundTag();
-        for (Map.Entry<Integer, UUID> entry : seatAssignments.entrySet()) {
-            seatAssignmentsTag.putUUID(entry.getKey().toString(), entry.getValue());
-        }
-        compound.put("SeatAssignments", seatAssignmentsTag);
+        //System.out.println("Saving seat data:");
 
+        for (int i = 0; i < 7; i++) {
+            Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
+            String seatKey = "Seat_" + i;
+
+            //System.out.println("Seat " + i + ": " + occupant);
+
+            if (occupant.isPresent()) {
+                compound.putUUID(seatKey, occupant.get());
+
+                //if (!compound.hasUUID(seatKey)) {
+                //    System.out.println("Failed to write UUID for seat: " + i);
+                //}
+            }
+        }
         compound.put("HeadDirt", saveDirtArray(headDirt));
         compound.put("HeadTopDirt", saveDirtArray(headTopDirt));
 
@@ -450,28 +473,29 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         this.entityData.set(DATA_ID_FLAGS, compound.getByte("Flags"));
 
-//        ItemStack crown = this.entityData.get(DATA_CROWN_ID);
-//        ItemStack armor = this.entityData.get(DATA_ARMOR_ID);
-//        if (!crown.isEmpty()) {
-//            this.inventory.setItem(INV_SLOT_CROWN, crown);
-//        }
-//        if (!armor.isEmpty()) {
-//            this.inventory.setItem(INV_SLOT_ARMOR, armor);
-//        }
-
         HAS_MOBIUS_SPAWNED = compound.getBoolean("HasMobiusSpawned");
 
-        seatAssignments.clear();
-        if (compound.contains("SeatAssignments")) {
-            CompoundTag seatAssignmentsTag = compound.getCompound("SeatAssignments");
-            for (String key : seatAssignmentsTag.getAllKeys()) {
-                int seatIndex = Integer.parseInt(key);
-                UUID uuid = seatAssignmentsTag.getUUID(key);
-                if (seatIndex >= 0 && seatIndex < seats.length) {
-                    seatAssignments.put(seatIndex, uuid);
-                }
+        boolean hasAnySeatData = IntStream.range(0, 7)
+                .anyMatch(i -> compound.hasUUID("Seat_" + i));
+
+        //System.out.println("Contains seat data: " + hasAnySeatData);
+
+        for (int i = 0; i < 7; i++) {
+            String seatKey = "Seat_" + i;
+            if (compound.hasUUID(seatKey)) {
+                UUID uuid = compound.getUUID(seatKey);
+                //System.out.println("Loading " + seatKey + " with UUID " + uuid);
+                this.entityData.set(getSeatAccessor(i), Optional.of(uuid));
+            } else {
+                //System.out.println("No data for: "+ seatKey);
+                this.entityData.set(getSeatAccessor(i), Optional.empty());
             }
         }
+
+        //System.out.println("Post-load seat data:");
+        //for (int i = 0; i < 7; i++) {
+        //    System.out.println("Seat "+ i +": " + this.entityData.get(getSeatAccessor(i)));
+        //}
 
         if (compound.contains("HeadDirt")) {
             headDirt = loadDirtArray(compound.getCompound("HeadDirt"));
@@ -491,25 +515,22 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (compound.contains("FlukeDirt")) {
             flukeDirt = loadDirtArray(compound.getCompound("FlukeDirt"));
         }
-//        if (compound.contains("Passengers")) {
-//            ListTag passengers = compound.getList("Passengers", 10);
-//            for (int i = 0; i < passengers.size(); i++) {
-//                CompoundTag passengerTag = passengers.getCompound(i);
-//                UUID passengerUUID = passengerTag.getUUID("UUID");
-//
-//                if (!seatAssignments.containsKey(passengerUUID)) {
-//                    int seat = IntStream.range(0, seats.length)
-//                            .filter(idx -> !seatAssignments.containsValue(idx))
-//                            .findFirst()
-//                            .orElse(0);
-//                    seatAssignments.put(passengerUUID, seat);
-//                }
-//            }
-//        }
 
-        syncSeatAssignments();
         syncDirtToClients();
         this.updateContainerEquipment();
+    }
+
+    private EntityDataAccessor<Optional<UUID>> getSeatAccessor(int seatIndex) {
+        return switch (seatIndex) {
+
+            case 0 -> DATA_SEAT_0;
+            case 1 -> DATA_SEAT_1;
+            case 2 -> DATA_SEAT_2;
+            case 3 -> DATA_SEAT_3;
+            case 4 -> DATA_SEAT_4;
+            case 5 -> DATA_SEAT_5;
+            default -> DATA_SEAT_6;
+        };
     }
 
     private CompoundTag saveDirtArray(BlockState[][] array) {
@@ -539,62 +560,20 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return array;
     }
 
-    private void validateAfterLoad() {
-        getPassengers().forEach(passenger -> {
-            if (!seatAssignments.containsValue(passenger.getUUID())) {
-                int seat = IntStream.range(0, seats.length)
-                        .filter(i -> !seatAssignments.containsKey(i))
-                        .findFirst()
-                        .orElse(0);
-                seatAssignments.put(seat, passenger.getUUID());
-            }
-        });
-
-        Set<UUID> passengerUUIDs = getPassengers().stream()
-                .map(Entity::getUUID)
-                .collect(Collectors.toSet());
-
-        seatAssignments.values().removeIf(uuid -> !passengerUUIDs.contains(uuid));
-        syncSeatAssignments();
-    }
-    @Override
-    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
-        super.onSyncedDataUpdated(key);
-
-        if (DATA_SEAT_ASSIGNMENTS.equals(key)) {
-            CompoundTag tag = this.entityData.get(DATA_SEAT_ASSIGNMENTS);
-            seatAssignments.clear();
-            for (String k : tag.getAllKeys()) {
-                int seatIndex = Integer.parseInt(k);
-                UUID uuid = tag.getUUID(k);
-                seatAssignments.put(seatIndex, uuid);
-            }
-        }
-        if(seatAssignments!=null)
-            syncSeatAssignments();
-    }
-
     public float getArmorProgress() {
         return (float) this.entityData.get(DATA_ARMOR_COUNT) /64;
     }
     public float getLeftEyeYaw() { return leftEyeYaw; }
     public float getRightEyeYaw() { return rightEyeYaw; }
     public float getEyePitch() { return eyePitch; }
-
-    public void setLeftEyeYaw(float yaw) { this.leftEyeYaw = yaw; }
-    public void setRightEyeYaw(float yaw) { this.rightEyeYaw = yaw; }
-    public void setEyePitch(float pitch) { this.eyePitch = pitch; }
-
     public boolean canBreatheUnderwater() {
         return isVehicle();
     }
-
     protected void handleAirSupply(int airSupply) {
     }
     public int getMaxAirSupply() {
         return 10000;
     }
-
     protected int increaseAirSupply(int currentAir) {
         return this.getMaxAirSupply();
     }
@@ -729,6 +708,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
+        this.goalSelector.addGoal(1, new HullbackTryFindWaterGoal(this, true));
+        this.goalSelector.addGoal(2, new HullbackTryFindWaterGoal(this, false));
         this.goalSelector.addGoal(2, new HullbackRandomSwimGoal(this, 1.0, 10));
         this.goalSelector.addGoal(0, new HullbackApproachPlayerGoal(this, 0.01f));
         this.goalSelector.addGoal(0, new HullbackArmorPlayerGoal(this, 0.005f));
@@ -760,86 +741,90 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     public InteractionResult interactDebug(Player player, InteractionHand hand){
-        if(!isTamed())
+        if(!isTamed()){
             setTamed(true);
-        System.out.println(level() + ": Seat Assignments: " + this.seatAssignments);
-        System.out.println(level() + ": Seat Data: " + this.entityData.get(DATA_SEAT_ASSIGNMENTS));
+            //equipSaddle();
+            return InteractionResult.SUCCESS;
+        }
+
+        //System.out.println(level() + ": Seat Data: ");
+        //for(int i = 0; i<7 ; i++){
+        //    System.out.println("Seat " + i + ": " + this.entityData.get(getSeatAccessor(i)));
+        //}
+
         return InteractionResult.SUCCESS;
     }
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
-        validateAfterLoad();
-
-        syncSeatAssignments();
-        if(getArmorProgress() < 0.5)
+        if (seatIndex < 0 || seatIndex >= 7) {
             return InteractionResult.FAIL;
+        }
 
-        if (!isSaddled()){
+        if (getArmorProgress() < 0.5) {
+            return InteractionResult.FAIL;
+        }
+
+        if (!isSaddled()) {
             mouthTarget = 1.0f;
             playSound(WBSoundRegistry.HULLBACK_MAD.get());
             return InteractionResult.PASS;
         }
-        if (seatIndex < 0 || seatIndex >= seats.length) {
-            return InteractionResult.FAIL;
-        }
 
-        // Check if seat is occupied
-        if (seatAssignments.containsKey(seatIndex)) {
-            return InteractionResult.PASS;
-        }
-        UUID entityUUID = (entityType != null) ? null : player.getUUID();
-        if (entityUUID != null) {
-            seatAssignments.values().removeIf(entityUUID::equals);
-            syncSeatAssignments();
-        }
-        if (entityType != null) {
-            Entity entity = entityType.create(this.level());
-
-            if (entity != null) {
-                entity.moveTo(seats[seatIndex].x + 0.5, seats[seatIndex].y + 1, seats[seatIndex].z + 0.5, this.getYRot(), 0);
-
-                seatAssignments.values().removeIf(uuid -> uuid.equals(entity.getUUID()));
-                syncSeatAssignments();
-
-                this.level().addFreshEntity(entity);
-                if (!level().isClientSide) {
-                    PacketDistributor.TRACKING_ENTITY.with(() -> this).send(new ClientboundAddEntityPacket(entity));
-                }
-                seatAssignments.put(seatIndex, entity.getUUID());
-                if(entity.startRiding(this, true))
-                    syncSeatAssignments();
-                else {
-                    entity.stopRiding();
-                    syncSeatAssignments();
-                    return InteractionResult.FAIL;
-                }
-
-                if (!player.getAbilities().instabuild) {
-                    player.getItemInHand(hand).shrink(1);
-                }
-
-                return InteractionResult.SUCCESS;
+        Optional<UUID> currentSeatOccupant = this.entityData.get(getSeatAccessor(seatIndex));
+        if (currentSeatOccupant.isPresent()) {
+            if (currentSeatOccupant.get().equals(player.getUUID())) {
+                return InteractionResult.PASS;
             }
-
             return InteractionResult.FAIL;
         }
 
-        seatAssignments.values().removeIf(uuid -> uuid.equals(player.getUUID()));
-        syncSeatAssignments();
+        if (entityType != null) {
+            return placeEquipment(player, hand, seatIndex, entityType);
+        }
 
-        seatAssignments.put(seatIndex, player.getUUID());
-        if(player.startRiding(this, true))
-            syncSeatAssignments();
-        else {
-            player.stopRiding();
-            syncSeatAssignments();
+        return mountPlayer(player, seatIndex);
+        //return super.interact(player, hand);
+    }
+
+    private InteractionResult placeEquipment(Player player, InteractionHand hand, int seatIndex, EntityType<?> entityType) {
+//        if (level().isClientSide) {
+//            return InteractionResult.SUCCESS;
+//        }
+
+        Entity entity = entityType.create(this.level());
+        if (entity == null) {
             return InteractionResult.FAIL;
         }
 
-        if (this.level().isClientSide) {
+        Vec3 seatPos = seats[seatIndex];
+        entity.moveTo(seatPos.x, seatPos.y + 1, seatPos.z, this.getYRot(), 0);
+        this.level().addFreshEntity(entity);
+
+        if (entity.startRiding(this, true)) {
+            assignSeat(seatIndex, entity);
+            if (!player.getAbilities().instabuild) {
+                player.getItemInHand(hand).shrink(1);
+            }
             return InteractionResult.SUCCESS;
         }
 
-        return InteractionResult.SUCCESS;
+        //entity.discard();
+        return InteractionResult.FAIL;
+    }
+    private InteractionResult mountPlayer(Player player, int seatIndex) {
+        for (int i = 0; i < 7; i++) {
+            Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
+            if (occupant.isPresent() && occupant.get().equals(player.getUUID())) {
+                player.stopRiding();
+            }
+        }
+
+        if (player.startRiding(this, true)) {
+            assignSeat(seatIndex, player);
+            return InteractionResult.SUCCESS;
+        } else {
+            //player.stopRiding();
+            return InteractionResult.FAIL;
+        }
     }
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         ItemStack heldItem = player.getItemInHand(hand);
@@ -948,7 +933,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                         playSound(WBSoundRegistry.HULLBACK_TAME.get());
                     }
                     this.updateContainerEquipment();
-                    this.syncSeatAssignments();
                     return InteractionResult.SUCCESS;
                 }
                 return InteractionResult.PASS;
@@ -1084,13 +1068,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if(!this.isEyeInFluidType(Fluids.WATER.getFluidType()))
             mouthTarget = 1;
 
-        boolean hasAnchorDown = seatAssignments.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .map(entry -> getEntityByUUID(entry.getValue()))
-                .filter(entity -> entity instanceof AnchorEntity)
-                .map(entity -> (AnchorEntity) entity)
-                .anyMatch(AnchorEntity::isDown);
-
         if(!isSaddled()){
             if(!getPassengers().isEmpty())
                 ejectPassengers();
@@ -1102,7 +1079,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         setOldPosAndRots();
 
-        if(!hasAnchorDown){
+        if(!hasAnchorDown()){
             updatePartPositions();
             rotatePassengers();
         }
@@ -1114,8 +1091,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             mouthTarget = 0.8f;
         }
 
-        if (this.tickCount % 80 == 0)
-            validateAfterLoad();
 //        for (int i = 0; i < getSubEntities().length; i++) {
 //            //if (part.getDeltaMovement().length() > 0) {
 //            moveEntitiesOnTop(i);
@@ -1142,11 +1117,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         if (this.tickCount % 20 == 0)
             validateAssignments();
-
-        if (!level().isClientSide && !validatedAfterLoad) {
-            validateAfterLoad();
-            validatedAfterLoad = true;
-        }
 
         if (tickCount == 10)
             syncDirtToClients();
@@ -1217,6 +1187,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 }
             }
         }
+    }
+
+    private boolean hasAnchorDown() {
+        for (Entity passenger : getPassengers()) {
+            if (passenger instanceof AnchorEntity anchor) {
+                if (anchor.isDown()) return true;
+                break;
+            }
+        }
+        return false;
     }
 
     public void stopMoving(){
@@ -1521,37 +1501,29 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     // PASSENGERS
     @Override
     public boolean canAddPassenger(Entity passenger) {
-        return this.getPassengers().size() < seats.length;
+        return (getPassengers().size() < 7);
     }
     @Override
     protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
         if (!this.hasPassenger(passenger)) return;
-        if (seatAssignments.isEmpty()) return;
+
+        int seatIndex = getSeatByEntity(passenger);
+        if (seatIndex == -1) {
+            return;
+            //getEntityByUUID(this.entityData.get(getSeatAccessor(-1)).get()).unRide();
+//            seatIndex = findFreeSeat();
+//            if (seatIndex != -1) {
+//                this.entityData.set(getSeatAccessor(seatIndex), Optional.of(passenger.getUUID()));
+//            } else {
+//                passenger.unRide();
+//                return;
+//            }
+        }
 
         float yOffset = 0;
         if(this.getArmorProgress() == 0)
             yOffset = 0.5F;
 
-        int seatIndex = seatAssignments.entrySet().stream()
-                .filter(entry -> entry.getValue().equals(passenger.getUUID()))
-                .map(Map.Entry::getKey)
-                .findFirst()
-                .orElse(-1);
-
-        if(seatIndex == -1){
-            passenger.unRide();
-            return;
-        }
-        if (seatIndex < 0 || seatIndex >= seats.length) {
-            seatIndex = IntStream.range(0, seats.length)
-                    .filter(i -> !seatAssignments.containsKey(i))
-                    .findFirst()
-                    .orElse(0);
-
-            seatAssignments.entrySet().removeIf(entry -> entry.getValue().equals(passenger.getUUID()));
-            seatAssignments.put(seatIndex, passenger.getUUID());
-            syncSeatAssignments();
-        }
         if (seatIndex < seats.length) {
             if(seats[seatIndex] != null)
                 callback.accept(passenger,
@@ -1559,15 +1531,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                         seats[seatIndex].y - yOffset + passenger.getMyRidingOffset(),
                         seats[seatIndex].z);
         }
-    }
-
-    private void syncSeatAssignments() {
-        CompoundTag tag = new CompoundTag();
-        seatAssignments.forEach((seat, uuid) ->
-                tag.putUUID(String.valueOf(seat), uuid));
-        updateModifiers();
-
-        this.entityData.set(DATA_SEAT_ASSIGNMENTS, tag);
     }
 
     private void updateModifiers() {
@@ -1597,85 +1560,99 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
     public int getSeatByEntity(Entity entity){
         if (entity != null) {
-            return seatAssignments.entrySet().stream()
-                    .filter(entry -> entry.getValue().equals(entity.getUUID()))
-                    .map(Map.Entry::getKey)
-                    .findFirst()
-                    .orElse(-1);
+            for (int seatIndex = 0; seatIndex < 7; seatIndex++) {
+                Optional<UUID> seatOccupant = this.entityData.get(getSeatAccessor(seatIndex));
+                if (seatOccupant.isPresent() && seatOccupant.get().equals(entity.getUUID())) {
+                    return seatIndex;
+                }
+            }
         }
         return -1;
     }
 
     private void validateAssignments() {
-        Map<Integer, UUID> assignmentsCopy = new HashMap<>(seatAssignments);
-        Set<UUID> currentPassengers = this.getPassengers().stream()
+        Set<UUID> currentPassengerUUIDs = this.getPassengers().stream()
                 .map(Entity::getUUID)
                 .collect(Collectors.toSet());
 
-        assignmentsCopy.forEach((seat, uuid) -> {
-            if (seat < 0 || seat >= seats.length) {
-                seatAssignments.remove(seat);
-                syncSeatAssignments();
-                return;
-            }
+        updateModifiers();
+        for (int seatIndex = 0; seatIndex < 7; seatIndex++) {
+            EntityDataAccessor<Optional<UUID>> seatAccessor = getSeatAccessor(seatIndex);
+            Optional<UUID> assignedUUID = this.entityData.get(seatAccessor);
 
-            if (!currentPassengers.contains(uuid)) {
-                seatAssignments.remove(seat);
-                syncSeatAssignments();
-                return;
-            }
+            if (assignedUUID.isPresent()) {
+                UUID uuid = assignedUUID.get();
 
-            Entity entity = this.getPassengers().stream()
-                    .filter(e -> e.getUUID().equals(uuid))
-                    .findFirst()
-                    .orElse(null);
+                if (!currentPassengerUUIDs.contains(uuid)) {
+                    //Whaleborne.LOGGER.debug("Clearing seat assignment: seat {} for {}", seatIndex, uuid);
+                    this.entityData.set(seatAccessor, Optional.empty());
+                }
 
-            if (entity != null) {
-                AABB seatArea = new AABB(seats[seat], seats[seat]).inflate(1.0);
-                if (!seatArea.contains(entity.position())) {
-                    seatAssignments.remove(seat);
-                    syncSeatAssignments();
+                else {
+                    Entity passenger = getEntityByUUID(uuid);
+                    if (passenger != null && getSeatByEntity(passenger) != seatIndex) {
+                        //Whaleborne.LOGGER.debug("Correcting mismatched seat assignment: {} was in seat {} but belongs in {}",
+                                //passenger, seatIndex, getSeatByEntity(passenger));
+                        this.entityData.set(seatAccessor, Optional.empty());
+                    }
                 }
             }
-        });
-
-        this.getPassengers().forEach(passenger -> {
-            if (!seatAssignments.containsValue(passenger.getUUID())) {
-                int availableSeat = IntStream.range(0, seats.length)
-                        .filter(i -> !seatAssignments.containsKey(i))
-                        .findFirst()
-                        .orElse(0);
-                seatAssignments.put(availableSeat, passenger.getUUID());
-                syncSeatAssignments();
-            }
-        });
+        }
     }
+    public void assignSeat(int seatIndex, @Nullable Entity passenger) {
+        this.entityData.set(getSeatAccessor(seatIndex), Optional.of(passenger.getUUID()));
+    }
+
+    public Optional<Entity> getPassengerForSeat(int seatIndex) {
+        if (seatIndex < 0 || seatIndex >= 7) return Optional.empty();
+
+        return this.entityData.get(getSeatAccessor(seatIndex))
+                .flatMap(uuid -> this.getPassengers().stream()
+                        .filter(p -> p.getUUID().equals(uuid))
+                        .findFirst());
+    }
+    private boolean isPassengerAssigned(Entity passenger) {
+        for (int i = 0; i < 7; i++) {
+            Optional<UUID> seatUUID = this.entityData.get(getSeatAccessor(i));
+            if (seatUUID.isPresent() && seatUUID.get().equals(passenger.getUUID())) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private int findFreeSeat() {
+        for (int i = 0; i < 7; i++) {
+            if (this.entityData.get(getSeatAccessor(i)).isEmpty()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     @Override
     protected void addPassenger(Entity passenger) {
         super.addPassenger(passenger);
-
-        if (!seatAssignments.containsValue(passenger.getUUID())) {
-//            if (passenger instanceof Player) {
-//                return;
-//            }
-
-
-            int availableSeat = IntStream.range(0, seats.length)
-                    .filter(i -> !seatAssignments.containsKey(i))
-                    .findFirst()
-                    .orElse(0);
-
-            seatAssignments.put(availableSeat, passenger.getUUID());
-            syncSeatAssignments();
-        }
+//        if (!seatAssignments.containsValue(passenger.getUUID())) {
+//
+//            int availableSeat = IntStream.range(0, seats.length)
+//                    .filter(i -> !seatAssignments.containsKey(i))
+//                    .findFirst()
+//                    .orElse(0);
+//
+//            seatAssignments.put(availableSeat, passenger.getUUID());
+//            syncSeatAssignments();
+//        }
     }
+
     @Override
     protected void removePassenger(Entity passenger) {
-        if (passenger.isRemoved()) {
-            seatAssignments.values().removeIf(uuid -> uuid.equals(passenger.getUUID()));
-            syncSeatAssignments();
-        }
-        syncSeatAssignments();
+        if(passenger.isRemoved())
+            for (int i = 0; i < 7; i++) {
+                Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
+                if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
+                    this.entityData.set(getSeatAccessor(i), Optional.empty());
+                }
+            }
         super.removePassenger(passenger);
     }
 
@@ -1683,9 +1660,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
         int seatIndex = getSeatByEntity(passenger);
         if (seatIndex != -1) {
-            seatAssignments.remove(seatIndex);
-            syncSeatAssignments();
-
+            for (int i = 0; i < 7; i++) {
+                Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
+                if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
+                    this.entityData.set(getSeatAccessor(i), Optional.empty());
+                }
+            }
+            
             if (seatIndex >= 0 && seatIndex < seats.length) {
                 Vec3 seatPos = seats[seatIndex];
                 return new Vec3(seatPos.x, seatPos.y, seatPos.z);
@@ -1733,15 +1714,20 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Nullable
     @Override
     public LivingEntity getControllingPassenger() {
-        return seatAssignments.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .map(entry -> {
-                    Entity entity = getEntityByUUID(entry.getValue());
-                    return (entity instanceof HelmEntity helm) ? helm.getControllingPassenger() : null;
-                })
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElseGet(super::getControllingPassenger);
+        for (int i = 0; i < 7; i++) {
+            Optional<UUID> seatOccupant = this.entityData.get(getSeatAccessor(i));
+            if (seatOccupant.isPresent()) {
+                Entity entity = getEntityByUUID(seatOccupant.get());
+
+                if (entity instanceof HelmEntity helm) {
+                    LivingEntity controller = helm.getControllingPassenger();
+                    if (controller != null) {
+                        return controller;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     public Entity getEntityByUUID(UUID uuid) {
@@ -1762,6 +1748,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
         if(Mth.abs(player.xxa) > 0){
+            if (hasAnchorDown()){
+                if (tickCount % 10 == 0)
+                    this.playSound(SoundEvents.WOOD_HIT);
+                return Vec3.ZERO;
+            }
             if (tickCount % 2 == 0)
                 this.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON);
             //newRotY = this.getYRot() - player.xxa;
@@ -1802,7 +1793,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         openHullbackMenu(player);
     }
     private void openHullbackMenu(Player player) {
-        if (!level().isClientSide && player instanceof ServerPlayer serverPlayer) {
+        if (!level().isClientSide && player instanceof ServerPlayer serverPlayer && serverPlayer.getRootVehicle() instanceof HullbackEntity) {
             NetworkHooks.openScreen(serverPlayer, new MenuProvider() {
                 @Override
                 public Component getDisplayName() {
@@ -1846,14 +1837,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         @Override
         public boolean canUse() {
 
-            boolean hasAnchorDown = seatAssignments.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey())
-                    .map(entry -> getEntityByUUID(entry.getValue()))
-                    .filter(entity -> entity instanceof AnchorEntity)
-                    .map(entity -> (AnchorEntity) entity)
-                    .anyMatch(AnchorEntity::isDown);
-
-            if (hasAnchorDown) {
+            if (mob.hasAnchorDown()) {
                 return false;
             }
 
@@ -1904,7 +1888,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         @Override
         public void start() {
             if (currentTarget != null) {
-                mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, mob.isSaddled() ? 0.1f : speedModifier);
+                mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, mob.isSaddled() ? 0.2f : speedModifier);
             }
         }
 
@@ -1929,14 +1913,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         protected Vec3 getPosition() {
             Vec3 target = Vec3.ZERO;
-            if (mob.isTamed())
-                target = mob.getRandom().nextFloat() < 0.7f ?
-                        findPositionInFront() :
-                        BehaviorUtils.getRandomSwimmablePos(mob, 2, 2);
-            else
-                target = mob.getRandom().nextFloat() < 0.7f ?
-                        findPositionInFront() :
-                        BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
+            target = mob.getRandom().nextFloat() < 0.7f ?
+                    findPositionInFront() :
+                    BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
             return target == null ? mob.position() : target;
         }
 
@@ -1982,6 +1961,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canUse() {
+
             if (breachCooldown > 0) {
                 breachCooldown--;
                 return false;
@@ -2130,17 +2110,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         @Override
         public boolean canUse() {
 
-            boolean hasAnchorDown = seatAssignments.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey())
-                    .map(entry -> getEntityByUUID(entry.getValue()))
-                    .filter(entity -> entity instanceof AnchorEntity)
-                    .map(entity -> (AnchorEntity) entity)
-                    .anyMatch(AnchorEntity::isDown);
-
             if (!isTamed())
                 return false;
 
-            if (hasAnchorDown)
+            if (hullback.hasAnchorDown())
                 return false;
 
             this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 50, 30);
@@ -2191,28 +2164,31 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         @Override
         public void tick() {
             if (this.targetPlayer == null) return;
-            Vec3 playerLook = this.targetPlayer.getLookAngle();
-            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            this.targetPosition = this.targetPlayer.position()
-                    .add(sideOffset)
-                    .add(playerLook.scale(-APPROACH_DISTANCE));
-            this.hullback.getNavigation().moveTo(
-                    targetPosition.x,
-                    targetPosition.y,
-                    targetPosition.z,
-                    this.speedModifier
-            );
 
-            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-            float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
-            float sideYawOffset = approachFromRight ? -90f : 90f;
-            float targetYaw = desiredYaw + sideYawOffset;
-            if (this.hullback.tickCount % 200 == 0){
-                this.hullback.setYRot(Mth.rotLerp(0.05f, this.hullback.getYRot(), targetYaw));
-                this.hullback.yBodyRot = this.hullback.getYRot();
-            }
             this.hullback.mouthTarget = 0.6f;
+            if(hullback.tickCount % 200 == 0){
+                Vec3 playerLook = this.targetPlayer.getLookAngle();
+                Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
+                Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
+                this.targetPosition = this.targetPlayer.position()
+                        .add(sideOffset)
+                        .add(playerLook.scale(-APPROACH_DISTANCE));
+                this.hullback.getNavigation().moveTo(
+                        targetPosition.x,
+                        targetPosition.y,
+                        targetPosition.z,
+                        this.speedModifier
+                );
+
+                Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
+                float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
+                float sideYawOffset = approachFromRight ? -90f : 90f;
+                float targetYaw = desiredYaw + sideYawOffset;
+//            if (this.hullback.tickCount % 200 == 0){
+                this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
+                this.hullback.yBodyRot = this.hullback.getYRot();
+//            }
+            }
         }
     }
     public class HullbackApproachPlayerGoal extends Goal {
@@ -2249,14 +2225,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         @Override
         public boolean canUse() {
 
-            boolean hasAnchorDown = seatAssignments.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey())
-                    .map(entry -> getEntityByUUID(entry.getValue()))
-                    .filter(entity -> entity instanceof AnchorEntity)
-                    .map(entity -> (AnchorEntity) entity)
-                    .anyMatch(AnchorEntity::isDown);
-
-            if (hasAnchorDown)
+            if (hullback.hasAnchorDown())
                 return false;
 
             this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 50, 30);
@@ -2306,46 +2275,185 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public void tick() {
-            if (this.targetPlayer == null) return;
-            Vec3 playerLook = this.targetPlayer.getLookAngle();
-            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            this.targetPosition = this.targetPlayer.position()
-                    .add(sideOffset)
-                    .add(playerLook.scale(-APPROACH_DISTANCE));
-            this.hullback.getNavigation().moveTo(
-                    targetPosition.x,
-                    targetPosition.y,
-                    targetPosition.z,
-                    this.speedModifier
-            );
-
-            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-            float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
-            float sideYawOffset = approachFromRight ? -90f : 90f;
-            float targetYaw = desiredYaw + sideYawOffset;
-
-            this.hullback.setYRot(Mth.rotLerp(0.2f, this.hullback.getYRot(), targetYaw));
-            this.hullback.yBodyRot = this.hullback.getYRot();
             this.hullback.mouthTarget = 0.6f;
+            if (this.targetPlayer == null) return;
+            if(hullback.tickCount % 200 == 0) {
+                Vec3 playerLook = this.targetPlayer.getLookAngle();
+                Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
+                Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
+                this.targetPosition = this.targetPlayer.position()
+                        .add(sideOffset)
+                        .add(playerLook.scale(-APPROACH_DISTANCE));
+                this.hullback.getNavigation().moveTo(
+                        targetPosition.x,
+                        targetPosition.y,
+                        targetPosition.z,
+                        this.speedModifier
+                );
+
+                Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
+                float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
+                float sideYawOffset = approachFromRight ? -90f : 90f;
+                float targetYaw = desiredYaw + sideYawOffset;
+
+                this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
+                this.hullback.yBodyRot = this.hullback.getYRot();
+            }
         }
     }
 
-//    static class HullbackMoveControl extends SmoothSwimmingMoveControl{
-//
-//        public HullbackMoveControl(Mob mob, int maxTurnX, int maxTurnY, float inWaterSpeedModifier, float outsideWaterSpeedModifier, boolean applyGravity) {
-//            super(mob, maxTurnX, maxTurnY, inWaterSpeedModifier, outsideWaterSpeedModifier, applyGravity);
-//        }
-//
-//        @Override
-//        public void tick() {
-//
-//            if (this.shouldBeStopped.getAsBoolean()) {
-//                this.operation = Operation.WAIT;
-//                this.ghast.stopInPlace();
-//            }
-//
-//            super.tick();
-//        }
-//    }
+    public class HullbackTryFindWaterGoal extends Goal {
+        private final PathfinderMob mob;
+        private final boolean isBeached;
+
+        public HullbackTryFindWaterGoal(PathfinderMob mob, boolean isBeached) {
+            this.mob = mob;
+            this.isBeached = isBeached;
+        }
+
+        public boolean canUse() {
+            if(isBeached)
+                return mob.tickCount > 20 && !this.mob.isEyeInFluidType(Fluids.WATER.getFluidType());
+            return mob.tickCount > 20 && !mob.level().getFluidState(mob.blockPosition().below()).is(FluidTags.WATER);
+        }
+
+        public void start() {
+            BlockPos blockpos = null;
+
+                Iterator var2 = BlockPos.betweenClosed(Mth.floor(this.mob.getX() - (isBeached ? 20.0 : 5)), Mth.floor(this.mob.getY() - 2.0), Mth.floor(this.mob.getZ() - (isBeached ? 20.0 : 5)), Mth.floor(this.mob.getX() + (isBeached ? 20.0 : 5)), this.mob.getBlockY(), Mth.floor(this.mob.getZ() + (isBeached ? 20.0 : 5))).iterator();
+
+            while(var2.hasNext()) {
+                BlockPos blockpos1 = (BlockPos)var2.next();
+                if (this.mob.level().getFluidState(blockpos1).is(FluidTags.WATER)) {
+                    blockpos = blockpos1;
+                    break;
+                }
+            }
+
+            if (blockpos != null) {
+                this.mob.getMoveControl().setWantedPosition((double)blockpos.getX(), (double)blockpos.getY(), (double)blockpos.getZ(), 1.0);
+                this.mob.getLookControl().setLookAt(mob.getMoveControl().getWantedX(), mob.getMoveControl().getWantedY(), mob.getMoveControl().getWantedZ());
+            }
+        }
+
+        @Override
+        public void tick() {
+            super.tick();
+
+            Vec3 target = new Vec3(mob.getMoveControl().getWantedX(),
+                    mob.getMoveControl().getWantedY(),
+                    mob.getMoveControl().getWantedZ());
+            float targetYRot = (float)Math.toDegrees(Math.atan2(target.z - mob.getZ(), target.x - mob.getX())) - 90;
+
+            mob.setYRot(Mth.rotLerp(0.01f, mob.getYRot(), targetYRot));
+
+
+            if(mob.tickCount % 10 == 0)
+                mob.playSound(WBSoundRegistry.HULLBACK_MAD.get());
+
+            if(mob.tickCount % 100 == 0 && !mob.level().getBlockState(mob.blockPosition().below()).isAir()){
+
+                ((HullbackEntity) mob).mouthTarget = 0;
+
+                mob.getLookControl().setLookAt(target);
+                mob.setYRot(Mth.rotLerp(0.1f, mob.getYRot(), targetYRot));
+                mob.yBodyRot = mob.getYRot();
+                Vec3 direction = target.subtract(mob.position()).normalize();
+
+                double lungePower = 1;
+                Vec3 velocity = direction.scale(lungePower).add(0, 0.5, 0);
+                if(isBeached) {
+                    mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 2f);
+                    mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 1f);
+                    mob.playSound(WBSoundRegistry.HULLBACK_HURT.get(), 3, 0.2f);
+                    mob.playSound(WBSoundRegistry.HULLBACK_SWIM.get(), 3, 0.5f);
+                    pushEntities();
+                }
+                mob.setDeltaMovement(velocity);
+
+                mob.setYRot(Mth.rotLerp(0.2f, mob.getYRot(), targetYRot));
+                mob.yBodyRot = mob.getYRot();
+            }
+        }
+
+        public void pushEntities(){
+            AABB pushArea = mob.getBoundingBox().inflate(20);
+            List<Entity> pushableEntities = this.mob.level().getEntities(mob, pushArea);
+            pushableEntities.removeIf(entity -> !entity.isPushable() && entity.isPassenger());
+
+            Vec3 center = mob.position();
+            double pushStrength = 3;
+
+            for (Entity entity : pushableEntities) {
+
+                Vec3 pushDir = entity.position().subtract(center).normalize();
+                entity.push(
+                        pushDir.x * pushStrength,
+                        0.3,
+                        pushDir.z * pushStrength
+                );
+
+                if (this.mob.level() instanceof ServerLevel serverLevel) {
+                    serverLevel.sendParticles(
+                            WBParticleRegistry.SMOKE.get(),
+                            entity.getX(),
+                            entity.getY(),
+                            entity.getZ(),
+                            10,
+                            0.5,
+                            0.5,
+                            0.5,
+                            0.02
+                    );
+                }
+
+                if (entity instanceof LivingEntity living) {
+                    living.knockback(0.5f, pushDir.x, pushDir.z);
+                    living.hurtMarked = true;
+                }
+            }
+        }
+
+        @Override
+        public void stop() {
+            super.stop();
+            if(isBeached) {
+                this.mob.setAirSupply(this.mob.getMaxAirSupply());
+
+                if (this.mob.level().isClientSide) {
+                    for (int i = 0; i < 20; i++) {
+                        this.mob.level().addParticle(ParticleTypes.BUBBLE,
+                                ((HullbackEntity) mob).partPosition[2].x,
+                                ((HullbackEntity) mob).partPosition[2].y,
+                                ((HullbackEntity) mob).partPosition[2].z,
+                                (this.mob.getRandom().nextFloat() - 0.5f) * 0.5f,
+                                this.mob.getRandom().nextFloat() * 0.5f,
+                                (this.mob.getRandom().nextFloat() - 0.5f) * 0.5f);
+                    }
+                    ((HullbackEntity) mob).mouthTarget = 0.0f;
+                }
+
+                Vec3 particlePos = partPosition[1].add(new Vec3(0, 7, 0));
+                double x = particlePos.x;
+                double y = particlePos.y;
+                double z = particlePos.z;
+
+                if (this.mob.level() instanceof ServerLevel serverLevel) {
+                    serverLevel.sendParticles(
+                            WBParticleRegistry.SMOKE.get(),
+                            x,
+                            y,
+                            z,
+                            50,
+                            0.2,
+                            0.2,
+                            0.2,
+                            0.02
+                    );
+                }
+
+                this.mob.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), 6, 1);
+            }
+        }
+    }
 }
