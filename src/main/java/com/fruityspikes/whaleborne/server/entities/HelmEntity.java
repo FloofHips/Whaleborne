@@ -80,4 +80,11 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
         if(this.isPassenger() && this.getVehicle() instanceof HullbackEntity hullback)
             hullback.openCustomInventoryScreen(player);
     }
+
+    @Override
+    protected void removePassenger(Entity passenger) {
+        if(this.isVehicle() && getVehicle() instanceof HullbackEntity hullback)
+            hullback.stationaryTicks = 100;
+        super.removePassenger(passenger);
+    }
 }

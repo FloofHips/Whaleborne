@@ -1212,8 +1212,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.setPos(this.xo, this.yo, this.zo);
         this.setYRot(yRotO);
         this.setXRot(xRotO);
-        this.setXxa(0.0F);
-        this.setYya(0.0F);
+        //this.setXxa(0.0F);
+        //this.setYya(0.0F);
     }
 
 //    private void updateWalkerPositions() {

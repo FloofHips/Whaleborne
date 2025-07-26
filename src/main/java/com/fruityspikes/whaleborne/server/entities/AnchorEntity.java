@@ -27,8 +27,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 public class AnchorEntity extends WhaleWidgetEntity{
-    private boolean isDown = false;
-    private boolean isClosed = true;
     public AnchorHeadEntity anchorHead;
     private float sinkSpeed = 0.05f;
     boolean hasHitTheBottom = false;
@@ -42,9 +40,6 @@ public class AnchorEntity extends WhaleWidgetEntity{
     public AnchorEntity(EntityType<?> entityType, Level level) {
         super(entityType, level, WBItemRegistry.ANCHOR.get());
     }
-    public void setDown(boolean down) {
-        isDown = down;
-    }
 
     public boolean isClosed() {
         return this.entityData.get(DATA_IS_CLOSED);
@@ -52,9 +47,6 @@ public class AnchorEntity extends WhaleWidgetEntity{
 
     public boolean isDown() {
         return this.entityData.get(DATA_IS_DOWN);
-    }
-    public void setClosed(boolean closed) {
-        isClosed = closed;
     }
     public Vector3f getHeadPos(){
         return this.entityData.get(DATA_HEAD_POSITION);
@@ -105,14 +97,15 @@ public class AnchorEntity extends WhaleWidgetEntity{
     private void relinkAnchorHead() {
         getAnchorHeadUUID().ifPresent(uuid -> {
             List<Entity> entities = this.level().getEntities(this,
-                    this.getBoundingBox().inflate(20, 100, 20),
-                    entity -> entity.getUUID().equals(uuid) && entity instanceof AnchorHeadEntity
+                    this.getBoundingBox().inflate(50, 100, 50),
+                    entity -> entity instanceof AnchorHeadEntity
             );
 
             if (!entities.isEmpty()) {
                 this.anchorHead = (AnchorHeadEntity) entities.get(0);
             } else {
-                // Couldn't find anchor head, reset state
+                // couldn't find anchor head
+                System.out.println("uh oh");
                 close();
             }
         });
@@ -163,17 +156,19 @@ public class AnchorEntity extends WhaleWidgetEntity{
         this.anchorHead.setXRot(Math.min(0, -90 + (float) this.position().distanceTo(this.anchorHead.position()) * 30));
         this.anchorHead.setYRot(this.getVehicle().getYRot());
 
-        if (this.position().y < this.anchorHead.position().y) {
+        if (this.tickCount > 20 && (this.position().y < this.anchorHead.position().y)) {
+            System.out.println("eyo");
             close();
         }
     }
 
     @Override
     public InteractionResult interact(Player player, InteractionHand hand) {
-        if (this.coolDown <= 0 && !this.level().isClientSide) {
+        if (this.coolDown <= 0) {
             toggleDown();
+            return InteractionResult.SUCCESS;
         }
-        return InteractionResult.sidedSuccess(level().isClientSide);
+        return InteractionResult.PASS;
     }
 
     public void toggleDown() {
@@ -246,11 +241,22 @@ public class AnchorEntity extends WhaleWidgetEntity{
     protected void readAdditionalSaveData(CompoundTag tag) {
         this.entityData.set(DATA_IS_CLOSED, tag.getBoolean("isClosed"));
         this.entityData.set(DATA_IS_DOWN, tag.getBoolean("isDown"));
+        float headX = tag.getFloat("headPosX");
+        float headY = tag.getFloat("headPosY");
+        float headZ = tag.getFloat("headPosZ");
+        this.entityData.set(DATA_HEAD_POSITION, new Vector3f(headX, headY, headZ));
+
         this.hasHitTheBottom = tag.getBoolean("hasHitTheBottom");
-        this.sinkSpeed = tag.getFloat("sinkSpeed");
 
         if (tag.hasUUID("anchorHeadUUID")) {
-            this.entityData.set(DATA_ANCHOR_HEAD_UUID, Optional.of(tag.getUUID("anchorHeadUUID")));
+            UUID uuid = tag.getUUID("anchorHeadUUID");
+            this.entityData.set(DATA_ANCHOR_HEAD_UUID, Optional.of(uuid));
+
+            if (!isClosed()) {
+                relinkAnchorHead();
+            }
+        } else {
+            this.entityData.set(DATA_ANCHOR_HEAD_UUID, Optional.empty());
         }
     }
 
@@ -259,7 +265,10 @@ public class AnchorEntity extends WhaleWidgetEntity{
         tag.putBoolean("isClosed", isClosed());
         tag.putBoolean("isDown", isDown());
         tag.putBoolean("hasHitTheBottom", this.hasHitTheBottom);
-        tag.putFloat("sinkSpeed", this.sinkSpeed);
+        Vector3f headPos = this.entityData.get(DATA_HEAD_POSITION);
+        tag.putFloat("headPosX", headPos.x());
+        tag.putFloat("headPosY", headPos.y());
+        tag.putFloat("headPosZ", headPos.z());
 
         getAnchorHeadUUID().ifPresent(uuid -> tag.putUUID("anchorHeadUUID", uuid));
     }
@@ -274,6 +283,7 @@ public class AnchorEntity extends WhaleWidgetEntity{
         if (anchorHead != null) {
             anchorHead.discard();
         }
+        System.out.println("mama mia!");
         close();
     }
 }

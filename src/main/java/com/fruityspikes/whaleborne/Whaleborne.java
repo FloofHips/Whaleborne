@@ -53,27 +53,6 @@ public class Whaleborne
     // Define mod id in a common place for everything to reference
     public static final String MODID = "whaleborne";
     private static final Logger LOGGER = LogUtils.getLogger();
-    public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
-
-//    public static final RegistryObject<Block> EXAMPLE_BLOCK = BLOCKS.register("example_block", () -> new Block(BlockBehaviour.Properties.of().mapColor(MapColor.STONE)));
-//    // Creates a new BlockItem with the id "examplemod:example_block", combining the namespace and path
-//    public static final RegistryObject<Item> EXAMPLE_BLOCK_ITEM = ITEMS.register("example_block", () -> new BlockItem(EXAMPLE_BLOCK.get(), new Item.Properties()));
-//
-//    // Creates a new food item with the id "examplemod:example_id", nutrition 1 and saturation 2
-    //public static final RegistryObject<Item> EXAMPLE_ITEM = WBItemRegistry.ITEMS.register("example_item", () -> new Item(new Item.Properties().food(new FoodProperties.Builder()
-    //        .alwaysEat().nutrition(1).saturationMod(2f).build())));
-
-    // Creates a creative tab with the id "examplemod:example_tab" for the example item, that is placed after the combat tab
-    public static final RegistryObject<CreativeModeTab> WHALEBORNE = CREATIVE_MODE_TABS.register("whaleborne", () -> CreativeModeTab.builder()
-            .withTabsBefore(CreativeModeTabs.COMBAT)
-            .title(Component.translatable("itemGroup.whaleborne.whaleborne"))
-            .icon(() -> WBItemRegistry.SAIL.get().getDefaultInstance())
-            .displayItems((parameters, output) -> {
-                WBItemRegistry.ITEMS.getEntries().forEach((i) -> {
-                            output.accept(i.get().asItem());
-                        }
-                );
-            }).build());
 
     public Whaleborne()
     {
@@ -88,8 +67,8 @@ public class Whaleborne
         WBSoundRegistry.SOUND_EVENTS.register(modEventBus);
         WBLootModifierRegistry.LOOT_MODIFIER_SERIALIZERS.register(modEventBus);
         WBParticleRegistry.PARTICLE_TYPES.register(modEventBus);
+        WBCreativeTabsRegistry.CREATIVE_MODE_TABS.register(modEventBus);
         WhaleborneNetwork.init();
-        CREATIVE_MODE_TABS.register(modEventBus);
 
         MinecraftForge.EVENT_BUS.register(this);
 
@@ -100,14 +79,14 @@ public class Whaleborne
     private void commonSetup(final FMLCommonSetupEvent event)
     {
         // Some common setup code
-        LOGGER.info("HELLO FROM COMMON SETUP");
+        //LOGGER.info("HELLO FROM COMMON SETUP");
 
-        if (Config.logDirtBlock)
-            LOGGER.info("DIRT BLOCK >> {}", ForgeRegistries.BLOCKS.getKey(Blocks.DIRT));
+        //if (Config.logDirtBlock)
+        //    LOGGER.info("DIRT BLOCK >> {}", ForgeRegistries.BLOCKS.getKey(Blocks.DIRT));
 
-        LOGGER.info(Config.magicNumberIntroduction + Config.magicNumber);
+        //LOGGER.info(Config.magicNumberIntroduction + Config.magicNumber);
 
-        Config.items.forEach((item) -> LOGGER.info("ITEM >> {}", item.toString()));
+        //Config.items.forEach((item) -> LOGGER.info("ITEM >> {}", item.toString()));
     }
 
     // Add the example block item to the building blocks tab
