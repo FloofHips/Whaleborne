@@ -1549,7 +1549,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        AttributeInstance inst = this.getAttribute(ForgeMod.SWIM_SPEED.get());
+        AttributeInstance inst = this.getAttribute(getSwimSpeed());
         if (inst != null) {
             AttributeModifier old = inst.getModifier(SAIL_SPEED_MODIFIER_UUID);
             if (old != null) {
@@ -1565,6 +1565,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
     }
+
+    public static Attribute getSwimSpeed() {
+        return ForgeMod.SWIM_SPEED.isPresent() ? ForgeMod.SWIM_SPEED.get() : Attributes.MOVEMENT_SPEED;
+    }
+
     public int getSeatByEntity(Entity entity){
         if (entity != null) {
             for (int seatIndex = 0; seatIndex < 7; seatIndex++) {
