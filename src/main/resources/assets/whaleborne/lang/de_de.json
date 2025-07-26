@@ -1,0 +1,22 @@
+{
+  "itemGroup.whaleborne.whaleborne": "Last der Wale",
+  "block.whaleborne.barnacle": "Seepockenblock",
+  "item.whaleborne.barnacle": "Seepockenblock",
+  "subtitles.block.barnacle.organ": "Seepocken singen",
+  "item.whaleborne.sail": "Segel",
+  "item.whaleborne.anchor": "Anker",
+  "item.whaleborne.mast": "Mast",
+  "item.whaleborne.helm": "Steuerrad",
+  "item.whaleborne.cannon": "Kanone",
+  "menu.title.whaleborne.cannon": "Kanone",
+  "item.whaleborne.hullback_spawn_egg": "Hullback Spawn-Ei",
+  "entity.whaleborne.hullback": "Hullback",
+  "subtitles.entity.hullback.ambient": "Hullback singt",
+  "subtitles.entity.hullback.hurt": "Hullback verletzt",
+  "subtitles.entity.hullback.death": "Hullback stirbt",
+  "subtitles.entity.hullback.happy": "Hullback ist glücklich",
+  "subtitles.entity.hullback.tame": "Hullback singt freudig",
+  "subtitles.entity.hullback.mad": "Hullback stöhnt",
+  "subtitles.entity.hullback.swim": "Hullback schwimmt",
+  "subtitles.entity.hullback.breathe": "Hullback atmet"
+}

@@ -24,16 +24,7 @@ public class ClientEvents {
         Player player = Minecraft.getInstance().player;
 
         if (player != null && player.getRootVehicle() instanceof HullbackEntity hullback) {
-
-            double baseDistance = 8.0;
-            double verticalOffset = 1.5;
-
-            Vec3 offset = Vec3.directionFromRotation(
-                    event.getCamera().getXRot(),
-                    event.getCamera().getYRot()
-            ).scale(-baseDistance).add(0, verticalOffset, 0);
             double newRoll = Mth.lerp(0.5f, event.getRoll(), Mth.clamp((float) ((hullback.getPartYRot(3) - hullback.getPartYRot(0)) * 0.25f * Minecraft.getInstance().options.fovEffectScale().get()), -2.23f, 2.23f));
-
             event.setRoll((float) newRoll);
         }
     }

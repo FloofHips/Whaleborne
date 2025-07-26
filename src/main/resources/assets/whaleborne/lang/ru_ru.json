@@ -1,0 +1,27 @@
+{
+  "itemGroup.whaleborne.whaleborne": "Киторождённый",
+
+  "block.whaleborne.barnacle": "Балянус",
+  "item.whaleborne.barnacle": "Балянус",
+  "subtitles.block.barnacle.organ": "Пение балянуса",
+
+  "item.whaleborne.sail": "Парус",
+  "item.whaleborne.anchor": "Якорь",
+  "item.whaleborne.mast": "Мачта",
+  "item.whaleborne.helm": "Штурвал",
+  "item.whaleborne.cannon": "Пушка",
+
+  "menu.title.whaleborne.cannon": "Пушка",
+
+  "item.whaleborne.hullback_spawn_egg": "Яйцо призыва судноспина",
+  "entity.whaleborne.hullback": "Судноспин",
+
+  "subtitles.entity.hullback.ambient": "Судноспин поёт",
+  "subtitles.entity.hullback.hurt": "Судноспин ранен",
+  "subtitles.entity.hullback.death": "Судноспин погибает",
+  "subtitles.entity.hullback.happy": "Судноспин доволен",
+  "subtitles.entity.hullback.tame": "Судноспин счастливо поёт",
+  "subtitles.entity.hullback.mad": "Судноспин кряхтит",
+  "subtitles.entity.hullback.swim": "Судноспин плывёт",
+  "subtitles.entity.hullback.breathe": "Судноспин дышит"
+}

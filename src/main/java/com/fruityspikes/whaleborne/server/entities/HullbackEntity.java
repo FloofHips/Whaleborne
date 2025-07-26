@@ -77,6 +77,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private boolean immobile;
     private boolean tamedCoolDown;
     private Vec3 currentTarget;
+    public int stationaryTicks;
     public SimpleContainer inventory = new SimpleContainer(3) {
         @Override
         public void setChanged() {
@@ -1065,6 +1066,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public void tick() {
         super.tick();
 
+        if(stationaryTicks>0){
+            stopMoving();
+            stationaryTicks--;
+        }
+
+
         if(!this.isEyeInFluidType(Fluids.WATER.getFluidType()))
             mouthTarget = 1;
 
@@ -1646,6 +1653,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     @Override
     protected void removePassenger(Entity passenger) {
+        if(passenger instanceof Player)
+            stationaryTicks = 100;
         if(passenger.isRemoved())
             for (int i = 0; i < 7; i++) {
                 Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
@@ -1666,7 +1675,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     this.entityData.set(getSeatAccessor(i), Optional.empty());
                 }
             }
-            
+
             if (seatIndex >= 0 && seatIndex < seats.length) {
                 Vec3 seatPos = seats[seatIndex];
                 return new Vec3(seatPos.x, seatPos.y, seatPos.z);

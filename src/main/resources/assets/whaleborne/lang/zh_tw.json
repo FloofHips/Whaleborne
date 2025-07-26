@@ -1,0 +1,22 @@
+﻿{
+  "itemGroup.whaleborne.whaleborne": "鯨魚的負擔",
+  "block.whaleborne.barnacle": "藤壺塊",
+  "item.whaleborne.barnacle": "藤壺塊",
+  "subtitles.block.barnacle.organ": "藤壺唱歌",
+  "item.whaleborne.sail": "船帆",
+  "item.whaleborne.anchor": "船錨",
+  "item.whaleborne.mast": "桅杆",
+  "item.whaleborne.helm": "船舵",
+  "item.whaleborne.cannon": "加農砲",
+  "menu.title.whaleborne.cannon": "加農砲",
+  "item.whaleborne.hullback_spawn_egg": "座船鯨 生怪蛋",
+  "entity.whaleborne.hullback": "座船鯨",
+  "subtitles.entity.hullback.ambient": "座船鯨吟唱",
+  "subtitles.entity.hullback.hurt": "座船鯨受傷",
+  "subtitles.entity.hullback.death": "座船鯨死亡",
+  "subtitles.entity.hullback.happy": "座船鯨愉悅",
+  "subtitles.entity.hullback.tame": "座船鯨高興地吟唱",
+  "subtitles.entity.hullback.mad": "座船鯨呻吟聲",
+  "subtitles.entity.hullback.swim": "座船鯨漫游",
+  "subtitles.entity.hullback.breathe": "座船鯨喘氣"
+}
