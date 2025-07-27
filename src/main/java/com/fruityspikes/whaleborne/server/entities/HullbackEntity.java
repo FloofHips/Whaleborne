@@ -4,10 +4,7 @@ import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import com.fruityspikes.whaleborne.network.SyncHullbackDirtPacket;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
-import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
-import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
-import com.fruityspikes.whaleborne.server.registries.WBParticleRegistry;
-import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
+import com.fruityspikes.whaleborne.server.registries.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.Registries;
@@ -15,6 +12,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
@@ -29,6 +28,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.*;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
@@ -48,6 +48,8 @@ import net.minecraft.world.item.*;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -55,6 +57,7 @@ import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.entity.PartEntity;
@@ -199,7 +202,65 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             initClientDirt();
 
         this.stationaryTicks = 60;
-        System.out.println(getPassengers());
+    }
+
+
+    @Override
+    public boolean checkSpawnRules(LevelAccessor level, MobSpawnType spawnReason) {
+        return checkHullbackSpawnRules((EntityType<HullbackEntity>) this.getType(), level, spawnReason, this.blockPosition(), level.getRandom());
+    }
+
+    public static boolean checkHullbackSpawnRules(EntityType<HullbackEntity> type, LevelAccessor level, MobSpawnType spawnType, BlockPos pos, RandomSource random) {
+        if (!WaterAnimal.checkSurfaceWaterAnimalSpawnRules(type, level, spawnType, pos, random)) {
+            return false;
+        }
+
+        if (!hasSpawnSpace(level, pos)) {
+            return false;
+        }
+
+        if (hasNearbyHullbacks(level, pos)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static boolean hasSpawnSpace(LevelAccessor level, BlockPos pos) {
+
+        int checkRadius = 10;
+        int heightCheck = 6;
+
+        AABB spawnCheckArea = new AABB(pos).inflate(checkRadius, heightCheck, checkRadius);
+
+        BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
+        for (int x = (int)spawnCheckArea.minX; x <= spawnCheckArea.maxX; x++) {
+            for (int y = (int)spawnCheckArea.minY; y <= spawnCheckArea.maxY; y++) {
+                for (int z = (int)spawnCheckArea.minZ; z <= spawnCheckArea.maxZ; z++) {
+                    mutablePos.set(x, y, z);
+                    BlockState state = level.getBlockState(mutablePos);
+                    if (state.isSolid() && state.getCollisionShape(level, mutablePos) != Shapes.empty()) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static boolean hasNearbyHullbacks(LevelAccessor level, BlockPos pos) {
+        AABB checkArea = new AABB(pos).inflate(32, 16, 32);
+        return !level.getEntitiesOfClass(
+                HullbackEntity.class,
+                checkArea,
+                e -> e.isAlive() && !e.isTamed()
+        ).isEmpty();
+    }
+
+    @Override
+    public Packet<ClientGamePacketListener> getAddEntityPacket() {
+        return NetworkHooks.getEntitySpawningPacket(this);
     }
 
     private void initClientDirt() {
@@ -1208,7 +1269,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
     }
 
-    private boolean hasAnchorDown() {
+    public boolean hasAnchorDown() {
         for (Entity passenger : getPassengers()) {
             if (passenger instanceof AnchorEntity anchor) {
                 if (anchor.isDown()) return true;
@@ -1739,12 +1800,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             if (!(passenger instanceof Player)) {
                 if(!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())){
                     if(passenger instanceof SailEntity){
+                        passenger.yRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), oldPartYRot[partIndex]) + offset);
+                        passenger.xRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), oldPartXRot[partIndex]));
                         passenger.setYRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]) + offset);
                         passenger.setXRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
                     }
                     else {
-                        passenger.yRotO = passenger.getYRot();
-                        passenger.xRotO = passenger.getXRot();
+                        passenger.yRotO = oldPartYRot[partIndex];
+                        passenger.xRotO = oldPartXRot[partIndex];
                         passenger.setYRot((partYRot[partIndex]) + offset);
                         passenger.setXRot(partXRot[partIndex]);
                     }

@@ -21,11 +21,6 @@ public class RideableWhaleWidgetEntity extends WhaleWidgetEntity{
     @Override
     public void tick() {
         super.tick();
-        if(this.isVehicle()){
-            if(this.getFirstPassenger() instanceof Player player){
-
-            }
-        }
     }
 
     @Nullable

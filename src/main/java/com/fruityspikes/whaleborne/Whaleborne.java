@@ -5,6 +5,8 @@ import com.fruityspikes.whaleborne.client.menus.HullbackScreen;
 import com.fruityspikes.whaleborne.client.models.*;
 import com.fruityspikes.whaleborne.client.renderers.*;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
+import com.fruityspikes.whaleborne.server.entities.AnchorEntity;
+import com.fruityspikes.whaleborne.server.entities.CannonEntity;
 import com.fruityspikes.whaleborne.server.entities.HelmEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.particles.WBSmokeParticle;
@@ -12,11 +14,14 @@ import com.fruityspikes.whaleborne.server.particles.WBSmokeProvider;
 import com.fruityspikes.whaleborne.server.registries.*;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.particle.SmokeParticle;
 import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.CreativeModeTab;
@@ -25,9 +30,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.EntityRenderersEvent;
-import net.minecraftforge.client.event.RegisterParticleProvidersEvent;
-import net.minecraftforge.client.event.ViewportEvent;
+import net.minecraftforge.client.event.*;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
@@ -54,6 +57,7 @@ public class Whaleborne
     public static final String MODID = "whaleborne";
     private static final Logger LOGGER = LogUtils.getLogger();
 
+    public static final ResourceLocation ANCHOR_GUI = new ResourceLocation(Whaleborne.MODID, "textures/gui/anchor.png");
     public Whaleborne()
     {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
@@ -108,6 +112,44 @@ public class Whaleborne
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static class ClientModEvents
     {
+        @SubscribeEvent
+        public static void registerOverlays(RegisterGuiOverlaysEvent event) {
+            event.registerAboveAll("whaleborne_anchor_overlay", (gui, poseStack, partialTick, width, height) -> {
+                Player player = Minecraft.getInstance().player;
+
+                if (player.getVehicle() instanceof HelmEntity) {
+                    if (player.getRootVehicle() instanceof HullbackEntity hullback) {
+                        for (Entity passenger : hullback.getPassengers()) {
+                            if (passenger instanceof AnchorEntity) {
+                                    int j = width / 2 - 12;
+                                    int k = height - 28 - 13;
+
+                                    poseStack.pose().pushPose();
+                                    poseStack.blit(ANCHOR_GUI, j, k, 0, 0, hullback.hasAnchorDown() ? 24 : 0, 24, 24, 24, 48);
+                                    poseStack.pose().popPose();
+                                    break;
+                            }
+                        }
+                    }
+                }
+            });
+            //event.registerAboveAll("whaleborne_cannon_overlay", (gui, poseStack, partialTick, width, height) -> {
+            //    Player player = Minecraft.getInstance().player;
+//
+            //    if (player.getVehicle() instanceof CannonEntity cannonEntity) {
+//
+            //        int j = width / 2;
+            //        int k = height / 2 - 8;
+//
+            //        poseStack.pose().pushPose();
+            //        poseStack.renderItem(cannonEntity.inventory.getItem(0), j - 32, k);
+            //        poseStack.renderItem(cannonEntity.inventory.getItem(1), j + 16, k);
+            //       // poseStack.blit(ANCHOR_GUI, j, k, 0, 0, hullback.hasAnchorDown() ? 24 : 0, 24, 24, 24, 48);
+            //        poseStack.pose().popPose();
+            //    }
+            //});
+        }
+
         @SubscribeEvent
         public static void onClientSetup(FMLClientSetupEvent event)
         {

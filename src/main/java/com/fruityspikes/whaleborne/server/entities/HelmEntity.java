@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.player.Player;
@@ -68,9 +69,24 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     public void handleStartJump(int i) {
         this.getVehicle().playSound(WBSoundRegistry.ORGAN.get(), 2, 2);
         this.getVehicle().playSound(WBSoundRegistry.ORGAN.get(), 1.5f, 1.5f);
+
+        boolean hasAnchorDown = false;
+        if(this.getVehicle()!=null && this.getVehicle() instanceof HullbackEntity hullback){
+            hasAnchorDown = hullback.hasAnchorDown();
+        }
         for (Entity passenger : this.getVehicle().getPassengers()) {
             if (passenger instanceof AnchorEntity anchor) {
-                anchor.toggleDown();
+                if (hasAnchorDown) {
+                    if (anchor.isDown()) {
+                        this.getVehicle().playSound(SoundEvents.CHAIN_PLACE, 1, 0);
+                        anchor.toggleDown();
+                    }
+                } else {
+                    if (!anchor.isDown() && anchor.isClosed()) {
+                        this.getVehicle().playSound(SoundEvents.CHAIN_BREAK, 1, 2);
+                        anchor.toggleDown();
+                    }
+                }
             }
         }
     }

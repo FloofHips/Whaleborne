@@ -54,21 +54,11 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
         }
     };
 
-    private final Map<Item, EntityType> itemToProjectileMap = new HashMap<>();
-
     public CannonEntity(EntityType<?> entityType, Level level) {
         super(entityType, level, WBItemRegistry.CANNON.get());
         cannonXRot = this.getXRot();
         this.inventory.addListener(this);
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
-
-        itemToProjectileMap.put(Items.ENDER_PEARL, EntityType.ENDER_PEARL);
-        itemToProjectileMap.put(Items.ARROW, EntityType.ARROW);
-        itemToProjectileMap.put(Items.SPECTRAL_ARROW, EntityType.SPECTRAL_ARROW);
-        itemToProjectileMap.put(Items.POTION, EntityType.POTION);
-        itemToProjectileMap.put(Items.TRIDENT, EntityType.TRIDENT);
-        itemToProjectileMap.put(Items.TNT, EntityType.TNT);
-
     }
 
     @Override
@@ -222,13 +212,6 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                         (LivingEntity) this.getVehicle());
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
-                        (float) power / 50);
-            }
-            else if(ammo.is(Items.FIRE_CHARGE)){
-                projectile = new LargeFireball(
-                        this.level(), (LivingEntity) this.getVehicle(), this.getX(), this.getY(), this.getZ(), power);
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.BLAZE_SHOOT, SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);
             }
             else if(ammo.is(Items.ARROW)){

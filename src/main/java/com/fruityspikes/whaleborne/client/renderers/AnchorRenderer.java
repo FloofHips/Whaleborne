@@ -66,6 +66,8 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
 
         poseStack.translate(tip.x, tip.y - 0.2, tip.z);
 
+        poseStack.mulPose(Axis.XP.rotationDegrees(180f));
+
         VertexConsumer vertexConsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(ANCHOR_HEAD_TEXTURE));
         anchorHeadModel.renderToBuffer(
                 poseStack,

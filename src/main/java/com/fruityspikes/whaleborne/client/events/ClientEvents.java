@@ -5,20 +5,19 @@ import com.fruityspikes.whaleborne.server.entities.HelmEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.event.RenderLevelStageEvent;
-import net.minecraftforge.client.event.RenderPlayerEvent;
-import net.minecraftforge.client.event.ViewportEvent;
+import net.minecraftforge.client.event.*;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = Whaleborne.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ClientEvents {
-
     @SubscribeEvent
     public static void onCameraSetup(ViewportEvent.ComputeCameraAngles event) {
         Player player = Minecraft.getInstance().player;
@@ -28,7 +27,6 @@ public class ClientEvents {
             event.setRoll((float) newRoll);
         }
     }
-
     @SubscribeEvent
     public static void onFovUpdate(ViewportEvent.ComputeFov event) {
         Player player = Minecraft.getInstance().player;
