@@ -36,8 +36,8 @@ public class AnchorModel<T extends AnchorEntity> extends EntityModel<T> {
     }
     @Override
     public void setupAnim(T t, float v, float v1, float v2, float v3, float v4) {
-        if(t instanceof AnchorEntity && t.getHeadPos()!=null)
-            spool.xRot = (float) t.position().distanceTo(new Vec3(t.getHeadPos().x, t.getHeadPos().y, t.getHeadPos().z));
+        if(t.getTargetPos().isPresent())
+            spool.xRot = (float) t.position().distanceTo(new Vec3(t.getAnchorRenderPosition(v).x, t.getAnchorRenderPosition(v).y, t.getAnchorRenderPosition(v).z));
     }
 
     @Override

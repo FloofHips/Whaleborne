@@ -42,14 +42,14 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
 
         if (entity instanceof AnchorEntity anchor){
 
-            if(!anchor.isClosed() && anchor.getHeadPos() != null){
-                renderChain(anchor, poseStack, buffer, packedLight, true);
-                renderChain(anchor, poseStack, buffer, packedLight, false);
+            if(anchor.isDeployed() && anchor.getTargetPos().isPresent()){
+                renderChain(anchor, poseStack, partialTick, buffer, packedLight, true);
+                renderChain(anchor, poseStack, partialTick, buffer, packedLight, false);
             }
         }
     }
 
-    public void renderChain(AnchorEntity anchor, PoseStack poseStack, MultiBufferSource buffer, int packedLight, boolean left){
+    public void renderChain(AnchorEntity anchor, PoseStack poseStack, float partialTick, MultiBufferSource buffer, int packedLight, boolean left){
         poseStack.pushPose();
 
         PoseStack.Pose pose = poseStack.last();
@@ -58,7 +58,7 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
         Vec3 base = Vec3.ZERO.add(0, 1,0);
 
         Vec3 entityPos = anchor.position();
-        Vec3 tip = new Vec3(entityPos.subtract(anchor.getHeadPos().x, anchor.getHeadPos().y, anchor.getHeadPos().z).toVector3f()).add(0, -2,0).multiply(-1, -1, -1);;
+        Vec3 tip = new Vec3(entityPos.subtract(anchor.getAnchorRenderPosition(partialTick).x, anchor.getAnchorRenderPosition(partialTick).y, anchor.getAnchorRenderPosition(partialTick).z).toVector3f()).add(0, -2,0).multiply(-1, -1, -1);;
 
         Vec3 direction = tip.subtract(base);
 
@@ -111,7 +111,7 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
     @Override
     public boolean shouldRender(Entity livingEntity, Frustum camera, double camX, double camY, double camZ) {
         if(livingEntity instanceof AnchorEntity anchor) {
-            if (!anchor.isClosed() && anchor.getHeadPos() != null) {
+            if (anchor.isDeployed() && anchor.getTargetPos().isPresent()) {
                 return true;
             }
         }

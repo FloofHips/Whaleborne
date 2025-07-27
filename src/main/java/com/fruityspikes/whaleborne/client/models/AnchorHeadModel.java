@@ -7,8 +7,9 @@ import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.model.geom.builders.*;
+import net.minecraft.world.entity.Entity;
 
-public class AnchorHeadModel<T extends AnchorHeadEntity> extends EntityModel<T> {
+public class AnchorHeadModel<T extends Entity> extends EntityModel<T> {
     private final ModelPart bb_main;
 
     public AnchorHeadModel(ModelPart root) {

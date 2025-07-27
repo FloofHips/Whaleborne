@@ -1,289 +1,205 @@
 package com.fruityspikes.whaleborne.server.entities;
 
-import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
-import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
-import com.fruityspikes.whaleborne.server.registries.WBParticleRegistry;
-import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
+import com.fruityspikes.whaleborne.server.registries.*;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.syncher.EntityDataAccessor;
-import net.minecraft.network.syncher.EntityDataSerializers;
-import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.network.syncher.*;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.*;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3f;
 
-import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
-public class AnchorEntity extends WhaleWidgetEntity{
-    public AnchorHeadEntity anchorHead;
-    private float sinkSpeed = 0.05f;
-    boolean hasHitTheBottom = false;
-    int coolDown = 0;
+public class AnchorEntity extends WhaleWidgetEntity {
+    private static final EntityDataAccessor<Boolean> DEPLOYED = SynchedEntityData.defineId(AnchorEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Boolean> LOCKED = SynchedEntityData.defineId(AnchorEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Optional<BlockPos>> TARGET_POS = SynchedEntityData.defineId(AnchorEntity.class, EntityDataSerializers.OPTIONAL_BLOCK_POS);
+    private static final EntityDataAccessor<Float> PROGRESS = SynchedEntityData.defineId(AnchorEntity.class, EntityDataSerializers.FLOAT);
 
-    private static final EntityDataAccessor<Vector3f> DATA_HEAD_POSITION = SynchedEntityData.defineId(AnchorEntity.class, EntityDataSerializers.VECTOR3);
-    private static final EntityDataAccessor<Boolean> DATA_IS_CLOSED = SynchedEntityData.defineId(AnchorEntity.class, EntityDataSerializers.BOOLEAN);
-    private static final EntityDataAccessor<Boolean> DATA_IS_DOWN = SynchedEntityData.defineId(AnchorEntity.class, EntityDataSerializers.BOOLEAN);
-    private static final EntityDataAccessor<Optional<UUID>> DATA_ANCHOR_HEAD_UUID = SynchedEntityData.defineId(AnchorEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private BlockPos startPos;
+    private int cooldown = 0;
+    private static final float DEPLOY_SPEED = 0.02f;
 
-    public AnchorEntity(EntityType<?> entityType, Level level) {
-        super(entityType, level, WBItemRegistry.ANCHOR.get());
+    public AnchorEntity(EntityType<?> type, Level level) {
+        super(type, level, WBItemRegistry.ANCHOR.get());
     }
 
-    public boolean isClosed() {
-        return this.entityData.get(DATA_IS_CLOSED);
-    }
-
-    public boolean isDown() {
-        return this.entityData.get(DATA_IS_DOWN);
-    }
-    public Vector3f getHeadPos(){
-        return this.entityData.get(DATA_HEAD_POSITION);
-    }
     @Override
     protected void defineSynchedData() {
         super.defineSynchedData();
-        this.entityData.define(DATA_IS_CLOSED, true);
-        this.entityData.define(DATA_IS_DOWN, false);
-        this.entityData.define(DATA_ANCHOR_HEAD_UUID, Optional.empty());
-        this.entityData.define(DATA_HEAD_POSITION, new Vector3f(0, 0, 0));
-    }
-
-    @Override
-    public boolean canRiderInteract() {
-        return true;
+        entityData.define(DEPLOYED, false);
+        entityData.define(LOCKED, false);
+        entityData.define(TARGET_POS, Optional.empty());
+        entityData.define(PROGRESS, 0f);
     }
 
     @Override
     public void tick() {
         super.tick();
+        if (cooldown > 0) cooldown--;
 
-        if (!isClosed() && getVehicle() != null && getVehicle() instanceof HullbackEntity hullback) {
-            //hullback.setPos(getVehicle().xo, getVehicle().yo, getVehicle().zo);
+        if (isLocked() && getVehicle() instanceof HullbackEntity hullback) {
             hullback.stopMoving();
         }
 
-        if (this.coolDown > 0) {
-            this.coolDown--;
-        }
-
-        if (!this.level().isClientSide) {
-            handleServerTick();
-            updateHeadPosition();
+        if (isDeployed()) {
+            updateAnchorMovement();
         }
     }
 
-    private void handleServerTick() {
-        if (!isClosed() && this.anchorHead == null) {
-            relinkAnchorHead();
-        }
+    private void updateAnchorMovement() {
+        Optional<BlockPos> targetOpt = entityData.get(TARGET_POS);
+        if (targetOpt.isEmpty()) return;
 
-        if (this.anchorHead != null && getVehicle() != null) {
-            handleAnchorMovement();
-        }
-    }
+        BlockPos target = targetOpt.get();
+        float progress = entityData.get(PROGRESS);
 
-    private void relinkAnchorHead() {
-        getAnchorHeadUUID().ifPresent(uuid -> {
-            List<Entity> entities = this.level().getEntities(this,
-                    this.getBoundingBox().inflate(50, 100, 50),
-                    entity -> entity instanceof AnchorHeadEntity
-            );
+        if (progress < 1.0f && isDeployed() && !isLocked()) {
+            float newProgress = Math.min(progress + DEPLOY_SPEED, 1.0f);
+            entityData.set(PROGRESS, newProgress);
 
-            if (!entities.isEmpty()) {
-                this.anchorHead = (AnchorHeadEntity) entities.get(0);
-            } else {
-                // couldn't find anchor head
-                System.out.println("uh oh");
-                close();
+            if (tickCount % 5 == 0) {
+                playChainSound();
             }
-        });
+
+            if (newProgress >= 1.0f) {
+                setLocked(true);
+                playAnchorHitEffects();
+            }
+        } else if (progress > 0f && !isDeployed()) {
+            float newProgress = Math.max(progress - 0.01f, 0f);
+            entityData.set(PROGRESS, newProgress);
+
+            if (tickCount % 5 == 0) {
+                playChainSound();
+            }
+        }
     }
 
-    private void handleAnchorMovement() {
-        if (isDown()) {
-            if (!this.level().getBlockState(BlockPos.containing(this.anchorHead.position().add(0, 1, 0))).isSolid()) {
-                this.sinkSpeed -= 0.5f;
-                playSound(SoundEvents.CHAIN_STEP, 1.0f, 1.0f);
-                this.anchorHead.moveTo(this.position().add(0, this.sinkSpeed, 0));
-                this.hasHitTheBottom = false;
-            } else if (!this.hasHitTheBottom) {
-                playSound(SoundEvents.ANVIL_LAND, 1.0f, 0.9f);
+    public Vec3 getAnchorRenderPosition(float partialTicks) {
+        Optional<BlockPos> targetOpt = entityData.get(TARGET_POS);
+        if (targetOpt.isEmpty()) return null;
 
-                if(this.getVehicle() != null && this.getVehicle() instanceof HullbackEntity hullback){
-                    for (int side : new int[]{-1, 1}) {
-                        Vec3 particlePos = hullback.getPartPos(1).add(new Vec3(3.5*side, 2, 0).yRot(hullback.getPartYRot(1)));
-                        double x = particlePos.x;
-                        double y = particlePos.y;
-                        double z = particlePos.z;
+        BlockPos target = targetOpt.get();
+        float progress = Mth.lerp(partialTicks,
+                entityData.get(PROGRESS) - DEPLOY_SPEED,
+                entityData.get(PROGRESS));
 
-                        if (this.level() instanceof ServerLevel serverLevel) {
-                            serverLevel.sendParticles(
-                                    WBParticleRegistry.SMOKE.get(),
-                                    x,
-                                    y,
-                                    z,
-                                    20,
-                                    0.2,
-                                    0.2,
-                                    0.2,
-                                    0.02
-                            );
-                        }
-                    }
-                    hullback.playSound(WBSoundRegistry.HULLBACK_MAD.get());
-                }
+        progress = Mth.clamp(progress, 0, 1);
+        Vec3 start = position();
+        Vec3 end = Vec3.atBottomCenterOf(target);
 
-                this.hasHitTheBottom = true;
-            }
-        } else {
-            this.sinkSpeed += 0.3f;
-            playSound(SoundEvents.CHAIN_STEP, 1.0f, 1.0f);
-            this.anchorHead.moveTo(this.position().add(0, this.sinkSpeed, 0));
-        }
-
-        this.anchorHead.setXRot(Math.min(0, -90 + (float) this.position().distanceTo(this.anchorHead.position()) * 30));
-        this.anchorHead.setYRot(this.getVehicle().getYRot());
-
-        if (this.tickCount > 20 && (this.position().y < this.anchorHead.position().y)) {
-            System.out.println("eyo");
-            close();
-        }
+        return start.add(end.subtract(start).scale(progress));
     }
 
     @Override
     public InteractionResult interact(Player player, InteractionHand hand) {
-        if (this.coolDown <= 0) {
-            toggleDown();
+        if (cooldown <= 0 && !level().isClientSide) {
+            toggleAnchor();
             return InteractionResult.SUCCESS;
         }
         return InteractionResult.PASS;
     }
 
-    public void toggleDown() {
-        if (isClosed()) {
-            if (this.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(
-                        WBParticleRegistry.SMOKE.get(),
-                        this.getX(),
-                        this.getY() + 1,
-                        this.getZ(),
-                        5,
-                        0.1,
-                        0.1,
-                        0.1,
-                        0.02
-                );
-            }
-            deployAnchor();
+    public void toggleAnchor() {
+        if (isDeployed()) {
+            retractAnchor();
         } else {
-            toggleAnchorState();
+            deployAnchor();
         }
-        this.coolDown = 20;
+        cooldown = 10;
     }
-    private void updateHeadPosition() {
-        if (!level().isClientSide && anchorHead != null) {
-            this.entityData.set(DATA_HEAD_POSITION, new Vector3f((float) anchorHead.getX(), (float) anchorHead.getY(), (float) anchorHead.getZ()));
-        } else if (anchorHead == null) {
-            this.entityData.set(DATA_HEAD_POSITION, new Vector3f((float)this.getX(), (float)this.getY(), (float)this.getZ()));
-        }
-    }
+
     private void deployAnchor() {
-        this.entityData.set(DATA_IS_CLOSED, false);
-        this.entityData.set(DATA_IS_DOWN, true);
-
-        double distanceInFront = -1.0;
-        double x = this.getX() + distanceInFront * Math.sin(Math.toRadians(-this.getYRot()));
-        double z = this.getZ() + distanceInFront * Math.cos(Math.toRadians(this.getYRot()));
-
-        this.anchorHead = new AnchorHeadEntity(WBEntityRegistry.ANCHOR_HEAD.get(), this.level());
-        this.anchorHead.moveTo(x, this.getY() - 0.2, z, this.getYRot(), -90);
-        this.level().addFreshEntity(this.anchorHead);
-
-        this.entityData.set(DATA_ANCHOR_HEAD_UUID, Optional.of(this.anchorHead.getUUID()));
+        BlockPos seafloorPos = findSeafloorPosition();
+        entityData.set(TARGET_POS, Optional.of(seafloorPos));
+        entityData.set(PROGRESS, 0f);
+        setDeployed(true);
+        setLocked(false);
         playSound(SoundEvents.CHAIN_PLACE, 1.0f, 0.9f);
     }
 
-    private void toggleAnchorState() {
-        boolean newDownState = !isDown();
-        this.entityData.set(DATA_IS_DOWN, newDownState);
-        playSound(newDownState ? SoundEvents.CHAIN_PLACE : SoundEvents.CHAIN_BREAK, 1.0f, 1.0f);
+    private void retractAnchor() {
+        setDeployed(false);
+        setLocked(false);
+        playSound(SoundEvents.CHAIN_BREAK, 1.0f, 1.0f);
+
+        if (getVehicle() instanceof HullbackEntity hullback) {
+            hullback.stationaryTicks = 100;
+        }
     }
 
-    public void close() {
-        if (this.anchorHead != null) {
-            this.anchorHead.discard();
-            this.anchorHead = null;
+    private BlockPos findSeafloorPosition() {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(
+                (int)getX(),
+                (int)getY(),
+                (int)getZ()
+        );
+
+        while (pos.getY() > level().getMinBuildHeight() &&
+                !level().getBlockState(pos).isSolid()) {
+            pos.move(Direction.DOWN);
         }
 
-        this.entityData.set(DATA_IS_CLOSED, true);
-        this.entityData.set(DATA_IS_DOWN, false);
-        this.entityData.set(DATA_ANCHOR_HEAD_UUID, Optional.empty());
-        this.entityData.set(DATA_HEAD_POSITION,
-                new Vector3f((float)this.getX(),
-                        (float)this.getY(),
-                        (float)this.getZ()));
-        playSound(SoundEvents.NETHERITE_BLOCK_HIT, 0.7f, 1.2f);
+        return pos.immutable();
     }
+
+    private void playAnchorHitEffects() {
+        playSound(SoundEvents.ANVIL_LAND, 1.0f, 0.9f);
+        if (level() instanceof ServerLevel serverLevel) {
+            serverLevel.sendParticles(
+                    WBParticleRegistry.SMOKE.get(),
+                    getX(), getY(), getZ(),
+                    20, 0.2, 0.2, 0.2, 0.02
+            );
+        }
+    }
+
+    private void playChainSound() {
+        playSound(SoundEvents.CHAIN_STEP, 0.5f, 1.0f + random.nextFloat() * 0.2f);
+    }
+
+    public boolean isDeployed() { return entityData.get(DEPLOYED); }
+    public boolean isLocked() { return entityData.get(LOCKED); }
+    public Optional<BlockPos> getTargetPos() { return entityData.get(TARGET_POS); }
+    public float getProgress() { return entityData.get(PROGRESS); }
+
+    private void setDeployed(boolean deployed) { entityData.set(DEPLOYED, deployed); }
+    private void setLocked(boolean locked) { entityData.set(LOCKED, locked); }
 
     @Override
     protected void readAdditionalSaveData(CompoundTag tag) {
-        this.entityData.set(DATA_IS_CLOSED, tag.getBoolean("isClosed"));
-        this.entityData.set(DATA_IS_DOWN, tag.getBoolean("isDown"));
-        float headX = tag.getFloat("headPosX");
-        float headY = tag.getFloat("headPosY");
-        float headZ = tag.getFloat("headPosZ");
-        this.entityData.set(DATA_HEAD_POSITION, new Vector3f(headX, headY, headZ));
+        setDeployed(tag.getBoolean("Deployed"));
+        setLocked(tag.getBoolean("Locked"));
+        entityData.set(PROGRESS, tag.getFloat("Progress"));
 
-        this.hasHitTheBottom = tag.getBoolean("hasHitTheBottom");
-
-        if (tag.hasUUID("anchorHeadUUID")) {
-            UUID uuid = tag.getUUID("anchorHeadUUID");
-            this.entityData.set(DATA_ANCHOR_HEAD_UUID, Optional.of(uuid));
-
-            if (!isClosed()) {
-                relinkAnchorHead();
-            }
-        } else {
-            this.entityData.set(DATA_ANCHOR_HEAD_UUID, Optional.empty());
+        if (tag.contains("TargetX")) {
+            BlockPos pos = new BlockPos(
+                    tag.getInt("TargetX"),
+                    tag.getInt("TargetY"),
+                    tag.getInt("TargetZ")
+            );
+            entityData.set(TARGET_POS, Optional.of(pos));
         }
     }
 
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
-        tag.putBoolean("isClosed", isClosed());
-        tag.putBoolean("isDown", isDown());
-        tag.putBoolean("hasHitTheBottom", this.hasHitTheBottom);
-        Vector3f headPos = this.entityData.get(DATA_HEAD_POSITION);
-        tag.putFloat("headPosX", headPos.x());
-        tag.putFloat("headPosY", headPos.y());
-        tag.putFloat("headPosZ", headPos.z());
+        tag.putBoolean("Deployed", isDeployed());
+        tag.putBoolean("Locked", isLocked());
+        tag.putFloat("Progress", getProgress());
 
-        getAnchorHeadUUID().ifPresent(uuid -> tag.putUUID("anchorHeadUUID", uuid));
-    }
-
-    public Optional<UUID> getAnchorHeadUUID() {
-        return this.entityData.get(DATA_ANCHOR_HEAD_UUID);
-    }
-
-    @Override
-    public void remove(RemovalReason reason) {
-        super.remove(reason);
-        if (anchorHead != null) {
-            anchorHead.discard();
-        }
-        System.out.println("mama mia!");
-        close();
+        getTargetPos().ifPresent(pos -> {
+            tag.putInt("TargetX", pos.getX());
+            tag.putInt("TargetY", pos.getY());
+            tag.putInt("TargetZ", pos.getZ());
+        });
     }
 }

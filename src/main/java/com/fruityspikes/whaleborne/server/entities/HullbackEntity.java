@@ -17,6 +17,7 @@ import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
+import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -196,6 +197,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             initDirt();
         else
             initClientDirt();
+
+        this.stationaryTicks = 60;
+        System.out.println(getPassengers());
     }
 
     private void initClientDirt() {
@@ -327,13 +331,15 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
     }
     protected void updateContainerEquipment() {
-        //if (!this.level().isClientSide) {
-            //if (this.inventory != null) {
-                this.entityData.set(DATA_CROWN_ID, this.inventory.getItem(INV_SLOT_CROWN));
-                this.entityData.set(DATA_ARMOR_COUNT, this.inventory.getItem(INV_SLOT_ARMOR).getCount());
-                this.setFlag(4, !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty());
-            //}
-        //}
+        if (!level().isClientSide) {
+            ItemStack crown = this.inventory.getItem(INV_SLOT_CROWN);
+            int armorCount = this.inventory.getItem(INV_SLOT_ARMOR).getCount();
+            boolean hasSaddle = !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty();
+
+            this.entityData.set(DATA_CROWN_ID, crown);
+            this.entityData.set(DATA_ARMOR_COUNT, armorCount);
+            this.setFlag(4, hasSaddle);
+        }
     }
     public void containerChanged(Container invBasic) {
         ItemStack itemstack = this.getArmor();
@@ -748,10 +754,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             return InteractionResult.SUCCESS;
         }
 
-        //System.out.println(level() + ": Seat Data: ");
-        //for(int i = 0; i<7 ; i++){
-        //    System.out.println("Seat " + i + ": " + this.entityData.get(getSeatAccessor(i)));
-        //}
+        System.out.println(level() + ": Seat Data: ");
+        for(int i = 0; i<7 ; i++){
+            System.out.println("Seat " + i + ": " + this.entityData.get(getSeatAccessor(i)));
+        }
+
+        System.out.println(getPassengers());
 
         return InteractionResult.SUCCESS;
     }
@@ -932,6 +940,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                             SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
                             SoundSource.PLAYERS, 2.0F, 1.0F);
                         playSound(WBSoundRegistry.HULLBACK_TAME.get());
+
                     }
                     this.updateContainerEquipment();
                     return InteractionResult.SUCCESS;
@@ -1075,21 +1084,24 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if(!this.isEyeInFluidType(Fluids.WATER.getFluidType()))
             mouthTarget = 1;
 
-        if(!isSaddled()){
+        if(!isSaddled() && !level().isClientSide){
             if(!getPassengers().isEmpty())
                 ejectPassengers();
         }
         else {
-            if(this.getArmorProgress() < 0.5 && !getPassengers().isEmpty())
+            if(getArmorProgress() < 0.45f &&
+                    getInventory().getItem(INV_SLOT_ARMOR).getCount() < 64 &&
+                    !level().isClientSide) {
                 ejectPassengers();
+            }
         }
 
         setOldPosAndRots();
 
-        if(!hasAnchorDown()){
-            updatePartPositions();
-            rotatePassengers();
-        }
+        //if(this.tickCount > 60 && !hasAnchorDown()){
+        updatePartPositions();
+        rotatePassengers();
+        //}
 
         if(this.getSubEntities()[1].isEyeInFluidType(Fluids.WATER.getFluidType()) && this.tickCount % 80 == 0)
             this.heal(0.25f);
@@ -1199,7 +1211,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private boolean hasAnchorDown() {
         for (Entity passenger : getPassengers()) {
             if (passenger instanceof AnchorEntity anchor) {
-                if (anchor.isDown()) return true;
+                if (anchor.isLocked()) return true;
                 break;
             }
         }
@@ -1613,6 +1625,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
     public void assignSeat(int seatIndex, @Nullable Entity passenger) {
         this.entityData.set(getSeatAccessor(seatIndex), Optional.of(passenger.getUUID()));
+        if (this.level() instanceof ServerLevel) {
+            PacketDistributor.TRACKING_ENTITY.with(() -> this)
+                    .send(new ClientboundSetPassengersPacket(this));
+        }
     }
 
     public Optional<Entity> getPassengerForSeat(int seatIndex) {
@@ -1644,6 +1660,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     protected void addPassenger(Entity passenger) {
         super.addPassenger(passenger);
+        //if (!this.level().isClientSide) {
+        //    // Update seat assignment
+        //    int seat = findFreeSeat();
+        //    if (seat != -1) {
+        //        assignSeat(seat, passenger);
+        //    }
+            // Sync immediately
+            if (this.level() instanceof ServerLevel) {
+                 PacketDistributor.TRACKING_ENTITY.with(() -> this)
+                        .send(new ClientboundSetPassengersPacket(this));
+            }
+        }
 //        if (!seatAssignments.containsValue(passenger.getUUID())) {
 //
 //            int availableSeat = IntStream.range(0, seats.length)
@@ -1654,7 +1682,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 //            seatAssignments.put(availableSeat, passenger.getUUID());
 //            syncSeatAssignments();
 //        }
-    }
+//  }
 
     @Override
     protected void removePassenger(Entity passenger) {

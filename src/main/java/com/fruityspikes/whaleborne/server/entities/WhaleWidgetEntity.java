@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -136,5 +137,15 @@ public abstract class WhaleWidgetEntity extends Entity {
     public InteractionResult interact(Player player, InteractionHand hand) {
 
         return super.interact(player, hand);
+    }
+
+    @Override
+    public boolean shouldBeSaved() {
+        return true;
+    }
+
+    @Override
+    public boolean saveAsPassenger(CompoundTag compound) {
+        return super.saveAsPassenger(compound);
     }
 }
