@@ -68,6 +68,11 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     public void handleStartJump(int i) {
         this.getVehicle().playSound(WBSoundRegistry.ORGAN.get(), 2, 2);
         this.getVehicle().playSound(WBSoundRegistry.ORGAN.get(), 1.5f, 1.5f);
+        for (Entity passenger : this.getVehicle().getPassengers()) {
+            if (passenger instanceof AnchorEntity anchor) {
+                anchor.toggleDown();
+            }
+        }
     }
 
     @Override

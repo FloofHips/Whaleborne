@@ -1211,7 +1211,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private boolean hasAnchorDown() {
         for (Entity passenger : getPassengers()) {
             if (passenger instanceof AnchorEntity anchor) {
-                if (anchor.isLocked()) return true;
+                if (anchor.isDown()) return true;
                 break;
             }
         }
