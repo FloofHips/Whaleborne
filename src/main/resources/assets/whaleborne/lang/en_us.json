@@ -2,7 +2,9 @@
   "itemGroup.whaleborne.whaleborne": "Whaleborne",
 
   "block.whaleborne.barnacle": "Barnacle Block",
+  "block.whaleborne.rough_barnacle": "Rough Barnacle Block",
   "item.whaleborne.barnacle": "Barnacle Block",
+  "item.whaleborne.rough_barnacle": "Rough Barnacle Block",
   "subtitles.block.barnacle.organ": "Barnacle sings",
 
   "item.whaleborne.sail": "Sail",

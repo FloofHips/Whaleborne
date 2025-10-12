@@ -77,8 +77,7 @@ public class Whaleborne
         MinecraftForge.EVENT_BUS.register(this);
 
         modEventBus.addListener(this::addCreative);
-
-        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
     }
     private void commonSetup(final FMLCommonSetupEvent event)
     {
@@ -180,6 +179,7 @@ public class Whaleborne
             event.registerEntityRenderer(WBEntityRegistry.HELM.get(), HelmRenderer::new);
             event.registerEntityRenderer(WBEntityRegistry.ANCHOR.get(), AnchorRenderer::new);
             event.registerEntityRenderer(WBEntityRegistry.ANCHOR_HEAD.get(), AnchorHeadRenderer::new);
+            event.registerEntityRenderer(WBEntityRegistry.HULLBACK_PLATFORM.get(), NothingRenderer::new);
         }
 
         @SubscribeEvent

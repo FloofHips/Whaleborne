@@ -1,0 +1,55 @@
+{
+  "variants": {
+    "number=1": [
+      {
+        "model": "whaleborne:block/barnacle_0"
+      },
+      {
+        "model": "whaleborne:block/barnacle_0",
+        "y": 90
+      },
+      {
+        "model": "whaleborne:block/barnacle_0",
+        "y": 180
+      },
+      {
+        "model": "whaleborne:block/barnacle_0",
+        "y": 270
+      }
+    ],
+    "number=2": [
+      {
+        "model": "whaleborne:block/barnacle_1"
+      },
+      {
+        "model": "whaleborne:block/barnacle_1",
+        "y": 90
+      },
+      {
+        "model": "whaleborne:block/barnacle_1",
+        "y": 180
+      },
+      {
+        "model": "whaleborne:block/barnacle_1",
+        "y": 270
+      }
+    ],
+    "number=3": [
+      {
+        "model": "whaleborne:block/barnacle_2"
+      },
+      {
+        "model": "whaleborne:block/barnacle_2",
+        "y": 90
+      },
+      {
+        "model": "whaleborne:block/barnacle_2",
+        "y": 180
+      },
+      {
+        "model": "whaleborne:block/barnacle_2",
+        "y": 270
+      }
+    ]
+  }
+}

@@ -144,8 +144,8 @@ public class HullbackScreen extends AbstractContainerScreen<HullbackMenu> {
     }
 
     public ResourceLocation getTextureLocation() {
-        if(menu.getName().equals("Mobius"))
-            return MOBIUS;
+        //if(menu.getName().equals("Mobius"))
+        //    return MOBIUS;
         if(menu.getName().equals("Steen"))
             return STEEN;
         return TEXTURE;

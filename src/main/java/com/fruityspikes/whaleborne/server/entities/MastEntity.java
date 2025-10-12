@@ -50,4 +50,9 @@ public class MastEntity extends RideableWhaleWidgetEntity{
         }
         return super.interact(player, hand);
     }
+
+    @Override
+    public boolean canBeCollidedWith() {
+        return false;
+    }
 }

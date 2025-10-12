@@ -23,6 +23,14 @@ public class WBEntityRegistry {
                             .setShouldReceiveVelocityUpdates(true)
                             .build(new ResourceLocation(Whaleborne.MODID, "hullback").toString())
     );
+    public static final RegistryObject<EntityType<HullbackWalkableEntity>> HULLBACK_PLATFORM = ENTITY_TYPES.register(
+            "hullback_platform", () ->
+                    EntityType.Builder.of(HullbackWalkableEntity::new, MobCategory.MISC)
+                            .sized(5F, 0.5F)
+                            .clientTrackingRange(128)
+                            .setShouldReceiveVelocityUpdates(true)
+                            .build(new ResourceLocation(Whaleborne.MODID, "hullback_platform").toString())
+    );
     public static final RegistryObject<EntityType<SailEntity>> SAIL = ENTITY_TYPES.register(
             "sail", () ->
                     EntityType.Builder.of(SailEntity::new, MobCategory.MISC)
@@ -61,7 +69,7 @@ public class WBEntityRegistry {
     public static final RegistryObject<EntityType<AnchorHeadEntity>> ANCHOR_HEAD = ENTITY_TYPES.register(
             "anchor_head", () ->
                     EntityType.Builder.of(AnchorHeadEntity::new, MobCategory.MISC)
-                            .sized(1.5F, 2F)
+                            .sized(0.5F, 2F)
                             .clientTrackingRange(20)
                             .build(new ResourceLocation(Whaleborne.MODID, "anchor_head").toString())
     );

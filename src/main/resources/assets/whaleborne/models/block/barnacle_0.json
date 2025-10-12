@@ -4,6 +4,7 @@
 	"textures": {
 		"3": "whaleborne:block/barnacle_0",
 		"bottom": "whaleborne:block/barnacle_bottom",
+		"particle": "whaleborne:block/barnacle_1",
 		"top": "whaleborne:block/barnacle_top"
 	},
 	"elements": [

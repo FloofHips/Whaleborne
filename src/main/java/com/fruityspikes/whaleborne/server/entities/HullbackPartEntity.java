@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.server.items.WhaleEquipment;
 import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBTagRegistry;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -63,7 +64,7 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             return parent.interactClean(player, hand, this, topClicked);
         }
 
-        if (heldItem.getItem() instanceof SaddleItem || heldItem.is(Items.DARK_OAK_PLANKS)) {
+        if (heldItem.getItem() instanceof SaddleItem || heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
             return parent.interactArmor(player, hand, this, topClicked);
         }
 

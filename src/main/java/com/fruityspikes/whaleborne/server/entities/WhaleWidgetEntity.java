@@ -93,7 +93,7 @@ public abstract class WhaleWidgetEntity extends Entity {
 
     @Override
     public boolean canBeCollidedWith() {
-        return true;
+        return false;
     }
     public void animateHurt(float yaw) {
         this.setHurtDir(-this.getHurtDir());

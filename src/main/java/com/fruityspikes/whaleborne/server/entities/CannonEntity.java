@@ -15,6 +15,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.*;
 import net.minecraft.world.entity.*;
@@ -23,13 +24,12 @@ import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.*;
+import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.entity.vehicle.ChestBoat;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.world.item.*;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.phys.Vec3;
@@ -194,6 +194,37 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                     passenger.setPose(Pose.CROUCHING);
                     level().playSound(null, this.getX(), this.getY(), this.getZ(),
                             WBSoundRegistry.ORGAN.get(), SoundSource.BLOCKS, 1.0F,
+                            (float) power / 50);
+                    level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
+                            (float) power / 50);
+                }
+            }
+            else if(ammo.getItem().asItem() instanceof BoatItem boatItem){
+                Entity passenger = this.getFirstPassenger();
+                if (passenger != null) {
+                    String[] boatName = ammo.getItem().asItem().toString().split("_");
+                    StringBuilder boatTypeBuilder = new StringBuilder();
+                    boolean hasChest = false;
+                    for (int i = 0; i < boatName.length - 1; i++) {
+                        if (!boatName[i].equals("chest")) {
+                            if (boatTypeBuilder.length() > 0) {
+                                boatTypeBuilder.append("_");
+                            }
+                            boatTypeBuilder.append(boatName[i]);
+                        } else {
+                            hasChest = true;
+                        }
+                    }
+                    Boat boat = (Boat)(hasChest ? new ChestBoat(this.level(), this.getX(), this.getY(), this.getZ()) : new Boat(this.level(), this.getX(), this.getY(), this.getZ()));
+                    boat.setVariant(Boat.Type.byName(boatTypeBuilder.toString()));
+                    boat.setYRot(passenger.getYRot());
+                    passenger.startRiding(boat);
+
+                    projectile = boat;
+
+                    level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR, SoundSource.BLOCKS, 1.0F,
                             (float) power / 50);
                     level().playSound(null, this.getX(), this.getY(), this.getZ(),
                             SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
