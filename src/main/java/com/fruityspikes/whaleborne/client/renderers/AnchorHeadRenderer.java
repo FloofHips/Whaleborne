@@ -31,7 +31,7 @@ public class AnchorHeadRenderer<T extends AnchorHeadEntity> extends EntityRender
     @Override
     public void render(AnchorHeadEntity entity, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         poseStack.pushPose();
-        poseStack.translate(0.0F, 1.5F, 0.0F);
+        poseStack.translate(0.0F, 1.25F, 0.0F);
         poseStack.mulPose(Axis.XP.rotationDegrees(180));
         poseStack.mulPose(Axis.YP.rotationDegrees(Mth.rotLerp(partialTick, entity.yRotO, entity.getYRot())));
 

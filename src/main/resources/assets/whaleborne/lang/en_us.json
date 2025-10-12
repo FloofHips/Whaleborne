@@ -3,8 +3,10 @@
 
   "block.whaleborne.barnacle": "Barnacle Block",
   "block.whaleborne.rough_barnacle": "Rough Barnacle Block",
+
   "item.whaleborne.barnacle": "Barnacle Block",
   "item.whaleborne.rough_barnacle": "Rough Barnacle Block",
+
   "subtitles.block.barnacle.organ": "Barnacle sings",
 
   "item.whaleborne.sail": "Sail",
@@ -12,6 +14,13 @@
   "item.whaleborne.mast": "Mast",
   "item.whaleborne.helm": "Helm",
   "item.whaleborne.cannon": "Cannon",
+
+  "entity.whaleborne.sail": "Sail",
+  "entity.whaleborne.anchor": "Anchor",
+  "entity.whaleborne.anchor_head": "Anchor Head",
+  "entity.whaleborne.mast": "Mast",
+  "entity.whaleborne.helm": "Helm",
+  "entity.whaleborne.cannon": "Cannon",
 
   "menu.title.whaleborne.cannon": "Cannon",
 

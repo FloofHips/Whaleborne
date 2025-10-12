@@ -21,4 +21,22 @@ public class ClientPacketHandler {
             }
         }
     }
+
+    public static void handleHullbackHurtSync(HullbackHurtPacket packet) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level != null) {
+            Entity entity = minecraft.level.getEntity(packet.getEntityId());
+            if (entity instanceof HullbackEntity whale) {
+
+                whale.inventory.setItem(HullbackEntity.INV_SLOT_ARMOR, packet.getArmorItem());
+                whale.inventory.setItem(HullbackEntity.INV_SLOT_CROWN, packet.getCrownItem());
+
+                whale.getEntityData().set(HullbackEntity.DATA_ARMOR, packet.getArmorItem());
+                whale.getEntityData().set(HullbackEntity.DATA_CROWN_ID, packet.getCrownItem());
+                whale.getEntityData().set(HullbackEntity.DATA_ID_FLAGS, packet.getFlags());
+
+                whale.updateContainerEquipment();
+            }
+        }
+    }
 }

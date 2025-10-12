@@ -72,7 +72,7 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
         anchorHeadModel.renderToBuffer(
                 poseStack,
                 vertexConsumer,
-                (int) (packedLight * tip.y),
+                (int) (packedLight / 2),
                 OverlayTexture.NO_OVERLAY,
                 1.0F, 1.0F, 1.0F, 1.0F
         );
@@ -121,7 +121,7 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
                 .color(1F, 1F, 1F, 1F)
                 .uv(left ? 0.5f : 1, length)
                 .overlayCoords(OverlayTexture.NO_OVERLAY)
-                .uv2((int) (packedLight * tip.y))
+                .uv2((int) (packedLight / 2))
                 .normal(pose.normal(), 0, 1, 0)
                 .endVertex();
 
@@ -129,7 +129,7 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
                 .color(1F, 1F, 1F, 1F)
                 .uv(left ? 0 : 0.5f, length)
                 .overlayCoords(OverlayTexture.NO_OVERLAY)
-                .uv2((int) (packedLight * tip.y))
+                .uv2((int) (packedLight / 2))
                 .normal(pose.normal(), 0, 1, 0)
                 .endVertex();
 

@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
+import com.fruityspikes.whaleborne.network.HullbackHurtPacket;
 import com.fruityspikes.whaleborne.network.SyncHullbackDirtPacket;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
 import com.fruityspikes.whaleborne.server.registries.*;
@@ -91,9 +92,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public static final int INV_SLOT_SADDLE = 1;
     public static final int INV_SLOT_ARMOR = 2;
     public static boolean HAS_MOBIUS_SPAWNED = false;
-    private static final EntityDataAccessor<ItemStack> DATA_CROWN_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
-    private static final EntityDataAccessor<ItemStack> DATA_ARMOR = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
-    private static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
+    public static final EntityDataAccessor<ItemStack> DATA_CROWN_ID = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
+    public static final EntityDataAccessor<ItemStack> DATA_ARMOR = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.ITEM_STACK);
+    public static final EntityDataAccessor<Byte> DATA_ID_FLAGS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<Float> DATA_MOUTH_PROGRESS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_0 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
     private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_1 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
@@ -399,12 +400,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.updateContainerEquipment();
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
     }
-    protected void updateContainerEquipment() {
+    public void updateContainerEquipment() {
         ItemStack crown = this.inventory.getItem(INV_SLOT_CROWN);
         ItemStack armor = this.inventory.getItem(INV_SLOT_ARMOR);
         boolean hasSaddle = !this.inventory.getItem(INV_SLOT_SADDLE).isEmpty();
         this.entityData.set(DATA_CROWN_ID, crown);
         this.entityData.set(DATA_ARMOR, armor);
+        sendHurtSyncPacket();
         this.setFlag(4, hasSaddle);
     }
     public void containerChanged(Container invBasic) {
@@ -1126,27 +1128,61 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     public boolean hurt(DamageSource source, float amount) {
         ItemStack armorStack = this.inventory.getItem(INV_SLOT_ARMOR);
+        ItemStack armorStackClient = this.entityData.get(DATA_ARMOR);
 
-        if (!this.level().isClientSide) {
-            this.inventory.setItem(INV_SLOT_ARMOR, getArmor());
+        float resistance = 1;
+        if (armorStack.getItem() instanceof BlockItem blockItem) {
+            BlockState defaultState = blockItem.getBlock().defaultBlockState();
+            resistance = defaultState.getDestroySpeed(null, null);
+            if (resistance < 0) {
+                resistance = 50f;
+            }
         }
 
-        System.out.println(level() + ": " + this.inventory.getItem(INV_SLOT_ARMOR));
-        System.out.println(level() + ": " + this.entityData.get(DATA_ARMOR));
+        if (!armorStack.isEmpty()) {
+            float blockChance = resistance / 70f;
+            if (this.random.nextFloat() < blockChance) {
+            amount = 0;
+            this.playSound(SoundEvents.SHIELD_BLOCK, 1.0F, 0.8F + this.random.nextFloat() * 0.4F);
+            this.playSound(WBSoundRegistry.HULLBACK_HAPPY.get(), 1.0F, 0.8F + this.random.nextFloat() * 0.4F);
+            updateContainerEquipment();
+            return super.hurt(source, amount);
+            }
 
-        mouthTarget = 0.8f;
-        int originalCount = armorStack.getCount();
-        int armorDamage = Math.min(originalCount, (int)Math.ceil(amount));
-
-        armorStack.shrink(armorDamage);
-        this.inventory.setItem(INV_SLOT_ARMOR, armorStack);
-        this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.random.nextFloat() * 0.4F);
-        updateContainerEquipment();
-        playSound(WBSoundRegistry.HULLBACK_MAD.get());
-        float remainingDamage = amount - armorDamage;
+            mouthTarget = 0.8f;
+            int originalCount = armorStack.getCount();
+            int armorDamage = Math.min(originalCount, (int)Math.ceil(amount));
+            armorStack.shrink(armorDamage);
+            this.inventory.setItem(INV_SLOT_ARMOR, armorStack);
+            this.entityData.set(DATA_ARMOR, armorStack);
+            this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.random.nextFloat() * 0.4F);
+            playSound(WBSoundRegistry.HULLBACK_MAD.get());
+            float remainingDamage = amount - armorDamage;
+            if (remainingDamage > 0) {
+                updateContainerEquipment();
+                return super.hurt(source, remainingDamage);
+            }
+            updateContainerEquipment();
+            return super.hurt(source, remainingDamage);
+        }
         mouthTarget = 0;
-        return super.hurt(source, remainingDamage);
+        return super.hurt(source, amount);
     }
+
+    private void sendHurtSyncPacket() {
+        if (!this.level().isClientSide) {
+            WhaleborneNetwork.INSTANCE.send(
+                    PacketDistributor.TRACKING_ENTITY.with(() -> this),
+                    new HullbackHurtPacket(
+                            this.getId(),
+                            this.inventory.getItem(INV_SLOT_ARMOR),
+                            this.inventory.getItem(INV_SLOT_CROWN),
+                            this.entityData.get(DATA_ID_FLAGS)
+                    )
+            );
+        }
+    }
+
     @Override
     public void onAddedToWorld() {
         super.onAddedToWorld();
@@ -1156,6 +1192,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     public void tick() {
         super.tick();
+
+        if(tickCount % 40 == 0) {
+            this.entityData.set(DATA_ARMOR, this.inventory.getItem(INV_SLOT_ARMOR));
+        }
 
         if (this.level().isClientSide && getArmorProgress() > 0 && this.inventory.getItem(INV_SLOT_ARMOR).getItem().asItem() == Items.AIR.asItem()) {
             this.inventory.setItem(INV_SLOT_ARMOR, getArmor());

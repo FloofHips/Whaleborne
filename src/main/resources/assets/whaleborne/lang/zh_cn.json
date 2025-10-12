@@ -1,0 +1,40 @@
+﻿{
+ "itemGroup.whaleborne.whaleborne": "鲸帆远航",
+
+ "block.whaleborne.barnacle": "藤壶块",
+ "item.whaleborne.barnacle": "藤壶块",
+
+ "block.whaleborne.rough_barnacle": "粗糙的藤壶块",
+ "item.whaleborne.rough_barnacle": "粗糙的藤壶块",
+
+ "subtitles.block.barnacle.organ": "藤壶风鸣",
+
+ "item.whaleborne.sail": "帆",
+ "item.whaleborne.anchor": "锚",
+ "item.whaleborne.mast": "桅杆",
+ "item.whaleborne.helm": "舵轮",
+ "item.whaleborne.cannon": "加农炮",
+
+ "entity.whaleborne.sail": "帆",
+ "entity.whaleborne.anchor": "锚",
+ "entity.whaleborne.anchor_head": "锚头",
+ "entity.whaleborne.mast": "桅杆",
+ "entity.whaleborne.helm": "舵轮",
+ "entity.whaleborne.cannon": "加农炮",
+
+ "menu.title.whaleborne.cannon": "加农炮",
+
+ "item.whaleborne.hullback_spawn_egg": "舵背鲸刷怪蛋",
+
+ "entity.whaleborne.hullback": "舵背鲸",
+
+ "subtitles.entity.hullback.ambient": "舵背鲸：鸣叫",
+ "subtitles.entity.hullback.hurt": "舵背鲸：受伤",
+ "subtitles.entity.hullback.death": "舵背鲸：死亡",
+ "subtitles.entity.hullback.happy": "舵背鲸：愉悦",
+ "subtitles.entity.hullback.tame": "舵背鲸：欢鸣",
+ "subtitles.entity.hullback.mad": "舵背鲸：低吼",
+ "subtitles.entity.hullback.swim": "舵背鲸：游动",
+ "subtitles.entity.hullback.breathe": "舵背鲸：换气"
+
+}

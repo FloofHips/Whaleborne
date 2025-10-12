@@ -158,7 +158,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                 renderFixedNameTag(pEntity, poseStack, buffer, packedLight);
             }
 
-            if (false) {
+            if (Config.armorProgress) {
                 armorPart.render(
                         poseStack,
                         buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
@@ -166,7 +166,6 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                         OverlayTexture.pack(0.0F, flag),
                         1, 1, 1, progress
                 );
-
 
                 armorPart.render(
                         poseStack,

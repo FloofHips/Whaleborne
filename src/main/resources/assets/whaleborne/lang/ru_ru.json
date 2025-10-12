@@ -3,6 +3,10 @@
 
   "block.whaleborne.barnacle": "Балянус",
   "item.whaleborne.barnacle": "Балянус",
+
+  "block.whaleborne.rough_barnacle": "грубый Балянус",
+  "item.whaleborne.rough_barnacle": "грубый Балянус",
+
   "subtitles.block.barnacle.organ": "Пение балянуса",
 
   "item.whaleborne.sail": "Парус",
@@ -10,6 +14,13 @@
   "item.whaleborne.mast": "Мачта",
   "item.whaleborne.helm": "Штурвал",
   "item.whaleborne.cannon": "Пушка",
+
+  "entity.whaleborne.sail": "Парус",
+  "entity.whaleborne.anchor": "Якорь",
+  "entity.whaleborne.anchor_head": "Головка якоря",
+  "entity.whaleborne.mast": "Мачта",
+  "entity.whaleborne.helm": "Штурвал",
+  "entity.whaleborne.cannon": "Пушка",
 
   "menu.title.whaleborne.cannon": "Пушка",
 

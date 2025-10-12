@@ -14,13 +14,13 @@ public class Config {
             .comment("Shows hullback building and damage progress. Turning this off solve incompatibility issues with shaders but will sacrifice some visual flair")
             .define("hullbackArmorProgress", true);
     static final ForgeConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
-    public static boolean clientBoolean;
+    public static boolean armorProgress;
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event)
     {
         if (event.getConfig().getSpec() == CLIENT_SPEC) {
-            clientBoolean = ARMOR_PROGRESS.get();
+            armorProgress = ARMOR_PROGRESS.get();
         }
     }
 }

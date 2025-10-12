@@ -2,7 +2,10 @@ package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
@@ -17,6 +20,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.PickaxeItem;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.Vec3;
 
@@ -55,12 +59,15 @@ public class AnchorHeadEntity extends Entity {
         } else if (!this.level().isClientSide && !this.isRemoved()) {
             this.gameEvent(GameEvent.ENTITY_DAMAGE, source.getEntity());
             boolean flag = source.getEntity() instanceof Player && ((Player)source.getEntity()).getAbilities().instabuild;
-                if (!flag && this.level().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
-                    this.playSound(SoundEvents.METAL_HIT);
-                    this.destroy(source);
-                }
+            if (!flag && this.level().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
+                this.playSound(SoundEvents.METAL_HIT);
+                this.destroy(source);
+            }
             this.level().playSound((Player)null, this.getX(), this.getY(), this.getZ(), SoundEvents.ANVIL_PLACE, SoundSource.BLOCKS, 0.75F, this.random.nextFloat() * 0.5f + 0.4F);
             this.discard();
+            if (this.level() instanceof ServerLevel) {
+                ((ServerLevel)this.level()).sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, Blocks.ANVIL.defaultBlockState()), this.getX(), this.getY(0.6666666666666666), this.getZ(), 10, (double)(this.getBbWidth() / 4.0F), (double)(this.getBbHeight() / 4.0F), (double)(this.getBbWidth() / 4.0F), 0.05);
+            }
             return true;
         } else {
             return true;

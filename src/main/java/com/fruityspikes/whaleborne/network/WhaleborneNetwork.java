@@ -28,6 +28,12 @@ public class WhaleborneNetwork {
                 SyncHullbackDirtPacket::encode,
                 SyncHullbackDirtPacket::decode,
                 SyncHullbackDirtPacket::handle);
+
+        INSTANCE.registerMessage(getPacketID(),
+                HullbackHurtPacket.class,
+                HullbackHurtPacket::encode,
+                HullbackHurtPacket::decode,
+                HullbackHurtPacket::handle);
     }
 
     public static int getPacketID() {
