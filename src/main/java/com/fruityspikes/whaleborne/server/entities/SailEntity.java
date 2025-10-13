@@ -41,25 +41,41 @@ public class SailEntity extends WhaleWidgetEntity{
 
     @Override
     public InteractionResult interact(Player player, InteractionHand hand) {
-        if (player.getItemInHand(hand).is(Items.WATER_BUCKET)) {
-            this.spawnAtLocation(this.entityData.get(DATA_BANNER));
-            this.entityData.set(DATA_BANNER, ItemStack.EMPTY);
+        if (player.getItemInHand(hand).is(Items.WATER_BUCKET) && !this.getBanner().isEmpty()) {
+            if (!this.level().isClientSide) {
+                this.spawnAtLocation(this.entityData.get(DATA_BANNER));
+                this.entityData.set(DATA_BANNER, ItemStack.EMPTY);
 
-            this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.BUCKET_EMPTY,
-                    SoundSource.PLAYERS, 1.0F, 1.0f);
-
-            return InteractionResult.SUCCESS;
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.AMBIENT_UNDERWATER_EXIT,
+                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.ARMOR_EQUIP_LEATHER,
+                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
+            }
+            return InteractionResult.sidedSuccess(this.level().isClientSide);
         }
         if (player.getItemInHand(hand).is(ItemTags.BANNERS)) {
-            this.entityData.set(DATA_BANNER, player.getItemInHand(hand));
-            this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.ARMOR_EQUIP_LEATHER,
-                    SoundSource.PLAYERS, 1.0F, 1.0f);
+            if (!this.level().isClientSide) {
+                if (!this.getBanner().isEmpty()) {
+                    this.spawnAtLocation(this.entityData.get(DATA_BANNER));
+                }
+                ItemStack bannerStack = player.getItemInHand(hand).copy();
+                bannerStack.setCount(1);
 
-            return InteractionResult.SUCCESS;
+                this.entityData.set(DATA_BANNER, bannerStack);
+
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.ARMOR_EQUIP_LEATHER,
+                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
+                if (!player.getAbilities().instabuild) {
+                    player.getItemInHand(hand).shrink(1);
+                }
+            }
+            return InteractionResult.sidedSuccess(this.level().isClientSide);
         }
         return super.interact(player, hand);
+
     }
 
     public ItemStack getBanner() {

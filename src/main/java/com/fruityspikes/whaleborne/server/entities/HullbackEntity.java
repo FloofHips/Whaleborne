@@ -1112,11 +1112,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         } else if (block == Blocks.MOSS_CARPET) {
             return new ItemStack(Items.MOSS_CARPET);
         } else if (block == WBBlockRegistry.WHALE_BARNACLE_0.get()) {
-            return new ItemStack(WBItemRegistry.BARNACLE.get());
+            return new ItemStack(WBItemRegistry.ROUGH_BARNACLE.get());
         } else if (block == WBBlockRegistry.WHALE_BARNACLE_1.get()) {
-            return new ItemStack(WBItemRegistry.BARNACLE.get(), 2);
+            return new ItemStack(WBItemRegistry.ROUGH_BARNACLE.get(), 2);
         } else if (block == WBBlockRegistry.WHALE_BARNACLE_2.get()) {
-            return new ItemStack(WBItemRegistry.BARNACLE.get(), 5);
+            return new ItemStack(WBItemRegistry.ROUGH_BARNACLE.get(), 5);
         } else if (block == Blocks.KELP_PLANT) {
             return new ItemStack(Items.KELP, 2);
         } else if (block == Blocks.TALL_SEAGRASS) {

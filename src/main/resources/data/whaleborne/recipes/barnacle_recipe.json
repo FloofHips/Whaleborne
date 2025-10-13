@@ -1,0 +1,14 @@
+{
+    "type": "minecraft:crafting_shapeless",
+    "ingredients": [
+        {
+            "item": "whaleborne:rough_barnacle"
+        },
+        {
+            "item": "whaleborne:rough_barnacle"
+        }
+    ],
+    "result": {"item": "whaleborne:barnacle"
+    },
+    "show_notification": false
+}
