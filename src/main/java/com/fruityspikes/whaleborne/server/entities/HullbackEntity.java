@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import com.fruityspikes.whaleborne.Config;
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import com.fruityspikes.whaleborne.network.HullbackHurtPacket;
@@ -744,7 +745,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        playSound(WBSoundRegistry.HULLBACK_AMBIENT.get(), 3, 1);
+        playSound(WBSoundRegistry.HULLBACK_AMBIENT.get(), Config.SOUND_DISTANCE.get().floatValue(), 1);
     }
 
     @Override
@@ -1169,6 +1170,23 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return super.hurt(source, amount);
     }
 
+    @Override
+    protected void tickDeath() {
+        if (this.moving_nose != null) {
+            this.moving_nose.discard();
+            this.moving_nose = null;
+        }
+        if (this.moving_head != null) {
+            this.moving_head.discard();
+            this.moving_head = null;
+        }
+        if (this.moving_body != null) {
+            this.moving_body.discard();
+            this.moving_body = null;
+        }
+        super.tickDeath();
+    }
+
     private void sendHurtSyncPacket() {
         if (!this.level().isClientSide) {
             WhaleborneNetwork.INSTANCE.send(
@@ -1228,13 +1246,20 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             mouthTarget = 1;
 
         if(!isSaddled() && !level().isClientSide){
-            if(!getPassengers().isEmpty())
+            if(!getPassengers().isEmpty()) {
+                if (!getInventory().getItem(INV_SLOT_CROWN).isEmpty()) {
+                    spawnAtLocation(getInventory().getItem(INV_SLOT_CROWN));
+                    getInventory().setItem(INV_SLOT_CROWN, ItemStack.EMPTY);
+                }
                 ejectPassengers();
+            }
         }
         else {
-            if(getArmorProgress() < 0.45f &&
-                    getInventory().getItem(INV_SLOT_ARMOR).getCount() < 64 &&
-                    !level().isClientSide) {
+            if(getArmorProgress() < 0.45f && getInventory().getItem(INV_SLOT_ARMOR).getCount() < 64 && !level().isClientSide) {
+                if (!getInventory().getItem(INV_SLOT_CROWN).isEmpty()) {
+                    spawnAtLocation(getInventory().getItem(INV_SLOT_CROWN));
+                    getInventory().setItem(INV_SLOT_CROWN, ItemStack.EMPTY);
+                }
                 ejectPassengers();
             }
         }
@@ -2279,7 +2304,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 );
             }
 
-            this.hullback.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), 3, 1);
+            this.hullback.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), Config.SOUND_DISTANCE.get().floatValue(), 1);
             this.hullback.setXRot(Mth.rotLerp(0.1f, this.hullback.getXRot(), 0));
         }
 
@@ -2580,8 +2605,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 if(isBeached) {
                     mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 2f);
                     mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 1f);
-                    mob.playSound(WBSoundRegistry.HULLBACK_HURT.get(), 3, 0.2f);
-                    mob.playSound(WBSoundRegistry.HULLBACK_SWIM.get(), 3, 0.5f);
+                    mob.playSound(WBSoundRegistry.HULLBACK_HURT.get(), Config.SOUND_DISTANCE.get().floatValue(), 0.2f);
+                    mob.playSound(WBSoundRegistry.HULLBACK_SWIM.get(), 2, 0.5f);
                     pushEntities();
                 }
                 mob.setDeltaMovement(velocity);
@@ -2667,7 +2692,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     );
                 }
 
-                this.mob.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), 6, 1);
+                this.mob.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), Config.SOUND_DISTANCE.get().floatValue() * 1.5f, 1);
             }
         }
     }

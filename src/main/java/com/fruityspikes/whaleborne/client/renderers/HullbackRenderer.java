@@ -35,6 +35,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.common.Tags;
+import net.minecraftforge.common.data.ForgeItemTagsProvider;
 import org.joml.Quaternionf;
 
 import java.util.ArrayList;
@@ -159,20 +161,30 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             }
 
             if (Config.armorProgress) {
-                armorPart.render(
-                        poseStack,
-                        buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
-                        packedLight,
-                        OverlayTexture.pack(0.0F, flag),
-                        1, 1, 1, progress
-                );
+                if (progress == 0) {
+                    armorPart.render(
+                            poseStack,
+                            buffer.getBuffer(RenderType.entityCutout(getArmor(pEntity))),
+                            packedLight,
+                            OverlayTexture.pack(0.0F, flag)
+                    );
 
-                armorPart.render(
-                        poseStack,
-                        buffer.getBuffer(RenderType.entityDecal(getArmor(pEntity))),
-                        packedLight,
-                        OverlayTexture.pack(0.0F, flag)
-                );
+                } else {
+                    armorPart.render(
+                            poseStack,
+                            buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
+                            packedLight,
+                            OverlayTexture.pack(0.0F, flag),
+                            1, 1, 1, progress
+                    );
+
+                    armorPart.render(
+                            poseStack,
+                            buffer.getBuffer(RenderType.entityDecal(getArmor(pEntity))),
+                            packedLight,
+                            OverlayTexture.pack(0.0F, flag)
+                    );
+                }
             } else {
                 armorPart.render(
                         poseStack,
@@ -201,7 +213,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             poseStack.mulPose(Axis.XP.rotationDegrees(180));
             poseStack.mulPose(Axis.YP.rotationDegrees(180));
 
-            if (crown.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof SkullBlock) {
+            if (crown.is(Tags.Items.HEADS)) {
                 poseStack.pushPose();
                 poseStack.translate(0,0,0.23);
                 Minecraft.getInstance().getItemRenderer().renderStatic(crown, ItemDisplayContext.FIXED, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);

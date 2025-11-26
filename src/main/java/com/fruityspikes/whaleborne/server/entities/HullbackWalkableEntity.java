@@ -4,10 +4,7 @@ import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityDimensions;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.decoration.HangingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -38,8 +35,9 @@ public class HullbackWalkableEntity extends Entity {
     }
     public void tick() {
         super.tick();
-        if (this.tickCount > 20000) {
-            this.discard();
+        if (this.tickCount % 200 == 0) {
+            if (this.level().getEntities(this, this.getBoundingBox().inflate(1F, 1F, 1F), EntitySelector.NO_CREATIVE_OR_SPECTATOR.and((entity) -> (entity instanceof HullbackPartEntity))).isEmpty())
+                this.discard();
         }
     }
 

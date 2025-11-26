@@ -12,6 +12,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
@@ -110,5 +111,11 @@ public class SailEntity extends WhaleWidgetEntity{
                     this.level().playSound(this, BlockPos.containing(this.position()), SoundEvents.ELYTRA_FLYING, SoundSource.NEUTRAL, 1, (float) whale.getDeltaMovement().length());
             }
         }
+    }
+
+    @Override
+    protected void destroy(DamageSource damageSource) {
+        spawnAtLocation(getBanner());
+        super.destroy(damageSource);
     }
 }

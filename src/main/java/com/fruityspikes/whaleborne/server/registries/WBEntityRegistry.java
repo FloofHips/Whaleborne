@@ -26,7 +26,7 @@ public class WBEntityRegistry {
     public static final RegistryObject<EntityType<HullbackWalkableEntity>> HULLBACK_PLATFORM = ENTITY_TYPES.register(
             "hullback_platform", () ->
                     EntityType.Builder.of(HullbackWalkableEntity::new, MobCategory.MISC)
-                            .sized(5F, 0.5F)
+                            .sized(6F, 0.5F)
                             .clientTrackingRange(128)
                             .setShouldReceiveVelocityUpdates(true)
                             .build(new ResourceLocation(Whaleborne.MODID, "hullback_platform").toString())
@@ -80,6 +80,6 @@ public class WBEntityRegistry {
 //        event.put(CANNON.get(), CannonEntity.createAttributes().build());
 //        event.put(HELM.get(), HelmEntity.createAttributes().build());
 //        event.put(MAST.get(), MastEntity.createAttributes().build());
-        //event.put(ANCHOR.get(), HullbackEntity.createAttributes().build());
+//        event.put(ANCHOR.get(), HullbackEntity.createAttributes().build());
     }
 }
