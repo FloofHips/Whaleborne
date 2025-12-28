@@ -1,55 +1,169 @@
 {
   "variants": {
-    "number=1": [
-      {
-        "model": "whaleborne:block/barnacle_0"
-      },
-      {
-        "model": "whaleborne:block/barnacle_0",
-        "y": 90
-      },
-      {
-        "model": "whaleborne:block/barnacle_0",
-        "y": 180
-      },
-      {
-        "model": "whaleborne:block/barnacle_0",
-        "y": 270
-      }
-    ],
-    "number=2": [
-      {
-        "model": "whaleborne:block/barnacle_1"
-      },
-      {
-        "model": "whaleborne:block/barnacle_1",
-        "y": 90
-      },
-      {
-        "model": "whaleborne:block/barnacle_1",
-        "y": 180
-      },
-      {
-        "model": "whaleborne:block/barnacle_1",
-        "y": 270
-      }
-    ],
-    "number=3": [
-      {
-        "model": "whaleborne:block/barnacle_2"
-      },
-      {
-        "model": "whaleborne:block/barnacle_2",
-        "y": 90
-      },
-      {
-        "model": "whaleborne:block/barnacle_2",
-        "y": 180
-      },
-      {
-        "model": "whaleborne:block/barnacle_2",
-        "y": 270
-      }
-    ]
+    "facing=down,type=small_lone": {
+      "model": "whaleborne:block/rough_barnacle_small_lone",
+      "x": 180
+    },
+    "facing=east,type=small_lone": {
+      "model": "whaleborne:block/rough_barnacle_small_lone",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north,type=small_lone": {
+      "model": "whaleborne:block/rough_barnacle_small_lone",
+      "x": 90
+    },
+    "facing=south,type=small_lone": {
+      "model": "whaleborne:block/rough_barnacle_small_lone",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up,type=small_lone": {
+      "model": "whaleborne:block/rough_barnacle_small_lone"
+    },
+    "facing=west,type=small_lone": {
+      "model": "whaleborne:block/rough_barnacle_small_lone",
+      "x": 90,
+      "y": 270
+    },
+
+    "facing=down,type=small": {
+      "model": "whaleborne:block/rough_barnacle_small",
+      "x": 180
+    },
+    "facing=east,type=small": {
+      "model": "whaleborne:block/rough_barnacle_small",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north,type=small": {
+      "model": "whaleborne:block/rough_barnacle_small",
+      "x": 90
+    },
+    "facing=south,type=small": {
+      "model": "whaleborne:block/rough_barnacle_small",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up,type=small": {
+      "model": "whaleborne:block/rough_barnacle_small"
+    },
+    "facing=west,type=small": {
+      "model": "whaleborne:block/rough_barnacle_small",
+      "x": 90,
+      "y": 270
+    },
+
+
+    "facing=down,type=base": {
+      "model": "whaleborne:block/rough_barnacle_base",
+      "x": 180
+    },
+    "facing=east,type=base": {
+      "model": "whaleborne:block/rough_barnacle_base",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north,type=base": {
+      "model": "whaleborne:block/rough_barnacle_base",
+      "x": 90
+    },
+    "facing=south,type=base": {
+      "model": "whaleborne:block/rough_barnacle_base",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up,type=base": {
+      "model": "whaleborne:block/rough_barnacle_base"
+    },
+    "facing=west,type=base": {
+      "model": "whaleborne:block/rough_barnacle_base",
+      "x": 90,
+      "y": 270
+    },
+
+
+    "facing=down,type=middle": {
+      "model": "whaleborne:block/rough_barnacle_middle",
+      "x": 180
+    },
+    "facing=east,type=middle": {
+      "model": "whaleborne:block/rough_barnacle_middle",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north,type=middle": {
+      "model": "whaleborne:block/rough_barnacle_middle",
+      "x": 90
+    },
+    "facing=south,type=middle": {
+      "model": "whaleborne:block/rough_barnacle_middle",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up,type=middle": {
+      "model": "whaleborne:block/rough_barnacle_middle"
+    },
+    "facing=west,type=middle": {
+      "model": "whaleborne:block/rough_barnacle_middle",
+      "x": 90,
+      "y": 270
+    },
+
+
+    "facing=down,type=tip_lone": {
+      "model": "whaleborne:block/rough_barnacle_tip_lone",
+      "x": 180
+    },
+    "facing=east,type=tip_lone": {
+      "model": "whaleborne:block/rough_barnacle_tip_lone",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north,type=tip_lone": {
+      "model": "whaleborne:block/rough_barnacle_tip_lone",
+      "x": 90
+    },
+    "facing=south,type=tip_lone": {
+      "model": "whaleborne:block/rough_barnacle_tip_lone",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up,type=tip_lone": {
+      "model": "whaleborne:block/rough_barnacle_tip_lone"
+    },
+    "facing=west,type=tip_lone": {
+      "model": "whaleborne:block/rough_barnacle_tip_lone",
+      "x": 90,
+      "y": 270
+    },
+
+
+    "facing=down,type=tip": {
+      "model": "whaleborne:block/rough_barnacle_tip",
+      "x": 180
+    },
+    "facing=east,type=tip": {
+      "model": "whaleborne:block/rough_barnacle_tip",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north,type=tip": {
+      "model": "whaleborne:block/rough_barnacle_tip",
+      "x": 90
+    },
+    "facing=south,type=tip": {
+      "model": "whaleborne:block/rough_barnacle_tip",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up,type=tip": {
+      "model": "whaleborne:block/rough_barnacle_tip"
+    },
+    "facing=west,type=tip": {
+      "model": "whaleborne:block/rough_barnacle_tip",
+      "x": 90,
+      "y": 270
+    }
   }
 }

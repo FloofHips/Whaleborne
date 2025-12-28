@@ -1,7 +1,7 @@
 {
   "variants": {
     "": {
-      "model": "whaleborne:block/barnacle_2"
+      "model": "whaleborne:block/whale_barnacle_big"
     }
   }
 }

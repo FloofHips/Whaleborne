@@ -1,10 +1,8 @@
 package com.fruityspikes.whaleborne.server.registries;
 
 import com.fruityspikes.whaleborne.Whaleborne;
-import com.fruityspikes.whaleborne.server.items.BarnacleItem;
 import com.fruityspikes.whaleborne.server.items.WhaleEquipment;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.common.ForgeSpawnEggItem;
 import net.minecraftforge.registries.DeferredRegister;
@@ -21,6 +19,6 @@ public class WBItemRegistry {
     public static final RegistryObject<WhaleEquipment> ANCHOR = ITEMS.register("anchor", () -> new WhaleEquipment(WBEntityRegistry.ANCHOR::get, new Item.Properties().stacksTo(1)));
     public static final RegistryObject<ForgeSpawnEggItem> HULLBACK_SPAWN_EGG = ITEMS.register("hullback_spawn_egg", () -> new ForgeSpawnEggItem(WBEntityRegistry.HULLBACK, -5787987,  -9600639, new Item.Properties()));
     public static final RegistryObject<Item> BARNACLE = ITEMS.register("barnacle", () -> new BlockItem(WBBlockRegistry.BARNACLE.get(), new Item.Properties()));
-    public static final RegistryObject<Item> ROUGH_BARNACLE = ITEMS.register("rough_barnacle", () -> new BarnacleItem(WBBlockRegistry.ROUGH_BARNACLE.get(), new Item.Properties()));
+    public static final RegistryObject<Item> ROUGH_BARNACLE = ITEMS.register("rough_barnacle", () -> new BlockItem(WBBlockRegistry.ROUGH_BARNACLE.get(), new Item.Properties()));
 
 }

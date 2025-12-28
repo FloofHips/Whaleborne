@@ -2,11 +2,10 @@ package com.fruityspikes.whaleborne.server.registries;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.server.blocks.BarnacleBlock;
-import com.fruityspikes.whaleborne.server.blocks.PlaceableBarnacleBlock;
+import com.fruityspikes.whaleborne.server.blocks.RoughBarnacleBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
@@ -18,7 +17,7 @@ import net.minecraftforge.registries.RegistryObject;
 public class WBBlockRegistry {
 
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, Whaleborne.MODID);
-    public static final RegistryObject<Block> ROUGH_BARNACLE = BLOCKS.register("rough_barnacle", () -> new PlaceableBarnacleBlock(BlockBehaviour.Properties.of().strength(1,2).sound(SoundType.BONE_BLOCK).mapColor(MapColor.STONE)));
+    public static final RegistryObject<Block> ROUGH_BARNACLE = BLOCKS.register("rough_barnacle", () -> new RoughBarnacleBlock(BlockBehaviour.Properties.of().strength(1,2).sound(SoundType.BONE_BLOCK).mapColor(MapColor.STONE)));
     public static final RegistryObject<Block> BARNACLE = BLOCKS.register("barnacle", () -> new BarnacleBlock(BlockBehaviour.Properties.of().sound(SoundType.BONE_BLOCK).strength(1,2).isRedstoneConductor(WBBlockRegistry::never).mapColor(MapColor.STONE)));
 
     public static final RegistryObject<Block> WHALE_BARNACLE_0 = BLOCKS.register("whale_barnacle_0", () -> new Block(BlockBehaviour.Properties.of().sound(SoundType.BONE_BLOCK).mapColor(MapColor.STONE)));
