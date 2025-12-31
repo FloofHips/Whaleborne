@@ -1,0 +1,10 @@
+{
+  "block": "minecraft:tall_seagrass",
+  "placements": ["body_bottom", "head_bottom", "tail_bottom", "fluke_bottom"],
+  "placement_chance": 0.05,
+  "growth": [],
+  "removable_with": ["shears"],
+  "drop": "minecraft:seagrass",
+  "sound_on_growth": "minecraft:block.seagrass.place",
+  "sound_on_remove": "minecraft:block.seagrass.break"
+}

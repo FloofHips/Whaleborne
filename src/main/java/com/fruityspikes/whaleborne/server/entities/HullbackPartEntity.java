@@ -60,10 +60,6 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             return parent.interactDebug(player, hand);
         }
 
-        if (heldItem.getItem() instanceof ShearsItem || heldItem.getItem() instanceof AxeItem) {
-            return parent.interactClean(player, hand, this, topClicked);
-        }
-
         if (heldItem.getItem() instanceof SaddleItem || heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
             return parent.interactArmor(player, hand, this, topClicked);
         }
@@ -96,6 +92,7 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             }
             return parent.interact(player, hand);
         }
+
 
         if ((heldItem.getItem() instanceof WhaleEquipment) || (heldItem.getItem() instanceof SpawnEggItem)){
             EntityType<?> entity;
@@ -134,7 +131,8 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             return parent.interact(player, hand);
         }
 
-        return parent.interact(player, hand);
+        InteractionResult result = parent.interactClean(player, hand, this, topClicked);
+        return result.consumesAction() ? result : parent.interact(player, hand);
     }
 
     protected void defineSynchedData() {

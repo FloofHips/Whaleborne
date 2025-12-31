@@ -1,0 +1,10 @@
+{
+  "block": "minecraft:moss_carpet",
+  "placements": ["body_top", "head_top"],
+  "placement_chance": 0.2,
+  "removable_with": ["shears"],
+  "growth": [],
+  "drop": "minecraft:moss_carpet",
+  "sound_on_growth": "minecraft:block.moss_carpet.place",
+  "sound_on_remove": "minecraft:block.moss_carpet.break"
+}

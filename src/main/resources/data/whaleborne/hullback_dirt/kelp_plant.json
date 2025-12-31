@@ -1,0 +1,10 @@
+{
+  "block": "minecraft:kelp_plant",
+  "placements": ["body_bottom", "head_bottom", "tail_bottom", "fluke_bottom"],
+  "placement_chance": 0.05,
+  "growth": [],
+  "removable_with": ["shears"],
+  "drop": "minecraft:kelp",
+  "sound_on_growth": "minecraft:block.kelp.place",
+  "sound_on_remove": "minecraft:block.kelp.break"
+}

@@ -1,37 +1,26 @@
 package com.fruityspikes.whaleborne;
 
+import com.fruityspikes.whaleborne.client.ClientProxy;
 import com.fruityspikes.whaleborne.client.menus.CannonScreen;
 import com.fruityspikes.whaleborne.client.menus.HullbackScreen;
 import com.fruityspikes.whaleborne.client.models.*;
 import com.fruityspikes.whaleborne.client.renderers.*;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
 import com.fruityspikes.whaleborne.server.entities.AnchorEntity;
-import com.fruityspikes.whaleborne.server.entities.CannonEntity;
 import com.fruityspikes.whaleborne.server.entities.HelmEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
-import com.fruityspikes.whaleborne.server.particles.WBSmokeParticle;
 import com.fruityspikes.whaleborne.server.particles.WBSmokeProvider;
 import com.fruityspikes.whaleborne.server.registries.*;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.screens.MenuScreens;
-import net.minecraft.client.particle.SmokeParticle;
-import net.minecraft.core.particles.SimpleParticleType;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.food.FoodProperties;
-import net.minecraft.world.item.CreativeModeTab;
-import net.minecraft.world.item.CreativeModeTabs;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.*;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.AddReloadListenerEvent;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -43,10 +32,6 @@ import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.RegistryObject;
 import org.slf4j.Logger;
 
 // The value here should match an entry in the META-INF/mods.toml file
@@ -55,7 +40,8 @@ public class Whaleborne
 {
     // Define mod id in a common place for everything to reference
     public static final String MODID = "whaleborne";
-    private static final Logger LOGGER = LogUtils.getLogger();
+    public static final Logger LOGGER = LogUtils.getLogger();
+    public static CommonProxy PROXY = DistExecutor.safeRunForDist(() -> ClientProxy::new, () -> CommonProxy::new);
 
     public static final ResourceLocation ANCHOR_GUI = new ResourceLocation(Whaleborne.MODID, "textures/gui/anchor.png");
     public Whaleborne()
@@ -76,6 +62,7 @@ public class Whaleborne
 
         MinecraftForge.EVENT_BUS.register(this);
 
+        PROXY.init();
         modEventBus.addListener(this::addCreative);
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
     }
@@ -107,6 +94,11 @@ public class Whaleborne
         LOGGER.info("HELLO from server starting");
     }
 
+
+    @SubscribeEvent
+    public void register(AddReloadListenerEvent event) {
+        event.addListener(Whaleborne.PROXY.getHullbackDirtManager());
+    }
     // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static class ClientModEvents

@@ -6,6 +6,7 @@ import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import com.fruityspikes.whaleborne.network.HullbackHurtPacket;
 import com.fruityspikes.whaleborne.network.SyncHullbackDirtPacket;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
+import com.fruityspikes.whaleborne.server.data.HullbackDirtManager;
 import com.fruityspikes.whaleborne.server.registries.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
@@ -60,6 +61,8 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraftforge.common.ForgeMod;
+import net.minecraftforge.common.Tags;
+import net.minecraftforge.common.data.ForgeItemTagsProvider;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.entity.PartEntity;
 import net.minecraftforge.fluids.FluidType;
@@ -136,25 +139,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public BlockState[][] bodyTopDirt; // 5 x 5
     public BlockState[][] tailDirt; // 2 x 2
     public BlockState[][] flukeDirt; // 4 x 4
-    public BlockState[] possibleBottomBlocks = {
-            Blocks.SEAGRASS.defaultBlockState(),
-            Blocks.KELP.defaultBlockState(),
-            Blocks.TALL_SEAGRASS.defaultBlockState(),
-            Blocks.KELP_PLANT.defaultBlockState(),
-            WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState(),
-            WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()
-    };
-    public BlockState[] possibleFreshBlocks = {
-            Blocks.SEAGRASS.defaultBlockState(),
-            Blocks.KELP.defaultBlockState(),
-            WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState(),
-            Blocks.MOSS_CARPET.defaultBlockState()
-    };
-    public BlockState[] possibleTopBlocks = {
-            Blocks.MOSS_CARPET.defaultBlockState(),
-            WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState(),
-            WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()
-    };
+
     public final Vec3[] seatOffsets = {
             //head
             new Vec3(0, 5.5f, 0.0), //sail
@@ -206,10 +191,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.mouthOpenProgress = 0.0f;
         this.currentTarget = this.position();
         //createInventory();
-        if(!level.isClientSide)
-            initDirt();
-        else
-            initClientDirt();
+        if(!level.isClientSide) initDirt();
+        else initClientDirt();
 
         this.stationaryTicks = 60;
     }
@@ -306,38 +289,37 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        fillDirtArray(headDirt, true);
-        fillDirtArray(headTopDirt, false);
-        fillDirtArray(bodyDirt, true);
-        fillDirtArray(bodyTopDirt, false);
-        fillDirtArray(tailDirt, true);
-        fillDirtArray(flukeDirt, true);
+        fillDirtArray(headDirt, true, getPartName(head));
+        fillDirtArray(headTopDirt, false, getPartName(head));
+        fillDirtArray(bodyDirt, true, getPartName(body));
+        fillDirtArray(bodyTopDirt, false, getPartName(body));
+        fillDirtArray(tailDirt, true, getPartName(tail));
+        fillDirtArray(flukeDirt, true, getPartName(tail));
 
         syncDirtToClients();
     }
 
-    private void fillDirtArray(BlockState[][] array, boolean bottom) {
-        if(bottom){
-            for (int x = 0; x < array.length; x++) {
-                for (int y = 0; y < array[x].length; y++) {
-                    array[x][y] = Blocks.AIR.defaultBlockState();
-                    if (random.nextDouble() < 0.5) {
-                        array[x][y] = possibleBottomBlocks[getWeightedIndex(possibleBottomBlocks.length, false)];
-                    }
+    private void fillDirtArray(BlockState[][] array, boolean bottom, String partName) {
+        List<HullbackDirtManager.HullbackDirtEntry> candidates = getCandidates(bottom, partName);
+
+        for (int x = 0; x < array.length; x++) {
+            for (int y = 0; y < array[x].length; y++) {
+                array[x][y] = Blocks.AIR.defaultBlockState();
+                if (candidates.isEmpty()) continue;
+                List<HullbackDirtManager.HullbackDirtEntry> successful = new ArrayList<>();
+
+                for (HullbackDirtManager.HullbackDirtEntry entry : candidates) {
+                    if (random.nextDouble() < entry.placementChance()) successful.add(entry);
                 }
-            }
-        } else {
-            for (int x = 0; x < array.length; x++) {
-                for (int y = 0; y < array[x].length; y++) {
-                    array[x][y] = Blocks.AIR.defaultBlockState();
-                    if (random.nextDouble() < 0.3) {
-                        array[x][y] = possibleTopBlocks[getWeightedIndex(possibleTopBlocks.length, false)];;
-                    }
+
+                if (!successful.isEmpty()) {
+                    HullbackDirtManager.HullbackDirtEntry chosen = successful.get(random.nextInt(successful.size()));
+                    array[x][y] = chosen.block().defaultBlockState();
                 }
             }
         }
-        syncDirtToClients();
     }
+
 
     public BlockState[][] getDirtArray(int index, boolean bottom){
         if(bottom){
@@ -802,6 +784,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
     }
 
+
+    private List<HullbackDirtManager.HullbackDirtEntry> getCandidates(boolean bottom, String partName) {
+        String key = partName + "_" + (bottom ? "bottom" : "top");
+        return Whaleborne.PROXY.getHullbackDirtManager().get().stream()
+                .filter(e -> e.placements().contains(key))
+                .toList();
+    }
+
     public InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (this.isVehicle()) {
             return super.mobInteract(player, hand);
@@ -899,9 +889,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
     }
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
-        ItemStack heldItem = player.getItemInHand(hand);
         mouthTarget = 0.2f;
-        if((handleVegetationRemoval(player, hand, part, top, heldItem.getItem() instanceof ShearsItem)) == InteractionResult.PASS) {
+        if ((handleVegetationRemoval(player, hand, part, top, true)) == InteractionResult.PASS) {
 
             for (BlockState[] states : headTopDirt) {
                 for (BlockState state : states) {
@@ -952,119 +941,44 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
         return InteractionResult.SUCCESS;
     }
-    public InteractionResult interactArmor(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
-        ItemStack heldItem = player.getItemInHand(hand);
-
-            if (heldItem.getItem() instanceof SaddleItem) {
-                if (!this.isSaddled()) {
-                    if (this.isTamed()) {
-                        this.equipSaddle(SoundSource.PLAYERS);
-                        if (!player.getAbilities().instabuild) {
-                            heldItem.shrink(1);
-                        }
-                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                                SoundEvents.HORSE_SADDLE,
-                                SoundSource.PLAYERS, 1.0F, 0.1F);
-                        return InteractionResult.SUCCESS;
-                    } else {
-                        mouthTarget = 0.3f;
-                        playSound(WBSoundRegistry.HULLBACK_MAD.get());
-                        return InteractionResult.PASS;
-                    }
-                }
-                return InteractionResult.PASS;
-            }
-            else if (heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
-                if (!isSaddled()) {
-                    mouthTarget = 0.3f;
-                    playSound(WBSoundRegistry.HULLBACK_MAD.get());
-                    return InteractionResult.PASS;
-                }
-
-                ItemStack currentArmor = this.inventory.getItem(INV_SLOT_ARMOR);
-
-                if (currentArmor.getCount() == currentArmor.getMaxStackSize()){
-                    mouthTarget = 0.3f;
-                    playSound(WBSoundRegistry.HULLBACK_MAD.get());
-                    return InteractionResult.PASS;
-                }
-
-                if (currentArmor.getCount() < currentArmor.getMaxStackSize()) {
-                    if (currentArmor.isEmpty()) {
-                        ItemStack newArmor = new ItemStack(heldItem.getItem(), 1);
-                        this.inventory.setItem(INV_SLOT_ARMOR, newArmor);
-                        updateContainerEquipment();
-                    } else {
-                        if (heldItem.getItem() == currentArmor.getItem()) {
-                            if (player.isCreative()) {
-                                currentArmor.setCount(64);
-                            } else {
-                                currentArmor.grow(1);
-                            }
-
-                            this.entityData.set(DATA_ARMOR, currentArmor.copy());
-                        } else {
-                            mouthTarget = 0.3f;
-                            playSound(WBSoundRegistry.HULLBACK_MAD.get());
-                            return InteractionResult.PASS;
-                        }
-                    }
-
-                    if (!player.getAbilities().instabuild) {
-                        heldItem.shrink(1);
-                    }
-
-                this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                            SoundEvents.WOOD_PLACE,
-                            SoundSource.PLAYERS, 1.0F, 1.0F);
-                    this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                            SoundEvents.ITEM_FRAME_REMOVE_ITEM,
-                            SoundSource.PLAYERS, 1.0F, 0.5f + ((float) currentArmor.getCount() /64));
-                    if(currentArmor.getCount()==64){
-                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                            SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
-                            SoundSource.PLAYERS, 2.0F, 1.0F);
-                        playSound(WBSoundRegistry.HULLBACK_TAME.get());
-
-                    }
-                    this.updateContainerEquipment();
-                    return InteractionResult.SUCCESS;
-                }
-                return InteractionResult.PASS;
-            }
-        return InteractionResult.PASS;
-    }
 
     private InteractionResult handleVegetationRemoval(Player player, InteractionHand hand, HullbackPartEntity part, boolean top, boolean isShears) {
         BlockState[][] dirtArray = getDirtArrayForPart(part, top);
-        BlockState removedState;
+        ItemStack held = player.getItemInHand(hand);
 
         for (int x = 0; x < dirtArray.length; x++) {
             for (int y = 0; y < dirtArray[x].length; y++) {
-                if(isRemovableVegetation(dirtArray[x][y], isShears)){
-                    removedState = dirtArray[x][y];
+                BlockState state = dirtArray[x][y];
+                if (state == null || state.isAir()) continue;
+
+                HullbackDirtManager.HullbackDirtEntry entry = HullbackDirtManager.DATA.stream().filter(e -> e.block() == state.getBlock()).findFirst().orElse(null);
+
+                if (entry == null) continue;
+
+                boolean removable = entry.removableWith().contains("any") || entry.removableWith().contains(getToolType(held));
+
+                if (removable) {
                     if (!this.level().isClientSide) {
                         dirtArray[x][y] = Blocks.AIR.defaultBlockState();
-                        ItemStack drop = getDropForBlock(removedState);
-                        if (!drop.isEmpty()) {
-                            ItemEntity itemEntity = new ItemEntity(
-                                    this.level(),
-                                    part.getX() + y - part.getSize().width / 2,
-                                    part.getY() + (top ? part.getSize().height + 0.5f : - 0.5f),
-                                    part.getZ() - x + part.getSize().width / 2,
-                                    drop
-                            );
+
+                        if (entry.drop() != Items.AIR) {
+                            ItemStack dropStack = new ItemStack(entry.drop());
+                            double px = part.getX() + y - part.getSize().width / 2.0;
+                            double py = part.getY() + (top ? part.getSize().height + 0.5f : -0.5f);
+                            double pz = part.getZ() - x + part.getSize().width / 2.0;
+                            ItemEntity itemEntity = new ItemEntity(this.level(), px, py, pz, dropStack);
                             this.level().addFreshEntity(itemEntity);
                         }
 
                         if (!player.isCreative()) {
-                            player.getItemInHand(hand).hurtAndBreak(1, player,
-                                    (p) -> p.broadcastBreakEvent(hand));
+                            player.getItemInHand(hand).hurtAndBreak(1, player, (p) -> p.broadcastBreakEvent(hand));
                         }
 
-                        this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                                isShears ? SoundEvents.SHEEP_SHEAR : SoundEvents.AXE_STRIP,
-                                SoundSource.PLAYERS, 1.0F, 1.0f);
+                        if (entry.soundOnRemove() != null) {
+                            this.level().playSound(null, player.getX(), player.getY(), player.getZ(), entry.soundOnRemove(), SoundSource.PLAYERS, 1.0F, 1.0f);
+                        } else {
+                            this.level().playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.SHEEP_SHEAR, SoundSource.PLAYERS, 1.0F, 1.0f);
+                        }
 
                         mouthTarget = 1.0f;
                         syncDirtToClients();
@@ -1076,7 +990,112 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 }
             }
         }
+
         return InteractionResult.PASS;
+    }
+
+    public InteractionResult interactArmor(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
+        ItemStack heldItem = player.getItemInHand(hand);
+
+        if (heldItem.getItem() instanceof SaddleItem) {
+            if (!this.isSaddled()) {
+                if (this.isTamed()) {
+                    this.equipSaddle(SoundSource.PLAYERS);
+                    if (!player.getAbilities().instabuild) {
+                        heldItem.shrink(1);
+                    }
+                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            SoundEvents.HORSE_SADDLE,
+                            SoundSource.PLAYERS, 1.0F, 0.1F);
+                    return InteractionResult.SUCCESS;
+                } else {
+                    mouthTarget = 0.3f;
+                    playSound(WBSoundRegistry.HULLBACK_MAD.get());
+                    return InteractionResult.PASS;
+                }
+            }
+            return InteractionResult.PASS;
+        }
+        else if (heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
+            if (!isSaddled()) {
+                mouthTarget = 0.3f;
+                playSound(WBSoundRegistry.HULLBACK_MAD.get());
+                return InteractionResult.PASS;
+            }
+
+            ItemStack currentArmor = this.inventory.getItem(INV_SLOT_ARMOR);
+
+            if (currentArmor.getCount() == currentArmor.getMaxStackSize()){
+                mouthTarget = 0.3f;
+                playSound(WBSoundRegistry.HULLBACK_MAD.get());
+                return InteractionResult.PASS;
+            }
+
+            if (currentArmor.getCount() < currentArmor.getMaxStackSize()) {
+                if (currentArmor.isEmpty()) {
+                    ItemStack newArmor = new ItemStack(heldItem.getItem(), 1);
+                    this.inventory.setItem(INV_SLOT_ARMOR, newArmor);
+                    updateContainerEquipment();
+                } else {
+                    if (heldItem.getItem() == currentArmor.getItem()) {
+                        if (player.isCreative()) {
+                            currentArmor.setCount(64);
+                        } else {
+                            currentArmor.grow(1);
+                        }
+
+                        this.entityData.set(DATA_ARMOR, currentArmor.copy());
+                    } else {
+                        mouthTarget = 0.3f;
+                        playSound(WBSoundRegistry.HULLBACK_MAD.get());
+                        return InteractionResult.PASS;
+                    }
+                }
+
+                if (!player.getAbilities().instabuild) {
+                    heldItem.shrink(1);
+                }
+
+                this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.WOOD_PLACE,
+                        SoundSource.PLAYERS, 1.0F, 1.0F);
+                this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.ITEM_FRAME_REMOVE_ITEM,
+                        SoundSource.PLAYERS, 1.0F, 0.5f + ((float) currentArmor.getCount() /64));
+                if(currentArmor.getCount()==64){
+                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                            SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
+                            SoundSource.PLAYERS, 2.0F, 1.0F);
+                    playSound(WBSoundRegistry.HULLBACK_TAME.get());
+
+                }
+                this.updateContainerEquipment();
+                return InteractionResult.SUCCESS;
+            }
+            return InteractionResult.PASS;
+        }
+        return InteractionResult.PASS;
+    }
+
+    private String getPartName(HullbackPartEntity part) {
+        if (part == this.head) return "head";
+        if (part == this.body) return "body";
+        if (part == this.tail) return "tail";
+        if (part == this.fluke) return "fluke";
+        if (part == this.nose) return "nose";
+        return "body";
+    }
+
+    private String getToolType(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return "hand";
+        Item item = stack.getItem();
+        if (item instanceof ShearsItem || stack.is(Tags.Items.SHEARS)) return "shears";
+        if (item instanceof AxeItem || stack.is(ItemTags.AXES)) return "axe";
+        if (item instanceof PickaxeItem || stack.is(ItemTags.PICKAXES)) return "pickaxe";
+        if (item instanceof HoeItem || stack.is(ItemTags.HOES)) return "hoe";
+        if (item instanceof ShovelItem || stack.is(ItemTags.SHOVELS)) return "shovel";
+        if (item instanceof SwordItem || stack.is(ItemTags.SWORDS)) return "sword";
+        return "hand";
     }
 
     private BlockState[][] getDirtArrayForPart(HullbackPartEntity part, boolean top) {
@@ -1092,39 +1111,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return this.tailDirt;
     }
 
-    private boolean isRemovableVegetation(BlockState state, boolean isShears) {
-        Block block = state.getBlock();
-        if (isShears) {
-            return block == Blocks.SEAGRASS || block == Blocks.TALL_SEAGRASS ||
-                    block == Blocks.KELP || block == Blocks.KELP_PLANT ||
-                    block == Blocks.MOSS_CARPET;
-        } else {
-            return block == WBBlockRegistry.WHALE_BARNACLE_0.get() || block == WBBlockRegistry.WHALE_BARNACLE_1.get() ||
-                    block == WBBlockRegistry.WHALE_BARNACLE_2.get();
-        }
-    }
-
-    private ItemStack getDropForBlock(BlockState state) {
-        Block block = state.getBlock();
-        if (block == Blocks.SEAGRASS) {
-            return new ItemStack(Items.SEAGRASS);
-        } else if (block == Blocks.KELP) {
-            return new ItemStack(Items.KELP);
-        } else if (block == Blocks.MOSS_CARPET) {
-            return new ItemStack(Items.MOSS_CARPET);
-        } else if (block == WBBlockRegistry.WHALE_BARNACLE_0.get()) {
-            return new ItemStack(WBItemRegistry.ROUGH_BARNACLE.get());
-        } else if (block == WBBlockRegistry.WHALE_BARNACLE_1.get()) {
-            return new ItemStack(WBItemRegistry.ROUGH_BARNACLE.get(), 2);
-        } else if (block == WBBlockRegistry.WHALE_BARNACLE_2.get()) {
-            return new ItemStack(WBItemRegistry.ROUGH_BARNACLE.get(), 5);
-        } else if (block == Blocks.KELP_PLANT) {
-            return new ItemStack(Items.KELP, 2);
-        } else if (block == Blocks.TALL_SEAGRASS) {
-            return new ItemStack(Items.SEAGRASS, 2);
-        }
-        return ItemStack.EMPTY;
-    }
 
     @Override
     public boolean hurt(DamageSource source, float amount) {
@@ -1184,6 +1170,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.moving_body.discard();
             this.moving_body = null;
         }
+        List<HullbackWalkableEntity> list = level().getEntitiesOfClass(HullbackWalkableEntity.class, this.getBoundingBox().inflate(6));
+        if (!list.isEmpty()) for (HullbackWalkableEntity entity : list) entity.discard();
+
         super.tickDeath();
     }
 
@@ -1328,14 +1317,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
 
         if(!level().isClientSide){
-            randomTickDirt(headDirt, true);
-            randomTickDirt(bodyDirt, true);
-            randomTickDirt(tailDirt, true);
-            randomTickDirt(flukeDirt, true);
+            randomTickDirt(headDirt, true, getPartName(head));
+            randomTickDirt(bodyDirt, true, getPartName(body));
+            randomTickDirt(tailDirt, true, getPartName(tail));
+            randomTickDirt(flukeDirt, true, getPartName(fluke));
 
             if(!isTamed()){
-                randomTickDirt(headTopDirt, false);
-                randomTickDirt(bodyTopDirt, false);
+                randomTickDirt(headTopDirt, false, getPartName(head));
+                randomTickDirt(bodyTopDirt, false, getPartName(body));
             } else {
                 for (int x = 0; x < headTopDirt.length; x++) {
                     for (int y = 0; y < headTopDirt[x].length; y++) {
@@ -1385,10 +1374,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     public HullbackWalkableEntity spawnPlatform(int index) {
-        HullbackWalkableEntity part = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), this.level());
-        part.setPos(this.getSubEntities()[index].getX(), this.position().y + 4.7, this.getSubEntities()[index].getZ());
-        if (this.level().addFreshEntity(part)) {
-            return part;
+        if (!this.isDeadOrDying()) {
+            HullbackWalkableEntity part = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), this.level());
+            part.setPos(this.getSubEntities()[index].getX(), this.position().y + 4.7, this.getSubEntities()[index].getZ());
+            if (this.level().addFreshEntity(part)) {
+                return part;
+            }
         }
         return null;
     }
@@ -1439,76 +1430,93 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 //        }
 //    }
 
-    private void randomTickDirt(BlockState[][] array, boolean bottom) {
+    private void randomTickDirt(BlockState[][] array, boolean bottom, String partName) {
         if (bottom) {
-            if (this.random.nextInt(30000) <= 10) {
+            if (this.random.nextInt(30000) <= 5) {
                 int x = getWeightedIndex(array.length, true);
                 int y = getWeightedIndex(array[x].length, true);
 
                 BlockState currentState = array[x][y];
+                HullbackDirtManager.HullbackDirtEntry entry = HullbackDirtManager.DATA.stream().filter(e -> e.block() == currentState.getBlock()).findFirst().orElse(null);
+                if (entry != null && !entry.growth().isEmpty()) {
+                    Block next = entry.growth().get(random.nextInt(entry.growth().size()));
+                    array[x][y] = next.defaultBlockState();
+                    this.level().playSound(null, getX(), getY(), getZ(), entry.soundOnGrowth() != null ? entry.soundOnGrowth() : SoundEvents.BONE_MEAL_USE, SoundSource.NEUTRAL, 1.0F, 1.0F);
+                    if (!this.level().isClientSide) syncDirtToClients();
+                    return;
+                }
 
-                if (currentState == Blocks.SEAGRASS.defaultBlockState()) {
-                    array[x][y] = Blocks.TALL_SEAGRASS.defaultBlockState();
-                    syncDirtToClients();
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
-                }
-                if (currentState == Blocks.KELP.defaultBlockState()) {
-                    array[x][y] = Blocks.KELP_PLANT.defaultBlockState();
-                    syncDirtToClients();
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
-                }
-                if (currentState == WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState()) {
-                    array[x][y] = WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState();
-                    syncDirtToClients();
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
-                }
-                if (currentState == WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()) {
-                    array[x][y] = WBBlockRegistry.WHALE_BARNACLE_2.get().defaultBlockState();
-                    syncDirtToClients();
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
-                }
-                if (currentState == Blocks.AIR.defaultBlockState()) {
-                    int index = getWeightedIndex(possibleFreshBlocks.length, false);
-                    array[x][y] = possibleFreshBlocks[index];
-                    syncDirtToClients();
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
+                if (currentState == null || currentState.isAir()) {
+                    List<HullbackDirtManager.HullbackDirtEntry> candidates = getCandidates(true, partName);
+                    List<HullbackDirtManager.HullbackDirtEntry> successful = new ArrayList<>();
+
+                    for (HullbackDirtManager.HullbackDirtEntry candidate : candidates) {
+                        if (random.nextDouble() < candidate.placementChance()) {
+                            successful.add(candidate);
+                        }
+                    }
+
+                    if (!successful.isEmpty()) {
+                        HullbackDirtManager.HullbackDirtEntry chosen = successful.get(random.nextInt(successful.size()));
+                        array[x][y] = chosen.block().defaultBlockState();
+
+                        if (!this.level().isClientSide) {
+                            this.level().playSound(null, getX(), getY(), getZ(), chosen.soundOnGrowth() != null ? chosen.soundOnGrowth() : SoundEvents.BONE_MEAL_USE, SoundSource.NEUTRAL, 1.0F, 1.0F);
+                            syncDirtToClients();
+                        }
+                    }
                 }
             }
+
         } else {
             if (this.random.nextInt(30000) <= 5) {
-
                 int x = getWeightedIndex(array.length, true);
                 int y = getWeightedIndex(array[x].length, true);
 
                 BlockState currentState = array[x][y];
 
-                if (currentState == Blocks.AIR.defaultBlockState()) {
-                    int index = getWeightedIndex(possibleTopBlocks.length, false);
-                    array[x][y] = possibleTopBlocks[index];
-                    syncDirtToClients();
-                    playSound(SoundEvents.BONE_MEAL_USE);
+                HullbackDirtManager.HullbackDirtEntry entry = HullbackDirtManager.DATA.stream()
+                        .filter(e -> e.block() == currentState.getBlock())
+                        .findFirst()
+                        .orElse(null);
+
+                if (entry != null && !entry.growth().isEmpty()) {
+                    Block next = entry.growth().get(random.nextInt(entry.growth().size()));
+                    array[x][y] = next.defaultBlockState();
+                    if (entry.soundOnGrowth() != null) {
+                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                                entry.soundOnGrowth(), SoundSource.NEUTRAL, 1.0F, 1.0f);
+                    } else {
+                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                                SoundEvents.BONE_MEAL_USE, SoundSource.NEUTRAL, 1.0F, 1.0f);
+                    }
+                    if (!this.level().isClientSide) syncDirtToClients();
                     return;
                 }
-                if (currentState == WBBlockRegistry.WHALE_BARNACLE_0.get().defaultBlockState()) {
-                    array[x][y] = WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState();
-                    syncDirtToClients();
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
-                }
-                if (currentState == WBBlockRegistry.WHALE_BARNACLE_1.get().defaultBlockState()) {
-                    array[x][y] = WBBlockRegistry.WHALE_BARNACLE_2.get().defaultBlockState();
-                    syncDirtToClients();
-                    playSound(SoundEvents.BONE_MEAL_USE);
-                    return;
+
+                if (currentState == null || currentState.isAir()) {
+                    List<HullbackDirtManager.HullbackDirtEntry> candidates = getCandidates(false, partName);
+                    if (!candidates.isEmpty()) {
+                        HullbackDirtManager.HullbackDirtEntry candidate = candidates.get(random.nextInt(candidates.size()));
+                        if (random.nextDouble() < candidate.placementChance()) {
+                            array[x][y] = candidate.block().defaultBlockState();
+                            if (!this.level().isClientSide) {
+                                if (candidate.soundOnGrowth() != null) {
+                                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                                            candidate.soundOnGrowth(), SoundSource.NEUTRAL, 1.0F, 1.0f);
+                                } else {
+                                    this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                                            SoundEvents.BONE_MEAL_USE, SoundSource.NEUTRAL, 1.0F, 1.0f);
+                                }
+                                syncDirtToClients();
+                            }
+                        }
+                    }
                 }
             }
         }
     }
+
 
     private int getWeightedIndex(int length, boolean higherWeight) {
         double[] weights = new double[length];

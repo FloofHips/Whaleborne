@@ -1,10 +1,8 @@
 {
-  "parent": "minecraft:block/orientable_with_bottom",
+  "parent": "minecraft:block/cube_bottom_top",
   "textures": {
     "bottom": "whaleborne:block/barnacle_bottom",
-    "front": "whaleborne:block/barnacle_side",
-    "particle": "whaleborne:block/barnacle_side",
-    "side": "whaleborne:block/barnacle_side",
+    "side": "whaleborne:block/barnacle",
     "top": "whaleborne:block/barnacle_top"
   }
 }

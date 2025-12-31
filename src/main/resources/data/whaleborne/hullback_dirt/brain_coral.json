@@ -1,0 +1,10 @@
+{
+  "block": "minecraft:brain_coral",
+  "placements": ["body_bottom", "head_bottom", "tail_bottom", "fluke_bottom"],
+  "placement_chance": 0.002,
+  "growth": [],
+  "removable_with": ["pickaxe"],
+  "drop": "minecraft:brain_coral",
+  "sound_on_growth": "minecraft:block.coral_block.place",
+  "sound_on_remove": "minecraft:block.coral_block.break"
+}
