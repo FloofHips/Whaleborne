@@ -14,7 +14,7 @@
                   "block": "whaleborne:rough_barnacle",
                   "condition": "minecraft:block_state_property",
                   "properties": {
-                    "type": "middle"
+                    "barnacle_type": "middle"
                   }
                 }
               ],
@@ -28,7 +28,7 @@
                   "block": "whaleborne:rough_barnacle",
                   "condition": "minecraft:block_state_property",
                   "properties": {
-                    "type": "tip_lone"
+                    "barnacle_type": "tip_lone"
                   }
                 }
               ],
@@ -42,7 +42,7 @@
                   "block": "whaleborne:rough_barnacle",
                   "condition": "minecraft:block_state_property",
                   "properties": {
-                    "type": "tip"
+                    "barnacle_type": "tip"
                   }
                 }
               ],
@@ -56,7 +56,7 @@
                   "block": "whaleborne:rough_barnacle",
                   "condition": "minecraft:block_state_property",
                   "properties": {
-                    "type": "base"
+                    "barnacle_type": "base"
                   }
                 }
               ],

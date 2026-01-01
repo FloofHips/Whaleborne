@@ -1,0 +1,13 @@
+{
+  "block": "whaleborne:rough_barnacle",
+  "placements": ["body_top", "head_top", "body_bottom", "head_bottom"],
+  "placement_chance": 0.025,
+  "removable_with": ["axe"],
+  "block_properties": {
+    "barnacle_type": "tip_lone"
+  },
+  "drop": "whaleborne:rough_barnacle",
+  "drop_amount": 2,
+  "sound_on_growth": "minecraft:block.bone_block.place",
+  "sound_on_remove": "minecraft:block.bone_block.break"
+}

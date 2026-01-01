@@ -55,6 +55,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.AABB;
@@ -314,12 +315,38 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
                 if (!successful.isEmpty()) {
                     HullbackDirtManager.HullbackDirtEntry chosen = successful.get(random.nextInt(successful.size()));
-                    array[x][y] = chosen.block().defaultBlockState();
+                    array[x][y] = applyProperties(chosen.block(), chosen.blockProperties());
                 }
             }
         }
     }
 
+    public static BlockState applyProperties(Block block, @Nullable Map<String, String> props) {
+        BlockState state = block.defaultBlockState();
+        if (props == null || props.isEmpty()) return state;
+
+        for (Map.Entry<String, String> entry : props.entrySet()) {
+            String name = entry.getKey();
+            String value = entry.getValue();
+
+            Property<?> property = state.getBlock().getStateDefinition().getProperty(name);
+            if (property == null) {
+                Whaleborne.LOGGER.warn("Unknown blockstate property '{}' for block {}", name, block);
+                continue;
+            }
+
+            state = setProperty(state, property, value);
+        }
+
+        return state;
+    }
+
+    private static <T extends Comparable<T>> BlockState setProperty(BlockState state, Property<T> property, String value) {
+        Optional<T> parsed = property.getValue(value);
+        if (parsed.isPresent()) return state.setValue(property, parsed.get());
+        Whaleborne.LOGGER.warn("Invalid value '{}' for property '{}' (allowed: {})", value, property.getName(), property.getPossibleValues());
+        return state;
+    }
 
     public BlockState[][] getDirtArray(int index, boolean bottom){
         if(bottom){
@@ -923,17 +950,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 double z = particlePos.z;
 
                 if (this.level() instanceof ServerLevel serverLevel) {
-                    serverLevel.sendParticles(
-                            ParticleTypes.HEART,
-                            x,
-                            y,
-                            z,
-                            10,
-                            0.5,
-                            0.5,
-                            0.5,
-                            0.02
-                    );
+                    serverLevel.sendParticles(ParticleTypes.HEART, x, y, z, 10, 0.5, 0.5, 0.5, 0.02);
                 }
             }
 
@@ -951,7 +968,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 BlockState state = dirtArray[x][y];
                 if (state == null || state.isAir()) continue;
 
-                HullbackDirtManager.HullbackDirtEntry entry = HullbackDirtManager.DATA.stream().filter(e -> e.block() == state.getBlock()).findFirst().orElse(null);
+                HullbackDirtManager.HullbackDirtEntry entry = HullbackDirtManager.DATA.stream().filter(e -> e.matches(state)).findFirst().orElse(null);
 
                 if (entry == null) continue;
 
@@ -962,12 +979,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                         dirtArray[x][y] = Blocks.AIR.defaultBlockState();
 
                         if (entry.drop() != Items.AIR) {
-                            ItemStack dropStack = new ItemStack(entry.drop());
-                            double px = part.getX() + y - part.getSize().width / 2.0;
-                            double py = part.getY() + (top ? part.getSize().height + 0.5f : -0.5f);
-                            double pz = part.getZ() - x + part.getSize().width / 2.0;
-                            ItemEntity itemEntity = new ItemEntity(this.level(), px, py, pz, dropStack);
-                            this.level().addFreshEntity(itemEntity);
+                            for (int i = 0; i < entry.dropAmount(); i++) {
+                                ItemStack dropStack = new ItemStack(entry.drop());
+                                double px = part.getX() + y - part.getSize().width / 2.0;
+                                double py = part.getY() + (top ? part.getSize().height + 0.5f : -0.5f);
+                                double pz = part.getZ() - x + part.getSize().width / 2.0;
+                                ItemEntity itemEntity = new ItemEntity(this.level(), px, py, pz, dropStack);
+                                this.level().addFreshEntity(itemEntity);
+                            }
                         }
 
                         if (!player.isCreative()) {
@@ -1437,10 +1456,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 int y = getWeightedIndex(array[x].length, true);
 
                 BlockState currentState = array[x][y];
-                HullbackDirtManager.HullbackDirtEntry entry = HullbackDirtManager.DATA.stream().filter(e -> e.block() == currentState.getBlock()).findFirst().orElse(null);
-                if (entry != null && !entry.growth().isEmpty()) {
-                    Block next = entry.growth().get(random.nextInt(entry.growth().size()));
-                    array[x][y] = next.defaultBlockState();
+                HullbackDirtManager.HullbackDirtEntry entry = HullbackDirtManager.DATA.stream().filter(e -> e.matches(currentState)).findFirst().orElse(null);
+                if (entry != null && entry.growth().isPresent() && this.random.nextBoolean()) {
+                    array[x][y] = applyProperties(entry.growth().get(), entry.growthProperties());
                     this.level().playSound(null, getX(), getY(), getZ(), entry.soundOnGrowth() != null ? entry.soundOnGrowth() : SoundEvents.BONE_MEAL_USE, SoundSource.NEUTRAL, 1.0F, 1.0F);
                     if (!this.level().isClientSide) syncDirtToClients();
                     return;
@@ -1458,7 +1476,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
                     if (!successful.isEmpty()) {
                         HullbackDirtManager.HullbackDirtEntry chosen = successful.get(random.nextInt(successful.size()));
-                        array[x][y] = chosen.block().defaultBlockState();
+                        array[x][y] = applyProperties(chosen.block(), chosen.blockProperties());
 
                         if (!this.level().isClientSide) {
                             this.level().playSound(null, getX(), getY(), getZ(), chosen.soundOnGrowth() != null ? chosen.soundOnGrowth() : SoundEvents.BONE_MEAL_USE, SoundSource.NEUTRAL, 1.0F, 1.0F);
@@ -1475,20 +1493,15 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
                 BlockState currentState = array[x][y];
 
-                HullbackDirtManager.HullbackDirtEntry entry = HullbackDirtManager.DATA.stream()
-                        .filter(e -> e.block() == currentState.getBlock())
-                        .findFirst()
-                        .orElse(null);
+                HullbackDirtManager.HullbackDirtEntry entry = HullbackDirtManager.DATA.stream().filter(e -> e.matches(currentState)).findFirst().orElse(null);
 
-                if (entry != null && !entry.growth().isEmpty()) {
-                    Block next = entry.growth().get(random.nextInt(entry.growth().size()));
-                    array[x][y] = next.defaultBlockState();
+                if (entry != null && entry.growth().isPresent() && this.random.nextBoolean()) {
+
+                    array[x][y] = applyProperties(entry.growth().get(), entry.growthProperties());
                     if (entry.soundOnGrowth() != null) {
-                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                                entry.soundOnGrowth(), SoundSource.NEUTRAL, 1.0F, 1.0f);
+                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(), entry.soundOnGrowth(), SoundSource.NEUTRAL, 1.0F, 1.0f);
                     } else {
-                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                                SoundEvents.BONE_MEAL_USE, SoundSource.NEUTRAL, 1.0F, 1.0f);
+                        this.level().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.BONE_MEAL_USE, SoundSource.NEUTRAL, 1.0F, 1.0f);
                     }
                     if (!this.level().isClientSide) syncDirtToClients();
                     return;
@@ -1499,7 +1512,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     if (!candidates.isEmpty()) {
                         HullbackDirtManager.HullbackDirtEntry candidate = candidates.get(random.nextInt(candidates.size()));
                         if (random.nextDouble() < candidate.placementChance()) {
-                            array[x][y] = candidate.block().defaultBlockState();
+                            array[x][y] = applyProperties(candidate.block(), candidate.blockProperties());
                             if (!this.level().isClientSide) {
                                 if (candidate.soundOnGrowth() != null) {
                                     this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
@@ -1516,7 +1529,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
     }
-
 
     private int getWeightedIndex(int length, boolean higherWeight) {
         double[] weights = new double[length];

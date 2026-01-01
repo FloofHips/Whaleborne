@@ -14,7 +14,11 @@ import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -50,22 +54,48 @@ public class HullbackDirtManager  extends SimpleJsonResourceReloadListener {
         return DATA;
     }
 
-    public record HullbackDirtEntry(Block block, List<String> placements, float placementChance, List<Block> growth, List<String> removableWith, Item drop, @Nullable Map<String,Integer> blockProperties, @Nullable SoundEvent soundOnGrowth, @Nullable SoundEvent soundOnRemove) {
+    public record HullbackDirtEntry(Block block, List<String> placements, float placementChance, Optional<Block> growth, @Nullable Map<String,String> growthProperties, List<String> removableWith, Item drop, int dropAmount, @Nullable Map<String,String> blockProperties, @Nullable SoundEvent soundOnGrowth, @Nullable SoundEvent soundOnRemove) {
         public static final Codec<HullbackDirtEntry> CODEC = RecordCodecBuilder.create(instance ->
                 instance.group(
                         BuiltInRegistries.BLOCK.byNameCodec().fieldOf("block").forGetter(HullbackDirtEntry::block),
                         Codec.list(Codec.STRING).fieldOf("placements").forGetter(HullbackDirtEntry::placements),
                         Codec.FLOAT.fieldOf("placement_chance").forGetter(HullbackDirtEntry::placementChance),
-                        Codec.list(BuiltInRegistries.BLOCK.byNameCodec()).fieldOf("growth").forGetter(HullbackDirtEntry::growth),
+                        BuiltInRegistries.BLOCK.byNameCodec().optionalFieldOf("growth").forGetter(HullbackDirtEntry::growth),
+                        Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("growth_properties").forGetter(entry -> Optional.ofNullable(entry.growthProperties)),
                         Codec.list(Codec.STRING).fieldOf("removable_with").forGetter(HullbackDirtEntry::removableWith),
-                        BuiltInRegistries.ITEM.byNameCodec().fieldOf("drop").forGetter(HullbackDirtEntry::drop),
-                        Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("block_properties").forGetter(entry -> Optional.ofNullable(entry.blockProperties)),
+                        BuiltInRegistries.ITEM.byNameCodec().fieldOf("drop").orElse(Items.AIR).forGetter(HullbackDirtEntry::drop),
+                        Codec.INT.fieldOf("drop_amount").orElse(1).forGetter(HullbackDirtEntry::dropAmount),
+                        Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("block_properties").forGetter(entry -> Optional.ofNullable(entry.blockProperties)),
                         BuiltInRegistries.SOUND_EVENT.byNameCodec().optionalFieldOf("sound_on_growth").forGetter(entry -> Optional.ofNullable(entry.soundOnGrowth)),
                         BuiltInRegistries.SOUND_EVENT.byNameCodec().optionalFieldOf("sound_on_remove").forGetter(entry -> Optional.ofNullable(entry.soundOnRemove))
-                ).apply(instance, (block, placements, placementChance, growth, removableWith, drop, props, soundOnGrowth, soundOnRemove) ->
-                        new HullbackDirtEntry(block, placements, placementChance, growth, removableWith, drop, props.orElse(null), soundOnGrowth.orElse(null), soundOnRemove.orElse(null))
+                ).apply(instance, (block, placements, placementChance, growth, growthProperties, removableWith, drop, dropAmount, props, soundOnGrowth, soundOnRemove) ->
+                        new HullbackDirtEntry(block, placements, placementChance, growth, growthProperties.orElse(null), removableWith, drop, dropAmount, props.orElse(null), soundOnGrowth.orElse(null), soundOnRemove.orElse(null))
                 )
         );
+
+
+
+        public boolean matches(BlockState state) {
+            if (state.getBlock() != this.block) return false;
+
+            if (blockProperties == null || blockProperties.isEmpty()) {
+                return true;
+            }
+
+            for (Map.Entry<String, String> entry : blockProperties.entrySet()) {
+                Property<?> property = state.getBlock().getStateDefinition().getProperty(entry.getKey());
+                if (property == null) return false;
+
+                Optional<?> expected = property.getValue(entry.getValue());
+                if (expected.isEmpty()) return false;
+
+                if (!state.getValue(property).equals(expected.get())) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 
 }

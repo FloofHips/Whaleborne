@@ -19,7 +19,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class RoughBarnacleBlock extends Block implements SimpleWaterloggedBlock {
     public static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;
-    public static final EnumProperty<Type> TYPE = EnumProperty.create("type", Type.class);
+    public static final EnumProperty<Type> TYPE = EnumProperty.create("barnacle_type", Type.class);
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
 
     protected static final VoxelShape SHAPE_UP = Block.box(0, 0, 0, 16, 8, 16);
