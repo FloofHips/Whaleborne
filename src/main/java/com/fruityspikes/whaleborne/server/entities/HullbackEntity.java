@@ -9,6 +9,7 @@ import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
 import com.fruityspikes.whaleborne.server.data.HullbackDirtManager;
 import com.fruityspikes.whaleborne.server.registries.*;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -53,7 +54,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.material.Fluids;
@@ -63,7 +63,6 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.common.Tags;
-import net.minecraftforge.common.data.ForgeItemTagsProvider;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.entity.PartEntity;
 import net.minecraftforge.fluids.FluidType;
@@ -76,7 +75,6 @@ import javax.annotation.Nullable;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 public class HullbackEntity extends WaterAnimal implements ContainerListener, HasCustomInventoryScreen, PlayerRideableJumping, Saddleable {
     private static final UUID SAIL_SPEED_MODIFIER_UUID = UUID.fromString("12345678-1234-1234-1234-1234567890ab");
@@ -917,7 +915,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         mouthTarget = 0.2f;
-        if ((handleVegetationRemoval(player, hand, part, top, true)) == InteractionResult.PASS) {
+        if ((handleVegetationRemoval(player, hand, part, top)) == InteractionResult.PASS) {
 
             for (BlockState[] states : headTopDirt) {
                 for (BlockState state : states) {
@@ -959,7 +957,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return InteractionResult.SUCCESS;
     }
 
-    private InteractionResult handleVegetationRemoval(Player player, InteractionHand hand, HullbackPartEntity part, boolean top, boolean isShears) {
+    private InteractionResult handleVegetationRemoval(Player player, InteractionHand hand, HullbackPartEntity part, boolean top) {
         BlockState[][] dirtArray = getDirtArrayForPart(part, top);
         ItemStack held = player.getItemInHand(hand);
 
@@ -975,7 +973,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 boolean removable = entry.removableWith().contains("any") || entry.removableWith().contains(getToolType(held));
 
                 if (removable) {
-                    if (!this.level().isClientSide) {
+                    if (level() instanceof ServerLevel serverLevel) {
+                        float yOffset = top ? 5 : -1;
+
+                        serverLevel.sendParticles(
+                                new BlockParticleOption(ParticleTypes.BLOCK, applyProperties(entry.block(), entry.blockProperties())),
+                                position().x, position().y + yOffset, position().z,
+                                60,
+                                3,0.2,-3
+                                ,0);
+
                         dirtArray[x][y] = Blocks.AIR.defaultBlockState();
 
                         if (entry.drop() != Items.AIR) {
@@ -1001,11 +1008,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
                         mouthTarget = 1.0f;
                         syncDirtToClients();
-                        return InteractionResult.SUCCESS;
                     } else {
                         dirtArray[x][y] = Blocks.AIR.defaultBlockState();
-                        return InteractionResult.SUCCESS;
                     }
+                    return InteractionResult.SUCCESS;
                 }
             }
         }
