@@ -59,16 +59,18 @@ public class RoughBarnacleBlock extends Block implements SimpleWaterloggedBlock 
         BlockPos frontPos = pos.relative(facing);
         BlockPos backPos = pos.relative(facing.getOpposite());
 
+        BlockState state = level.getBlockState(pos);
         BlockState front = level.getBlockState(frontPos);
         BlockState back = level.getBlockState(backPos);
 
-        boolean hasFront = isSameBarnacle(front, facing);
-        boolean hasBack = isSameBarnacle(back, facing);
+        boolean hasFront = isSameBarnacle(front, facing) && front.getValue(TYPE) != Type.SMALL_LONE;
+
+        boolean hasBack = isSameBarnacle(back, facing) && back.getValue(TYPE) != Type.SMALL_LONE && back.getValue(TYPE) != Type.SMALL;
 
         if (hasFront && hasBack) return Type.MIDDLE;
         if (hasBack) return Type.TIP;
         if (hasFront) return Type.BASE;
-        return Type.TIP_LONE;
+        return state.getValue(TYPE) == Type.SMALL_LONE || state.getValue(TYPE) == Type.SMALL ? Type.SMALL_LONE : Type.TIP_LONE;
     }
 
     private boolean isSameBarnacle(BlockState state, Direction facing) {
@@ -85,13 +87,13 @@ public class RoughBarnacleBlock extends Block implements SimpleWaterloggedBlock 
         BlockState existing = level.getBlockState(pos);
         if (existing.is(this) && (existing.getValue(TYPE) == Type.SMALL || existing.getValue(TYPE) == Type.SMALL_LONE)) {
             BlockState back = level.getBlockState(pos.relative(existing.getValue(FACING).getOpposite()));
-            boolean hasBack = isSameBarnacle(back, existing.getValue(FACING));
+            boolean hasBack = isSameBarnacle(back, existing.getValue(FACING)) && back.getValue(TYPE) != Type.SMALL_LONE && back.getValue(TYPE) != Type.SMALL;
 
             return existing.setValue(TYPE, hasBack ? Type.TIP : Type.TIP_LONE);
         }
         if (!existing.is(this)) {
             BlockState back = level.getBlockState(pos.relative(facing.getOpposite()));
-            boolean hasBack = isSameBarnacle(back, facing);
+            boolean hasBack = isSameBarnacle(back, facing) && back.getValue(TYPE) != Type.SMALL_LONE && back.getValue(TYPE) != Type.SMALL;
 
             return defaultBlockState().setValue(FACING, facing).setValue(TYPE, hasBack ? Type.SMALL : Type.SMALL_LONE).setValue(WATERLOGGED, fluid.getType() == Fluids.WATER);
         }
@@ -105,14 +107,24 @@ public class RoughBarnacleBlock extends Block implements SimpleWaterloggedBlock 
 
     @Override
     public BlockState updateShape(BlockState state, Direction dir, BlockState neighbor, LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
-        if (state.getValue(TYPE) == Type.SMALL || state.getValue(TYPE) == Type.SMALL_LONE) {
+        boolean isSmall = state.getValue(TYPE) == Type.SMALL || state.getValue(TYPE) == Type.SMALL_LONE;
+        Direction facing = state.getValue(FACING);
+        BlockPos frontPos = pos.relative(facing);
+        BlockPos backPos = pos.relative(facing.getOpposite());
+
+        BlockState front = level.getBlockState(frontPos);
+        BlockState back = level.getBlockState(backPos);
+        boolean hasFront = isSameBarnacle(front, facing) && front.getValue(TYPE) != Type.SMALL_LONE;
+        boolean hasBack = isSameBarnacle(back, facing) && back.getValue(TYPE) != Type.SMALL_LONE && back.getValue(TYPE) != Type.SMALL;
+
+
+        if (isSmall && (hasFront || hasBack)) {
             return state;
         }
 
         if (state.getValue(WATERLOGGED)) {
             level.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(level));
         }
-        Direction facing = state.getValue(FACING);
 
         if (dir == facing || dir == facing.getOpposite()) {
             Type newType = calculateType(level, pos, facing);
