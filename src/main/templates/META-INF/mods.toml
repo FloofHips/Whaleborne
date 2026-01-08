@@ -19,7 +19,10 @@ license="${mod_license}"
 # If your mod is purely client-side and has no multiplayer functionality (be it dedicated servers or Open to LAN),
 # set this to true, and Forge will set the correct displayTest for you and skip loading your mod on dedicated servers.
 #clientSideOnly=true #optional - defaults to false if absent
-
+[[accessTransformers]]
+## The file is relative to the output directory of the resources, or the root path inside the jar when compiled
+## The 'resources' directory represents the root output directory of the resources
+file="META-INF/accesstransformer.cfg"
 # A list of mods - how many allowed here is determined by the individual mod loader
 [[mods]] #mandatory
 
