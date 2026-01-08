@@ -54,14 +54,14 @@ public class Whaleborne
 
         modEventBus.addListener(this::commonSetup);
 
-//        WBEntityRegistry.ENTITY_TYPES.register(modEventBus);
-//        WBBlockRegistry.BLOCKS.register(modEventBus);
-//        WBItemRegistry.ITEMS.register(modEventBus);
-//        WBMenuRegistry.MENUS.register(modEventBus);
-//        WBSoundRegistry.SOUND_EVENTS.register(modEventBus);
-//        WBLootModifierRegistry.LOOT_MODIFIER_SERIALIZERS.register(modEventBus);
-//        WBParticleRegistry.PARTICLE_TYPES.register(modEventBus);
-//        WBCreativeTabsRegistry.CREATIVE_MODE_TABS.register(modEventBus);
+        WBEntityRegistry.ENTITY_TYPES.register(modEventBus);
+        WBBlockRegistry.BLOCKS.register(modEventBus);
+        WBItemRegistry.ITEMS.register(modEventBus);
+        WBMenuRegistry.MENUS.register(modEventBus);
+        WBSoundRegistry.SOUND_EVENTS.register(modEventBus);
+        WBLootModifierRegistry.LOOT_MODIFIER_SERIALIZERS.register(modEventBus);
+        WBParticleRegistry.PARTICLE_TYPES.register(modEventBus);
+        WBCreativeTabsRegistry.CREATIVE_MODE_TAB.register(modEventBus);
         WhaleborneNetwork.init();
 
         NeoForge.EVENT_BUS.register(this);
@@ -101,7 +101,7 @@ public class Whaleborne
 
     @SubscribeEvent
     public void register(AddReloadListenerEvent event) {
-        event.addListener(Whaleborne.PROXY.getHullbackDirtManager());
+//        event.addListener(Whaleborne.PROXY.getHullbackDirtManager());
     }
     // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
     @EventBusSubscriber(modid = MODID,  value = Dist.CLIENT)

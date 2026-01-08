@@ -42,7 +42,6 @@ public class CannonModel<T extends CannonEntity> extends EntityModel<T> {
 
     @Override
     public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int i, int i1, int i2) {
-        bb_main.render(poseStack, vertexConsumer, i, i1, i2);
         cannon.render(poseStack, vertexConsumer, i, i1, i2);
     }
 }

@@ -20,6 +20,6 @@ public class WBEntityModelLayers {
     }
 
     private static ModelLayerLocation register(String name, String layer_name) {
-        return new ModelLayerLocation(new ResourceLocation(Whaleborne.MODID, name), layer_name);
+        return new ModelLayerLocation(ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, name), layer_name);
     }
 }
