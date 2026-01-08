@@ -19,7 +19,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
 public class WhaleWidgetRenderer<T extends WhaleWidgetEntity> extends EntityRenderer<WhaleWidgetEntity> {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/sail.png");
+    public static final ResourceLocation TEXTURE =  ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/sail.png");
     protected EntityModel model;
     public WhaleWidgetRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -46,7 +46,7 @@ public class WhaleWidgetRenderer<T extends WhaleWidgetEntity> extends EntityRend
         poseStack.mulPose(Axis.XN.rotationDegrees(Mth.rotLerp(partialTick, entity.xRotO, entity.getXRot())));
         model.setupAnim(entity, partialTick, 0.0F, -0.1F, 0.0F, 0.0F);
         VertexConsumer vertexconsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(getTextureLocation(entity)));
-        getModel().renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);
+        getModel().renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY);
         poseStack.popPose();
     }
 

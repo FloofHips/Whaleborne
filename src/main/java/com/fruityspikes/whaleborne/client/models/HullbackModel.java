@@ -134,9 +134,7 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
 
     }
 
-    @Override
-    public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {
-    }
+
 
     public ModelPart getHead() {
         return head;
@@ -149,5 +147,10 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
     }
     public ModelPart getFluke() {
         return fluke;
+    }
+
+    @Override
+    public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int i, int i1, int i2) {
+
     }
 }

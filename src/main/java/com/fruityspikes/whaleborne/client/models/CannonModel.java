@@ -38,10 +38,12 @@ public class CannonModel<T extends CannonEntity> extends EntityModel<T> {
         cannon.xRot = (t.getCannonXRot() + 90) * Mth.DEG_TO_RAD;
     }
 
+
+
     @Override
-    public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int i, int i1, float v, float v1, float v2, float v3) {
-        cannon.render(poseStack, vertexConsumer, i, i1, v, v1, v2, v3);
-        bb_main.render(poseStack, vertexConsumer, i, i1, v, v1, v2, v3);
+    public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int i, int i1, int i2) {
+        bb_main.render(poseStack, vertexConsumer, i, i1, i2);
+        cannon.render(poseStack, vertexConsumer, i, i1, i2);
     }
 }
 

@@ -26,7 +26,7 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
 public class MastRenderer<T extends MastEntity> extends WhaleWidgetRenderer<MastEntity> {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/mast.png");
+    public static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/mast.png");
     public MastRenderer(EntityRendererProvider.Context context) {
         super(context);
         this.model = new MastModel<>(context.bakeLayer(WBEntityModelLayers.MAST));

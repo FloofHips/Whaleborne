@@ -24,6 +24,7 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -35,8 +36,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.Tags;
-import net.minecraftforge.common.data.ForgeItemTagsProvider;
 import org.joml.Quaternionf;
 
 import java.util.ArrayList;
@@ -44,12 +43,12 @@ import java.util.List;
 import java.util.Optional;
 
 public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<HullbackEntity, HullbackModel<HullbackEntity>> {
-    public static final ResourceLocation MOB_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback.png");
-    public static final ResourceLocation STEEN_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/steen.png");
+    public static final ResourceLocation MOB_TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/hullback.png");
+    public static final ResourceLocation STEEN_TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/steen.png");
     //public static final ResourceLocation MOBIUS_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/mobius.png");
-    public static final ResourceLocation SADDLE_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback_saddle.png");
-    public static final ResourceLocation ARMOR_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/armor/hullback_dark_oak_planks_armor.png");
-    public static final ResourceLocation ARMOR_PROGRESS = new ResourceLocation(Whaleborne.MODID, "textures/entity/hullback_armor_progress.png");
+    public static final ResourceLocation SADDLE_TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/hullback_saddle.png");
+    public static final ResourceLocation ARMOR_TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/armor/hullback_dark_oak_planks_armor.png");
+    public static final ResourceLocation ARMOR_PROGRESS = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/hullback_armor_progress.png");
     private final HullbackArmorModel<HullbackEntity> armorModel;
 
     public HullbackRenderer(EntityRendererProvider.Context ctx) {
@@ -61,7 +60,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
         if (pEntity.getArmorProgress() > 0) {
             ItemStack armor = pEntity.getArmor();
             if (armor.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
-                ResourceLocation armor_tex = new ResourceLocation(Whaleborne.MODID, "textures/entity/armor/hullback_" + armor.getItem() + "_armor.png");
+                ResourceLocation armor_tex = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/armor/hullback_" + armor.getItem() + "_armor.png");
                 Optional<Resource> tex = Minecraft.getInstance().getResourceManager().getResource(armor_tex);
                 return tex.isPresent() ? armor_tex : ARMOR_TEXTURE;
             }
@@ -174,9 +173,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                             poseStack,
                             buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
                             packedLight,
-                            OverlayTexture.pack(0.0F, flag),
-                            1, 1, 1, progress
-                    );
+                            OverlayTexture.pack(0.0F, flag));
 
                     armorPart.render(
                             poseStack,
@@ -190,16 +187,12 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                         poseStack,
                         buffer.getBuffer(RenderType.entityCutoutNoCull(getArmor(pEntity))),
                         packedLight,
-                        OverlayTexture.pack(0.0F, flag),
-                        1, 1, 1, 1
-                );
+                        OverlayTexture.pack(0.0F, flag));
                 armorPart.render(
                         poseStack,
                         buffer.getBuffer(RenderType.entityTranslucent(ARMOR_PROGRESS)),
                         packedLight,
-                        OverlayTexture.pack(0.0F, flag),
-                        1, pEntity.getArmorProgress(), pEntity.getArmorProgress(), progress
-                );
+                        OverlayTexture.pack(0.0F, flag));
             }
 
             poseStack.popPose();
@@ -213,7 +206,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             poseStack.mulPose(Axis.XP.rotationDegrees(180));
             poseStack.mulPose(Axis.YP.rotationDegrees(180));
 
-            if (crown.is(Tags.Items.HEADS)) {
+            if (crown.is(ItemTags.HEAD_ARMOR)) {
                 poseStack.pushPose();
                 poseStack.translate(0,0,0.23);
                 Minecraft.getInstance().getItemRenderer().renderStatic(crown, ItemDisplayContext.FIXED, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
@@ -360,7 +353,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
         } else {
             ArrayList<AABB> list = new ArrayList<>(List.of());
             for (HullbackPartEntity entity : hullbackEntity.getSubEntities()) {
-                list.add(entity.getBoundingBoxForCulling().inflate(0.5F));
+                list.add(entity.parent.getBoundingBoxForCulling().inflate(0.5));
             }
             return list.stream().anyMatch(frustum::isVisible);
         }

@@ -63,12 +63,7 @@ public class HullbackArmorModel<T extends HullbackEntity> extends EntityModel<T>
     public void setupAnim(T entity, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch) {
 
     }
-    @Override
-    public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {
-        head.render(poseStack, vertexConsumer, packedLight, packedOverlay, red, green, blue, alpha);
-        body.render(poseStack, vertexConsumer, packedLight, packedOverlay, red, green, blue, alpha);
-        fluke.render(poseStack, vertexConsumer, packedLight, packedOverlay, red, green, blue, alpha);
-    }
+
 
 
     public ModelPart getHead() {
@@ -79,5 +74,12 @@ public class HullbackArmorModel<T extends HullbackEntity> extends EntityModel<T>
     }
     public ModelPart getFluke() {
         return fluke;
+    }
+
+    @Override
+    public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int i, int i1, int i2) {
+        head.render(poseStack, vertexConsumer, i, i1, i2);
+        body.render(poseStack, vertexConsumer, i, i1, i2);
+        fluke.render(poseStack, vertexConsumer, i, i1, i2);
     }
 }

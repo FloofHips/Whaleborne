@@ -10,7 +10,7 @@ import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.resources.ResourceLocation;
 
 public class HullbackSaddleRenderLayer extends RenderLayer<HullbackEntity, HullbackModel<HullbackEntity>> {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/bewereager/bewereager_collar.png");
+    public static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/bewereager/bewereager_collar.png");
 
     public HullbackSaddleRenderLayer(RenderLayerParent<HullbackEntity, HullbackModel<HullbackEntity>> p_117707_) {
         super(p_117707_);

@@ -9,7 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 
 public class CannonScreen extends AbstractContainerScreen<CannonMenu> {
-    private static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/gui/cannon.png");
+    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/gui/cannon.png");
     public CannonScreen(CannonMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
     }
@@ -24,7 +24,7 @@ public class CannonScreen extends AbstractContainerScreen<CannonMenu> {
 
     @Override
     public void render(GuiGraphics gui, int mouseX, int mouseY, float partialTick) {
-        renderBackground(gui);
+        renderBackground(gui,mouseX,mouseY,partialTick);
         super.render(gui, mouseX, mouseY, partialTick);
         renderTooltip(gui, mouseX, mouseY);
     }

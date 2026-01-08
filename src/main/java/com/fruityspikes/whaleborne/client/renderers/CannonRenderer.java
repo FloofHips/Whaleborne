@@ -9,7 +9,7 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
 
 public class CannonRenderer extends WhaleWidgetRenderer {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/cannon.png");
+    public static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/cannon.png");
     public CannonRenderer(EntityRendererProvider.Context context) {
         super(context);
         this.model = new CannonModel<>(context.bakeLayer(WBEntityModelLayers.CANNON));

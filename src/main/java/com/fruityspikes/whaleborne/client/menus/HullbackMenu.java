@@ -16,7 +16,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.common.ForgeMod;
+import net.neoforged.neoforge.common.NeoForgeMod;
 
 public class HullbackMenu extends AbstractContainerMenu {
     private final Container hullbackContainer;
@@ -140,7 +140,7 @@ public class HullbackMenu extends AbstractContainerMenu {
         return this.hullback.getArmorProgress();
     }
     public float getSpeedModifier(){
-        AttributeInstance inst = this.hullback.getAttribute(ForgeMod.SWIM_SPEED.get());
+        AttributeInstance inst = this.hullback.getAttribute(NeoForgeMod.SWIM_SPEED);
         if (inst != null){
             if(inst.getModifier(HullbackEntity.getSailSpeedModifierUuid()) != null)
                 return (float) inst.getModifier(HullbackEntity.getSailSpeedModifierUuid()).getAmount();

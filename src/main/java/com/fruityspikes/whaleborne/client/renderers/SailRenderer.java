@@ -40,8 +40,8 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 
 public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<SailEntity> {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/sail.png");
-    public static final ResourceLocation TARP_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/tarp.png");
+    public static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/sail.png");
+    public static final ResourceLocation TARP_TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/tarp.png");
     private final SailModel<SailEntity> model;
 
     private Vec3 edge1 = new Vec3(0,0,0);
@@ -87,7 +87,7 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
 
         poseStack.popPose();
         VertexConsumer vertexconsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(getTextureLocation(entity)));
-        getModel().renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);
+        getModel().renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY);
 
         this.renderSails((SailEntity) entity, poseStack, buffer, partialTick, packedLight, OverlayTexture.NO_OVERLAY, list, 1.0F, 1.0F, 1.0F, 1.0f);
 
@@ -188,35 +188,35 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
         float nx = 0f;
         float nz = -1f;
 
-        vertexConsumer.vertex(poseStack.last().pose(), x0, topY, topZ)
-                .color(red, green, blue, alpha)
-                .uv(u0, v0)
-                .overlayCoords(overlay)
-                .uv2((int)(packedLight * topLight))
+        vertexConsumer.addVertex(poseStack.last().pose(), x0, topY, topZ)
+                .setColor(red, green, blue, alpha)
+                .setUv(u0, v0)
+                .setOverlay(overlay)
+                .setUv2((int)(packedLight * topLight))
                 .normal(poseStack.last().normal(), nx, 0f, nz)
                 .endVertex();
 
-        vertexConsumer.vertex(poseStack.last().pose(), x1, topY, topZ)
-                .color(red, green, blue, alpha)
-                .uv(u1, v0)
-                .overlayCoords(overlay)
-                .uv2((int)(packedLight * topLight))
+        vertexConsumer.addVertex(poseStack.last().pose(), x1, topY, topZ)
+                .setColor(red, green, blue, alpha)
+                .setUv(u1, v0)
+                .setOverlay(overlay)
+                .setUv((int)(packedLight * topLight))
                 .normal(poseStack.last().normal(), nx, 0f, nz)
                 .endVertex();
 
-        vertexConsumer.vertex(poseStack.last().pose(), x1, bottomY, bottomZ)
-                .color(red, green, blue, alpha)
-                .uv(u1, v1)
-                .overlayCoords(overlay)
-                .uv2((int)(packedLight * bottomLight))
+        vertexConsumer.addVertex(poseStack.last().pose(), x1, bottomY, bottomZ)
+                .setColor(red, green, blue, alpha)
+                .setUv(u1, v1)
+                .setOverlay(overlay)
+                .setUv2((int)(packedLight * bottomLight))
                 .normal(poseStack.last().normal(), nx, 0f, nz)
                 .endVertex();
 
-        vertexConsumer.vertex(poseStack.last().pose(), x0, bottomY, bottomZ)
-                .color(red, green, blue, alpha)
-                .uv(u0, v1)
-                .overlayCoords(overlay)
-                .uv2((int)(packedLight * bottomLight))
+        vertexConsumer.addVertex(poseStack.last().pose(), x0, bottomY, bottomZ)
+                .setColor(red, green, blue, alpha)
+                .setUv(u0, v1)
+                .setOverlay(overlay)
+                .setUv2((int)(packedLight * bottomLight))
                 .normal(poseStack.last().normal(), nx, 0f, nz)
                 .endVertex();
 
@@ -252,35 +252,35 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
         float nx = 0f;
         float nz = -1f;
 
-        vertexConsumer.vertex(poseStack.last().pose(), x0, topY, topZ)
-                .color(red, green, blue, alpha)
-                .uv(u0, v0)
-                .overlayCoords(overlay)
-                .uv2((int)(packedLight))
+        vertexConsumer.addVertex(poseStack.last().pose(), x0, topY, topZ)
+                .setColor(red, green, blue, alpha)
+                .setUv(u0, v0)
+                .setOverlay(overlay)
+                .setUv2((int)(packedLight))
                 .normal(poseStack.last().normal(), nx, 0f, nz)
                 .endVertex();
 
-        vertexConsumer.vertex(poseStack.last().pose(), x1, topY, topZ)
-                .color(red, green, blue, alpha)
-                .uv(u1, v0)
-                .overlayCoords(overlay)
-                .uv2((int)(packedLight))
+        vertexConsumer.addVertex(poseStack.last().pose(), x1, topY, topZ)
+                .setColor(red, green, blue, alpha)
+                .setUv(u1, v0)
+                .setOverlay(overlay)
+                .setUv2((int)(packedLight))
                 .normal(poseStack.last().normal(), nx, 0f, nz)
                 .endVertex();
 
-        vertexConsumer.vertex(poseStack.last().pose(), x1, bottomY, bottomZ)
-                .color(red, green, blue, alpha)
-                .uv(u1, v1)
-                .overlayCoords(overlay)
-                .uv2((int)(packedLight))
+        vertexConsumer.addVertex(poseStack.last().pose(), x1, bottomY, bottomZ)
+                .setColor(red, green, blue, alpha)
+                .setUv(u1, v1)
+                .setOverlay(overlay)
+                .setUv2((int)(packedLight))
                 .normal(poseStack.last().normal(), nx, 0f, nz)
                 .endVertex();
 
-        vertexConsumer.vertex(poseStack.last().pose(), x0, bottomY, bottomZ)
-                .color(red, green, blue, alpha)
-                .uv(u0, v1)
-                .overlayCoords(overlay)
-                .uv2((int)(packedLight))
+        vertexConsumer.addVertex(poseStack.last().pose(), x0, bottomY, bottomZ)
+                .setColor(red, green, blue, alpha)
+                .setUv(u0, v1)
+                .setOverlay(overlay)
+                .setUv2((int)(packedLight))
                 .normal(poseStack.last().normal(), nx, 0f, nz)
                 .endVertex();
 

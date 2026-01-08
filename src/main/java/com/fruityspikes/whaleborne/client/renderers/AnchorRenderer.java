@@ -31,9 +31,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 public class AnchorRenderer extends WhaleWidgetRenderer {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/anchor.png");
-    public static final ResourceLocation CHAIN = new ResourceLocation(Whaleborne.MODID, "textures/entity/chain.png");
-    public static final ResourceLocation ANCHOR_HEAD_TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/anchor_head.png");
+    public static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/anchor.png");
+    public static final ResourceLocation CHAIN = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/chain.png");
+    public static final ResourceLocation ANCHOR_HEAD_TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/anchor_head.png");
     private final AnchorHeadModel anchorHeadModel;
 
     public AnchorRenderer(EntityRendererProvider.Context context) {
@@ -73,9 +73,7 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
                 poseStack,
                 vertexConsumer,
                 (int) (packedLight / 2),
-                OverlayTexture.NO_OVERLAY,
-                1.0F, 1.0F, 1.0F, 1.0F
-        );
+                OverlayTexture.NO_OVERLAY);
 
         poseStack.popPose();
     }
@@ -101,35 +99,35 @@ public class AnchorRenderer extends WhaleWidgetRenderer {
         Vec3 dir = left ? right : side;
         float length = (float) direction.length();
 
-        builder.vertex(pose.pose(), (float) (base.x + dir.x), (float) (base.y + dir.y), (float) (base.z + dir.z))
-                .color(1F, 1F, 1F, 1F)
-                .uv(left ? 0 : 0.5f, 0F)
-                .overlayCoords(OverlayTexture.NO_OVERLAY)
-                .uv2(packedLight)
+        builder.addVertex(pose.pose(), (float) (base.x + dir.x), (float) (base.y + dir.y), (float) (base.z + dir.z))
+                .setColor(1F, 1F, 1F, 1F)
+                .setUv(left ? 0 : 0.5f, 0F)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setUv2(packedLight)
                 .normal(pose.normal(), 0, 1, 0)
                 .endVertex();
 
-        builder.vertex(pose.pose(), (float) (base.x - dir.x), (float) (base.y - dir.y), (float) (base.z - dir.z))
-                .color(1F, 1F, 1F, 1F)
-                .uv(left ? 0.5f : 1, 0F)
-                .overlayCoords(OverlayTexture.NO_OVERLAY)
-                .uv2(packedLight)
+        builder.addVertex(pose.pose(), (float) (base.x - dir.x), (float) (base.y - dir.y), (float) (base.z - dir.z))
+                .setColor(1F, 1F, 1F, 1F)
+                .setUv(left ? 0.5f : 1, 0F)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setUv2(packedLight)
                 .normal(pose.normal(), 0, 1, 0)
                 .endVertex();
 
-        builder.vertex(pose.pose(), (float) (tip.x - dir.x), (float) (tip.y - dir.y), (float) (tip.z - dir.z))
-                .color(1F, 1F, 1F, 1F)
-                .uv(left ? 0.5f : 1, length)
-                .overlayCoords(OverlayTexture.NO_OVERLAY)
-                .uv2((int) (packedLight / 2))
+        builder.addVertex(pose.pose(), (float) (tip.x - dir.x), (float) (tip.y - dir.y), (float) (tip.z - dir.z))
+                .setColor(1F, 1F, 1F, 1F)
+                .setUv(left ? 0.5f : 1, length)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setUv((int) (packedLight / 2))
                 .normal(pose.normal(), 0, 1, 0)
                 .endVertex();
 
-        builder.vertex(pose.pose(), (float) (tip.x + dir.x), (float) (tip.y + dir.y), (float) (tip.z + dir.z))
-                .color(1F, 1F, 1F, 1F)
-                .uv(left ? 0 : 0.5f, length)
-                .overlayCoords(OverlayTexture.NO_OVERLAY)
-                .uv2((int) (packedLight / 2))
+        builder.addVertex(pose.pose(), (float) (tip.x + dir.x), (float) (tip.y + dir.y), (float) (tip.z + dir.z))
+                .setColor(1F, 1F, 1F, 1F)
+                .setUv(left ? 0 : 0.5f, length)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setUv2((int) (packedLight / 2))
                 .normal(pose.normal(), 0, 1, 0)
                 .endVertex();
 

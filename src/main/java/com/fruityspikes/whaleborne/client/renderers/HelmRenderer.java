@@ -9,7 +9,7 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
 
 public class HelmRenderer extends WhaleWidgetRenderer {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/helm.png");
+    public static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/helm.png");
     public HelmRenderer(EntityRendererProvider.Context context) {
         super(context);
         this.model = new HelmModel<>(context.bakeLayer(WBEntityModelLayers.HELM));

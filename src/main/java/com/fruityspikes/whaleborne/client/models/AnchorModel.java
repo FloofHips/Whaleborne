@@ -40,9 +40,10 @@ public class AnchorModel<T extends AnchorEntity> extends EntityModel<T> {
             spool.xRot = (float) t.position().distanceTo(new Vec3(t.getHeadPos().getX(), t.getHeadPos().getY(), t.getHeadPos().getZ()));
     }
 
+
     @Override
-    public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int i, int i1, float v, float v1, float v2, float v3) {
-        bb_main.render(poseStack, vertexConsumer, i, i1, v, v1, v2, v3);
-        spool.render(poseStack, vertexConsumer, i, i1, v, v1, v2, v3);
+    public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int i, int i1, int i2) {
+        bb_main.render(poseStack, vertexConsumer, i, i1, i2);
+        spool.render(poseStack, vertexConsumer, i, i1, i2);
     }
 }

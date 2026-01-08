@@ -21,7 +21,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
 public class AnchorHeadRenderer<T extends AnchorHeadEntity> extends EntityRenderer<AnchorHeadEntity> {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(Whaleborne.MODID, "textures/entity/anchor_head.png");
+    public static final ResourceLocation TEXTURE =  ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/anchor_head.png");
     protected EntityModel model;
     public AnchorHeadRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -38,7 +38,7 @@ public class AnchorHeadRenderer<T extends AnchorHeadEntity> extends EntityRender
         poseStack.mulPose(Axis.XN.rotationDegrees(Mth.rotLerp(partialTick, entity.xRotO, entity.getXRot())));
         model.setupAnim(entity, partialTick, 0.0F, -0.1F, 0.0F, 0.0F);
         VertexConsumer vertexconsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(getTextureLocation(entity)));
-        getModel().renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);
+        getModel().renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY);
         poseStack.popPose();
     }
 
