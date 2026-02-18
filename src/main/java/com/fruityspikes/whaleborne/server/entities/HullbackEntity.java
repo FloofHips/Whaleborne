@@ -146,6 +146,25 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private float mouthTarget;
     private boolean wasPilotControlled = false;
     private boolean pitchLocked = false;
+    private boolean platformsStable = false; // Added for Integrated Fix
+    private boolean isApproachingPlayer = false; // Flag to apply movement during approach
+    private float currentPlatformHeight = 4.55f;
+    private float targetPlatformHeight = 4.55f;
+    private float oldPlatformHeight = 4.55f; // Rastreia a altura do tick anterior
+    private int platformHeightCooldown = 0;
+    private boolean wasMounted = false;
+    private static final float PLATFORM_HEIGHT_THRESHOLD = 0.002f;
+    private int playerStableTimer = 0;
+    private Vec3 lastPlayerPosition = Vec3.ZERO;
+    private static final double STABLE_THRESHOLD = 0.01;
+
+    public void setApproachingPlayer(boolean approaching) {
+        this.isApproachingPlayer = approaching;
+    }
+
+    public boolean isApproachingPlayer() {
+        return this.isApproachingPlayer;
+    }
 
     @Override
     public void setXRot(float xRot) {
@@ -211,9 +230,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.moving_body = null;
 
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
-        //this.moving_subEntities = new HullbackPartWalkableEntity[]{this.moving_nose, this.moving_head, this.moving_body, this.moving_tail, this.moving_fluke};
-        //this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
-
+        
         this.prevPartPositions = new Vec3[5];
         this.partPosition = new Vec3[5];
         this.partYRot = new float[5];
@@ -224,7 +241,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         Arrays.fill(partPosition, Vec3.ZERO);
         this.mouthOpenProgress = 0.0f;
         this.currentTarget = this.position();
-        //createInventory();
+        
         if(!level.isClientSide) initDirt();
         else initClientDirt();
 
@@ -254,14 +271,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     private static boolean hasSpawnSpace(LevelAccessor level, BlockPos pos) {
-        // Reduced check area to allow more spawns (Ported from 1.21.1)
-        int checkRadius = 5; // Reduced from 10
-        int heightCheck = 4; // Reduced from 6
+        int checkRadius = 5; 
+        int heightCheck = 4; 
 
         AABB spawnCheckArea = new AABB(pos).inflate(checkRadius, heightCheck, checkRadius);
 
         int solidCount = 0;
-        int maxSolidAllowed = 20;  // Allow up to 20 solid blocks (tolerance)
+        int maxSolidAllowed = 20;
 
         BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
         for (int x = (int)spawnCheckArea.minX; x <= spawnCheckArea.maxX; x++) {
@@ -272,7 +288,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     if (state.isSolid() && state.getCollisionShape(level, mutablePos) != Shapes.empty()) {
                          solidCount++;
                          if (solidCount > maxSolidAllowed) {
-                             return false;  // Too obstructed
+                             return false; 
                          }
                     }
                 }
@@ -437,6 +453,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
         this.goalSelector.addGoal(1, new HullbackApproachPlayerGoal(this, 1.2f));
         this.goalSelector.addGoal(2, new HullbackTryFindWaterGoal(this, true));
+        this.goalSelector.addGoal(2, new HullbackArmorPlayerGoal(this, 1.2f)); 
         this.goalSelector.addGoal(3, new HullbackRandomSwimGoal(this, 1.0D, 10));
         this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
     }
@@ -768,32 +785,24 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         super.recreateFromPacket(packet);
     }
 
-    //    private void updateWalkerPositions() {
-//        for ( HullbackPartEntity part : getSubEntities()) {
-//            AABB boundingBox = part.getBoundingBoxForCulling().move(0, 0.5f, 0);
-//
-//            List<Entity> riders = level().getEntities(part, boundingBox);
-//            riders.removeIf(rider -> rider.isPassenger());
-//
-//            for (Entity entity : riders) {
-//                if (entity instanceof HullbackEntity || entity instanceof HullbackPartEntity)
-//                    return;
-//                Vec3 offset = new Vec3
-//            }
-//        }
-//    }
-
     private boolean scanPlayerAbove() {
-        for (HullbackPartEntity part : getSubEntities()) {
+        // If approaching, the check is RIGOROUS (0.5 blocks). 
+        // You have to be literally stepping on it to count.
+        double heightCheck = isApproachingPlayer() ? 0.5 : 2.0;
+
+        for (int i = 0; i < 3; i++) { // Nose, Head, Body
+            HullbackPartEntity part = getSubEntities()[i];
             AABB box = part.getBoundingBox();
+            
+            // Reduced inflation to avoid false lateral detection
             AABB topSurface = new AABB(
                     box.minX,
                     box.maxY,
                     box.minZ,
                     box.maxX,
-                    box.maxY + 6.0,
+                    box.maxY + heightCheck, 
                     box.maxZ
-            ).inflate(1.0, 0.0, 1.0);
+            ).inflate(0.5, 0.0, 0.5);
 
             List<Entity> entities = level().getEntitiesOfClass(Entity.class, topSurface,
                     entity -> entity instanceof Player &&
@@ -802,11 +811,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             );
 
             if (!entities.isEmpty()) {
-                //playSound(SoundEvents.AMETHYST_BLOCK_CHIME);
-                //for (Entity entity : entities) {
-                //    entity.hurtMarked = true;
-                //    entity.push(0,0.05f,0);
-                //}
                 return true;
             }
         }
@@ -875,16 +879,62 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     public void moveEntitiesOnTop(int index, Set<Entity> movedThisTick) {
         HullbackPartEntity part = getSubEntities()[index];
-        Vec3 offset = partPosition[index].subtract(oldPartPosition[index]);
+        
+        // Body movement calculation
+        Vec3 bodyOffset = partPosition[index].subtract(oldPartPosition[index]);
 
-        if (offset.length() <= 0) return;
-        for (Entity entity : this.level().getEntities(part, part.getBoundingBox().inflate(0F, 0.01F, 0F), EntitySelector.NO_SPECTATORS.and((entity) -> (!entity.isPassenger())))) {
-            if (!movedThisTick.contains(entity) && !entity.noPhysics && !(entity instanceof HullbackPartEntity) && !(entity instanceof HullbackEntity) && !(entity instanceof HullbackWalkableEntity)) {
-                if (entity instanceof LivingEntity living) {
-                    living.getAttribute(net.minecraftforge.common.ForgeMod.ENTITY_GRAVITY.get());
+        // NEW: Platform height delta calculation (Relative Height Fix)
+        double heightDelta = (double)this.currentPlatformHeight - (double)this.oldPlatformHeight;
+
+        // Total movement = Body Movement + Height Variation
+        Vec3 totalOffset = bodyOffset.add(0, heightDelta, 0);
+
+        // If platforms are stable, DO NOT move anyone
+        if (this.platformsStable) {
+            return;
+        }
+
+        // Tiny threshold to ensure micro-movements are processed (Elevator Problem)
+        if (totalOffset.lengthSqr() < 1.0E-7) return; 
+
+        if (index > 2) return; // Only main platforms (0, 1, 2) move entities
+
+        // Search area expanded vertically (6.0F) to reach the deck
+        for (Entity entity : this.level().getEntities(part, part.getBoundingBox().inflate(0.5F, 6.0F, 0.5F), 
+             EntitySelector.NO_SPECTATORS.and((e) -> (!e.isPassenger())))) {
+            
+            if (!movedThisTick.contains(entity) && !entity.noPhysics && 
+                !(entity instanceof HullbackPartEntity) && 
+                !(entity instanceof HullbackEntity) && 
+                !(entity instanceof HullbackWalkableEntity)) {
+
+                // Checks if the entity is actually ON the platform visually
+                if (entity.getY() < part.getY() + currentPlatformHeight - 0.5) continue;
+                
+                double motionMultiplier = 0.5;
+                double entityMultiplier = motionMultiplier;
+                
+                if (entity instanceof Player player) {
+                    entityMultiplier *= 0.8;
+                    
+                    // If the player has been stable for more than 1 second, reduces horizontal movement
+                    if (playerStableTimer > 20) {
+                        entityMultiplier *= 0.1;
+                    }
+                    
+                    // --- ELEVATOR AND RELATIVE HEIGHT FIX ---
+                    // For the Player, we apply 100% of the vertical variation to ensure smooth contact
+                    Vec3 moveVec = new Vec3(totalOffset.x * entityMultiplier, totalOffset.y, totalOffset.z * entityMultiplier);
+                    
+                    entity.move(MoverType.SHULKER, moveVec);
+                    
+                    player.setOnGround(true);
+                    player.fallDistance = 0; // Prevents fall damage accumulated from jitter
+                } else {
+                    Vec3 moveVec = totalOffset.scale(entityMultiplier);
+                    entity.move(MoverType.SHULKER, moveVec);
                 }
-                float f2 = 1.0F;
-                entity.move(MoverType.SHULKER, new Vec3((double) (f2 * (float) offset.x), (double) (f2 * (float) offset.y), (double) (f2 * (float) offset.z)));
+                
                 entity.hurtMarked = true;
                 movedThisTick.add(entity);
             }
@@ -1317,21 +1367,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         // Capture rotation snapshot for Hard Lock (Ported from 1.21.1 setup)
         RotationSnapshot snapshot = new RotationSnapshot(this.getYRot(), this.yBodyRot, this.yHeadRot);
 
-        if (stationaryTicks > 0) {
-            stopMoving();
-            stationaryTicks--;
-        }
-
-        // Pilot dismount detection: Trigger 120-tick buffer when pilot leaves the helm
-        LivingEntity currentPilot = getControllingPassenger();
-        if (wasPilotControlled && currentPilot == null) {
-            stationaryTicks = 120;
-        }
-        wasPilotControlled = currentPilot != null;
-
-        if (scanPlayerAbove())
-            stationaryTicks = Math.max(this.stationaryTicks, 40); // Increased buffer, prevents overwriting higher values
-
+        updateModifiers(); // Update speed modifiers every tick for instant acceleration response
+        handleStationaryState();
 
         if (!this.level().isClientSide) {
             this.entityData.set(DATA_STATIONARY_TICKS, stationaryTicks);
@@ -1350,41 +1387,15 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        if ((this.getStationaryTicks() > 0 || this.hasAnchorDown()) && !isBreachingAction) {
-            this.setYRot(snapshot.yaw());
-            this.setYBodyRot(snapshot.bodyYaw());
-            this.setYHeadRot(snapshot.headYaw());
-            this.yRotO = snapshot.yaw();
-            this.yBodyRotO = snapshot.bodyYaw();
-            this.yHeadRotO = snapshot.headYaw();
-            
-            // CRITICAL FIX: Lock pitch to prevent vertical tilting when anchored/stationary
-            this.pitchLocked = true;
-            super.setXRot(0f); // Force immediate 0 to prevent one-tick jitters
-            this.xRotO = 0f;
-            
-            // Set delta movement to zero to stop wagging tail due to swimCycle
-            this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
-        } else {
-            this.pitchLocked = false;
-        }
+        applyEnhancedPitchControl(snapshot, isBreachingAction);
 
 
 
-        // MOVED DISCARD HERE: Ensure it only happens if NO player was detected above after the tick
-        if (stationaryTicks == 0) {
-            if (this.moving_nose != null) {
-                this.moving_nose.discard();
-                this.moving_nose = null;
-            }
-            if (this.moving_head != null) {
-                this.moving_head.discard();
-                this.moving_head = null;
-            }
-            if (this.moving_body != null) {
-                this.moving_body.discard();
-                this.moving_body = null;
-            }
+        // Discard logic: Only if NOT stationary (moving freely) AND not approaching
+        if (stationaryTicks == 0 && !scanPlayerAbove() && !isApproachingPlayer()) {
+            if (this.moving_nose != null) { this.moving_nose.discard(); this.moving_nose = null; }
+            if (this.moving_head != null) { this.moving_head.discard(); this.moving_head = null; }
+            if (this.moving_body != null) { this.moving_body.discard(); this.moving_body = null; }
         }
 
         if (!this.isEyeInFluidType(Fluids.WATER.getFluidType()))
@@ -1420,6 +1431,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             mouthTarget = 0.8f;
         }
 
+        updatePlatformHeight();
+        // REMOVED: Unconditional updateWalkablePlatforms() (it was forcing phantom spawns)
+        updatePlayerStability();
+
         Set<Entity> movedThisTick = new HashSet<>();
         for (int i = 0; i < getSubEntities().length; i++) {
             moveEntitiesOnTop(i, movedThisTick);
@@ -1437,6 +1452,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (this.tickCount % 80 == 0)
             mouthTarget = 0;
 
+        // Updates the previous height for the delta calculation in the next tick
+        this.oldPlatformHeight = this.currentPlatformHeight;
         if (this.tickCount % 20 == 0)
             validateAssignments();
 
@@ -1510,12 +1527,102 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
+        // FINAL FIX: Removed the "12 blocks" check within tick().
+        // Platform appearance now depends EXCLUSIVELY on stationaryTicks being > 0.
+        // The stationaryTicks, in turn, is only set in handleStationaryState if the whale ACTUALLY stops or gets close.
         if (this.getStationaryTicks() > 0) {
             updateWalkablePlatforms();
         }
     }
 
 
+
+    private void handleStationaryState() {
+        // Maximum priority: If breathing, it doesn't stop.
+        if (this.isBreaching()) return;
+
+        LivingEntity currentPilot = getControllingPassenger();
+        
+        if (!wasPilotControlled && currentPilot != null) {
+            this.isApproachingPlayer = false;
+        }
+        
+        // Manage pilot -> dismounted transition (PORTED FROM 1.21.1)
+        if (currentPilot != null) {
+            this.stationaryTicks = 0; // Fix: Immediate acceleration when mounted (Fixes Speed Lag)
+            this.wasPilotControlled = true;
+            this.platformsStable = false;
+        } else if (this.wasPilotControlled) {
+            // Increase initial time after dismount
+            stationaryTicks = 200; 
+            this.wasPilotControlled = false;
+            this.platformsStable = false;
+        }
+        wasPilotControlled = currentPilot != null;
+
+        // CONFLICT LOGIC FIXED:
+        boolean playerDetectedOnTop = scanPlayerAbove();
+        
+        if (currentPilot == null && playerDetectedOnTop) {
+            if (this.isApproachingPlayer) {
+                // If the approach AI (scissor) is active:
+                // ONLY accepts turning into a statue if the whale has already arrived (nearly zero speed).
+                // If it's still fast, IGNORE the player and continue swimming.
+                if (this.getDeltaMovement().horizontalDistance() < 0.2) {
+                    stationaryTicks = Math.max(this.stationaryTicks, 60);
+                    this.setApproachingPlayer(false); // Arrived at destination, turns off approach.
+                }
+            } else {
+                // Default behavior (no tool in hand)
+                stationaryTicks = Math.max(this.stationaryTicks, 60);
+            }
+        }
+
+        // Counter execution
+        if (stationaryTicks > 0) {
+            // If still marked as "approaching", it DOES NOT stop movement,
+            // allows the AI to finish the path smoothly.
+            if (!isApproachingPlayer) {
+                stopMoving();
+            }
+            stationaryTicks--;
+        }
+        
+        // Platform stabilization (Only activates if it actually stops)
+        if (stationaryTicks > 10 && Math.abs(this.getDeltaMovement().y) < 0.005) { 
+            this.platformsStable = true;
+        } else {
+            this.platformsStable = false;
+        }
+    }
+
+    private void applyEnhancedPitchControl(RotationSnapshot snapshot, boolean isBreaching) {
+        boolean shouldLockPitch = false;
+          
+        // Hard Lock Conditions: Anchored OR (Stationary AND Stable AND Not Approaching)
+        if (this.hasAnchorDown()) {
+            shouldLockPitch = true;
+        } else if (this.getStationaryTicks() > 0 && this.platformsStable && !this.isApproachingPlayer) {
+             shouldLockPitch = true;
+        }
+        
+        if (shouldLockPitch && !isBreaching) {
+            // Restore rotation from snapshot to prevent spinning
+            this.setYRot(snapshot.yaw());
+            this.setYBodyRot(snapshot.bodyYaw());
+            this.setYHeadRot(snapshot.headYaw());
+            this.yRotO = snapshot.yaw();
+            this.yBodyRotO = snapshot.bodyYaw();
+            this.yHeadRotO = snapshot.headYaw();
+            
+            this.pitchLocked = true;
+            super.setXRot(0f);
+            this.xRotO = 0f;
+            this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
+        } else {
+            this.pitchLocked = false;
+        }
+    }
 
     public void setMouthTarget(float mouthTarget) {
         this.mouthTarget = mouthTarget;
@@ -1594,19 +1701,29 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private void updateModifiers() {
         double speedModifier = 0.0;
 
+        // 1. Calculate potential speed from sails
         for (Entity passenger : getPassengers()) {
             if (passenger instanceof SailEntity sail) {
                 speedModifier += sail.getSpeedModifier();
             }
         }
 
-        AttributeInstance inst = this.getAttribute(getSwimSpeed());
+        // 2. Enforce Pilot Requirement (HELM ONLY)
+        // Check if the controller is actually at a HelmEntity to apply sail bonus
+        LivingEntity pilot = this.getControllingPassenger();
+        if (pilot == null || !(pilot.getVehicle() instanceof HelmEntity)) {
+            speedModifier = 0.0;
+        }
+
+        AttributeInstance inst = this.getAttribute(net.minecraftforge.common.ForgeMod.SWIM_SPEED.get());
         if (inst != null) {
-            AttributeModifier old = inst.getModifier(SAIL_SPEED_MODIFIER_UUID);
-            if (old != null) {
-                inst.removeModifier(old);
+            // 3. Always remove the old modifier first to ensure a clean state
+            if (inst.getModifier(SAIL_SPEED_MODIFIER_UUID) != null) {
+                inst.removeModifier(SAIL_SPEED_MODIFIER_UUID);
             }
-            if (speedModifier != 0.0) {
+
+            // 4. Only add the new modifier if it's non-zero
+            if (speedModifier > 0.0) {
                 inst.addPermanentModifier(new AttributeModifier(
                         SAIL_SPEED_MODIFIER_UUID,
                         Whaleborne.MODID + ":sail_speed_modifier",
@@ -1638,7 +1755,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 .map(Entity::getUUID)
                 .collect(Collectors.toSet());
 
-        updateModifiers();
         for (int seatIndex = 0; seatIndex < 7; seatIndex++) {
             EntityDataAccessor<Optional<UUID>> seatAccessor = getSeatAccessor(seatIndex);
             Optional<UUID> assignedUUID = this.entityData.get(seatAccessor);
@@ -1893,7 +2009,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public void tick() {
-            if (HullbackEntity.this.getStationaryTicks() > 0 || HullbackEntity.this.pitchLocked) {
+            // INTEGRATED FIX: Allow movement if approaching player, even if stationary
+            if ((HullbackEntity.this.getStationaryTicks() > 0 && !HullbackEntity.this.isApproachingPlayer()) || HullbackEntity.this.pitchLocked) {
                 this.mob.setSpeed(0.0F);
                 this.mob.setZza(0.0F);
                 this.mob.setYya(0.0F);
@@ -2140,7 +2257,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canUse() {
-            if(hullback.stationaryTicks > 0) return false;
+            // FIX: Allows surfacing if air is critical, even if stationaryTicks > 0
+            if(hullback.stationaryTicks > 0 && this.hullback.getAirSupply() > 100) return false;
 
             for (net.minecraft.world.entity.Entity passenger : hullback.getPassengers()) {
                 if (passenger instanceof net.minecraft.world.entity.player.Player) {
@@ -2237,8 +2355,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 double z = particlePos.z;
 
                 if (this.hullback.level() instanceof ServerLevel serverLevel) {
-                     // Check registry existence to avoid error
-                     if (com.fruityspikes.whaleborne.server.registries.WBParticleRegistry.SMOKE != null) {
+                      // Check registry existence to avoid error
+                      if (com.fruityspikes.whaleborne.server.registries.WBParticleRegistry.SMOKE != null) {
                         serverLevel.sendParticles(
                                 com.fruityspikes.whaleborne.server.registries.WBParticleRegistry.SMOKE.get(),
                                 x,
@@ -2265,17 +2383,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
 
     public class HullbackArmorPlayerGoal extends Goal {
-        private static final float APPROACH_DISTANCE = 8.0f;
+        private static final float APPROACH_DISTANCE = 6.0f; // Slightly increased to avoid crude collision
         private static final float SIDE_OFFSET = 5.0f;
         private static final float ROTATION_SPEED = 0.8f;
         private static Ingredient TEMPT_PLANKS = Ingredient.of(WBTagRegistry.HULLBACK_EQUIPPABLE);
         private static Ingredient TEMPT_WIDGETS = Ingredient.of(WBItemRegistry.SAIL.get(), WBItemRegistry.ANCHOR.get(), WBItemRegistry.MAST.get(), WBItemRegistry.HELM.get(), WBItemRegistry.CANNON.get());
         private final HullbackEntity hullback;
         private final float speedModifier;
-        private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(10.0).ignoreLineOfSight();
+        private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(40.0).ignoreLineOfSight(); // Increased range
         private final TargetingConditions targetingConditions;
         private Player targetPlayer;
-        private int repositionCooldown;
         private boolean approachFromRight;
         private Vec3 targetPosition;
 
@@ -2283,7 +2400,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.hullback = hullback;
             this.speedModifier = speedModifier;
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
-            this.repositionCooldown = 200 + hullback.getRandom().nextInt(200);
             this.targetingConditions = TEMP_TARGETING.copy().selector(this::shouldFollow);
         }
 
@@ -2300,15 +2416,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canUse() {
-
-            if (hullback.hasAnchorDown())
-                return false;
-
-            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 50, 30);
+            if (hullback.hasAnchorDown()) return false;
+            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 40, 50, 40);
             if (this.targetPlayer == null) return false;
             if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback))))
                 return false;
-
             return true;
         }
 
@@ -2319,33 +2431,20 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public void start() {
-            super.start();
-
+            this.hullback.setApproachingPlayer(true);
             Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
             Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
             this.approachFromRight = toPlayer.dot(whaleRight) > 0;
-
-
-            this.hullback.setTarget(this.targetPlayer);
-            Vec3 playerLook = this.targetPlayer.getLookAngle();
-
-            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-
-            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            this.targetPosition = this.targetPlayer.position()
-                    .add(sideOffset)
-                    .add(playerLook.scale(-APPROACH_DISTANCE));
-
             playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
             this.hullback.mouthTarget = 0.1f;
         }
 
         @Override
         public void stop() {
+            this.hullback.setApproachingPlayer(false);
             this.targetPlayer = null;
             this.targetPosition = null;
             this.hullback.setTarget(null);
-            this.repositionCooldown = 100 + hullback.getRandom().nextInt(200);
             this.hullback.getNavigation().stop();
             this.hullback.mouthTarget = 0.0f;
         }
@@ -2355,37 +2454,42 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             if (this.targetPlayer == null) return;
 
             this.hullback.mouthTarget = 0.6f;
-            if (hullback.tickCount % 200 == 0) {
-                Vec3 playerLook = this.targetPlayer.getLookAngle();
-                Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-                Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-                this.targetPosition = this.targetPlayer.position()
-                        .add(sideOffset)
-                        .add(playerLook.scale(-APPROACH_DISTANCE));
-                this.hullback.getNavigation().moveTo(
-                        targetPosition.x,
-                        targetPosition.y,
-                        targetPosition.z,
-                        this.speedModifier
-                );
 
-                Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-                float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
-                float sideYawOffset = approachFromRight ? -90f : 90f;
-                float targetYaw = desiredYaw + sideYawOffset;
-//            if (this.hullback.tickCount % 200 == 0){
+            // Constantly recalculates target for smoothness
+            Vec3 playerLook = this.targetPlayer.getLookAngle();
+            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
+            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
+            this.targetPosition = this.targetPlayer.position()
+                    .add(sideOffset)
+                    .add(playerLook.scale(-APPROACH_DISTANCE));
+
+            double distSqr = this.hullback.position().distanceToSqr(targetPosition);
+
+            // HYBRID NAVIGATION SYSTEM
+            // If standard navigation fails (common on surface) or is too close/far, we use brute force.
+            boolean pathFound = this.hullback.getNavigation().moveTo(targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
+
+            if (!pathFound || this.hullback.getNavigation().isDone()) {
+                // Manual Vector "Push"
+                Vec3 moveDir = targetPosition.subtract(this.hullback.position()).normalize();
+                // Applies smooth speed in the target direction
+                double speed = this.speedModifier * 0.15; // Manual speed fine tuning
+                this.hullback.setDeltaMovement(this.hullback.getDeltaMovement().add(moveDir.scale(speed)));
+                
+                // Manual Rotation (Smooth Look)
+                double d0 = targetPosition.x - this.hullback.getX();
+                double d2 = targetPosition.z - this.hullback.getZ();
+                float targetYaw = (float)(Mth.atan2(d2, d0) * (double)(180F / (float)Math.PI)) - 90.0F;
                 this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
                 this.hullback.yBodyRot = this.hullback.getYRot();
-//            }
             }
         }
     }
 
     public class HullbackApproachPlayerGoal extends Goal {
-        private static final float APPROACH_DISTANCE = 8.0f;
+        private static final float APPROACH_DISTANCE = 6.0f; 
         private static final float SIDE_OFFSET = 5.0f;
-        private static final float ROTATION_SPEED = 0.8f;
-
+        
         private static Ingredient TEMPT_SADDLE = Ingredient.of(Items.SADDLE);
         private static Ingredient TEMPT_ITEMS = Ingredient.of(Items.SHEARS);
         private static Ingredient TEMPT_AXES = Ingredient.of(ItemTags.AXES);
@@ -2394,7 +2498,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(40.0).ignoreLineOfSight();
         private final TargetingConditions targetingConditions;
         private Player targetPlayer;
-        private int repositionCooldown;
         private boolean approachFromRight;
         private Vec3 targetPosition;
 
@@ -2402,7 +2505,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.hullback = hullback;
             this.speedModifier = speedModifier;
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
-            this.repositionCooldown = 200 + hullback.getRandom().nextInt(200);
             this.targetingConditions = TEMP_TARGETING.copy().selector(this::shouldFollow);
         }
 
@@ -2414,15 +2516,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canUse() {
-
-            if (hullback.hasAnchorDown())
-                return false;
-
-            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 50, 30);
+            if (hullback.hasAnchorDown()) return false;
+            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 40, 50, 40);
             if (this.targetPlayer == null) return false;
             if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback))))
                 return false;
-
             return true;
         }
 
@@ -2433,33 +2531,21 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public void start() {
-            super.start();
-
+            this.hullback.setApproachingPlayer(true);
             Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
             Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
             this.approachFromRight = toPlayer.dot(whaleRight) > 0;
-
-
             this.hullback.setTarget(this.targetPlayer);
-            Vec3 playerLook = this.targetPlayer.getLookAngle();
-
-            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-            //TODO FIX
-            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            this.targetPosition = this.targetPlayer.position()
-                    .add(sideOffset)
-                    .add(playerLook.scale(-APPROACH_DISTANCE));
-
             playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
             this.hullback.mouthTarget = 0.2f;
         }
 
         @Override
         public void stop() {
+            this.hullback.setApproachingPlayer(false);
             this.targetPlayer = null;
             this.targetPosition = null;
             this.hullback.setTarget(null);
-            this.repositionCooldown = 100 + hullback.getRandom().nextInt(200);
             this.hullback.getNavigation().stop();
             this.hullback.mouthTarget = 0.0f;
         }
@@ -2468,25 +2554,30 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         public void tick() {
             this.hullback.mouthTarget = 0.6f;
             if (this.targetPlayer == null) return;
-            if (hullback.tickCount % 200 == 0) {
-                Vec3 playerLook = this.targetPlayer.getLookAngle();
-                Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-                Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-                this.targetPosition = this.targetPlayer.position()
-                        .add(sideOffset)
-                        .add(playerLook.scale(-APPROACH_DISTANCE));
-                this.hullback.getNavigation().moveTo(
-                        targetPosition.x,
-                        targetPosition.y,
-                        targetPosition.z,
-                        this.speedModifier
-                );
 
-                Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-                float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
-                float sideYawOffset = approachFromRight ? -90f : 90f;
-                float targetYaw = desiredYaw + sideYawOffset;
+            Vec3 playerLook = this.targetPlayer.getLookAngle();
+            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
+            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
+            this.targetPosition = this.targetPlayer.position()
+                    .add(sideOffset)
+                    .add(playerLook.scale(-APPROACH_DISTANCE));
 
+            // HYBRID SYSTEM: Tries to navigate, if fails, pushes.
+            boolean pathFound = this.hullback.getNavigation().moveTo(targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
+
+            if (!pathFound || this.hullback.getNavigation().isDone()) {
+                // Manual vector calculation to ensure movement even on the surface
+                Vec3 moveDir = targetPosition.subtract(this.hullback.position()).normalize();
+                
+                // Forces movement (This overcomes Pathfinding limitation on the surface)
+                double speed = this.speedModifier * 0.15;
+                this.hullback.setDeltaMovement(this.hullback.getDeltaMovement().add(moveDir.scale(speed)));
+
+                // Forces visual rotation
+                double d0 = targetPosition.x - this.hullback.getX();
+                double d2 = targetPosition.z - this.hullback.getZ();
+                float targetYaw = (float)(Mth.atan2(d2, d0) * (double)(180F / (float)Math.PI)) - 90.0F;
+                
                 this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
                 this.hullback.yBodyRot = this.hullback.getYRot();
             }
@@ -2673,7 +2764,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     public boolean isHullbackInWater() {
-        return this.getFluidTypeHeight(net.minecraftforge.common.ForgeMod.WATER_TYPE.get()) > 0.8;
+        return this.getFluidTypeHeight(net.minecraftforge.common.ForgeMod.WATER_TYPE.get()) > 0.4;
     }
 
     @Override
@@ -2681,13 +2772,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (this.isAlive()) {
             boolean isHullbackInWater = this.isInWater() || this.getFluidTypeHeight(net.minecraftforge.common.ForgeMod.WATER_TYPE.get()) > 0.1;
 
-            // Stop horizontal movement if anchor is down or stationary
-            if ((this.hasAnchorDown() || (this.getStationaryTicks() > 0)) && isHullbackInWater) {
-                pTravelVector = Vec3.ZERO;
-            }
-
-            // Stop horizontal movement if anchor is down or stationary
-            if ((this.hasAnchorDown() || (this.getStationaryTicks() > 0)) && isHullbackInWater) {
+            // Stop horizontal movement if anchor is down or stationary (UNLESS BREACHING)
+            if ((this.hasAnchorDown() || (this.getStationaryTicks() > 0)) && isHullbackInWater && !this.isBreaching()) {
                 pTravelVector = Vec3.ZERO;
             }
 
@@ -2707,26 +2793,17 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 this.setNoGravity(false);
                 boolean isAtHelm = this.getControllingPassenger() != null && this.getControllingPassenger().getVehicle() instanceof HelmEntity;
 
-                if (isAtHelm) {
-                    // SAILING AT HELM: Maintain target depth -4.7 for perfect deck alignment
-                    double targetY = this.level().getSeaLevel() - 4.7;
+                if (isAtHelm || (this.getStationaryTicks() > 0) || this.isTamed() || this.hasAnchorDown()) {
+                    // HELM, STATIONARY, TAMED, ANCHORED: Maintain target depth
+                    double targetY = this.level().getSeaLevel() - (isAtHelm ? 4.55 : 5.0);
                     double diff = targetY - this.getY();
 
-                    if (Math.abs(diff) < 0.1) {
+                    // FIX: Aggressive Deadzone (Snap)
+                    if (Math.abs(diff) < 0.05) {
                         this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
+                        this.setPos(this.getX(), targetY, this.getZ()); // Hard Snap
                     } else {
-                        double verticalSpeed = Mth.clamp(diff * 0.1, -0.05, 0.05);
-                        this.setDeltaMovement(this.getDeltaMovement().x, verticalSpeed, this.getDeltaMovement().z);
-                    }
-                } else if (this.isTamed() || this.hasAnchorDown() || (this.getStationaryTicks() > 0 && this.isTamed())) {
-                    // TAMED, ANCHORED: Maintain stable -5.0 depth
-                    double targetY = this.level().getSeaLevel() - 5.0;
-                    double diff = targetY - this.getY();
-
-                    if (Math.abs(diff) < 0.1) {
-                         this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
-                    } else {
-                        double verticalSpeed = Mth.clamp(diff * 0.1, -0.05, 0.05);
+                        double verticalSpeed = Mth.clamp(diff * 0.2, -0.1, 0.1);
                         this.setDeltaMovement(this.getDeltaMovement().x, verticalSpeed, this.getDeltaMovement().z);
                     }
                 } else {
@@ -2764,9 +2841,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             // WIPE VERTICAL DRIFT IF AT HELM OR TAMED/STATIONARY IN DEADZONE
             if ((this.getControllingPassenger() != null || this.isTamed() || this.hasAnchorDown() || this.getStationaryTicks() > 0) && this.isInWater()) {
-                double targetY = this.getControllingPassenger() != null ? this.level().getSeaLevel() - 4.7 : this.level().getSeaLevel() - 5.0;
-                if (Math.abs(targetY - this.getY()) < 0.11) {
+                double targetY = this.getControllingPassenger() != null ? this.level().getSeaLevel() - 4.55 : this.level().getSeaLevel() - 5.0;
+                if (Math.abs(targetY - this.getY()) < 0.051) {
                     this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
+                    this.setPos(this.getX(), targetY, this.getZ());
                 }
             }
 
@@ -3029,9 +3107,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        // Disable swimCycle when anchored or stationary to prevent tilting
+        // CRITICAL MODIFICATION: swimCycle = 0 when platforms are stable
         float swimCycle;
-        if (this.pitchLocked || (this.hasAnchorDown() || this.getStationaryTicks() > 0)) {
+        if (this.pitchLocked || this.hasAnchorDown() || this.getStationaryTicks() > 0 || this.platformsStable) {
             swimCycle = 0f;
         } else {
              // BREATHING COMPATIBILITY: Force swimCycle to 0 if breaching to prevent visual glitches
@@ -3041,7 +3119,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                      if (breachGoal.isBreaching()) isBreachingAction = true;
                  }
              }
-             if(isBreachingAction) {
+             if (scanPlayerAbove()) {
+                 swimCycle = (float) (Mth.sin(this.tickCount * 0.05f) * this.getDeltaMovement().horizontalDistance() * 0.3);
+             } else if(isBreachingAction) {
                  swimCycle = 0f;
              } else {
                  swimCycle = (float) (Mth.sin(this.tickCount * 0.1f) * this.getDeltaMovement().horizontalDistance());
@@ -3086,6 +3166,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             prevPartPositions[i] = baseOffsets[i];
         }
 
+        // CRITICAL: Does not apply swimCycle if platforms are stable
+        float swimOffset1 = this.platformsStable ? 0f : swimCycle * 2;
+        float swimOffset2 = this.platformsStable ? 0f : swimCycle * 2;
+        float swimOffset3 = this.platformsStable ? 0f : swimCycle * 8;
+        float swimOffset4 = this.platformsStable ? 0f : swimCycle * 5.5f;
+
         this.partPosition[0] = prevPartPositions[0];
         this.partYRot[0] = calculateYaw(prevPartPositions[0], prevPartPositions[1]);
         this.partXRot[0] = calculatePitch(prevPartPositions[0], prevPartPositions[1]);
@@ -3093,27 +3179,27 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 partYRot[0],
                 partXRot[0]);
 
-        this.partPosition[1] = new Vec3(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z);
+        this.partPosition[1] = new Vec3(prevPartPositions[1].x, prevPartPositions[1].y + swimOffset1, prevPartPositions[1].z);
         this.partYRot[1] = calculateYaw(prevPartPositions[0], prevPartPositions[1]);
         this.partXRot[1] = calculatePitch(prevPartPositions[0], prevPartPositions[1]);
-        this.head.moveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z,
+        this.head.moveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimOffset1, prevPartPositions[1].z,
                 partYRot[1],
                 partXRot[1]);
 
-        this.partPosition[2] = new Vec3(prevPartPositions[2].x, prevPartPositions[2].y + swimCycle * 2, prevPartPositions[2].z);
+        this.partPosition[2] = new Vec3(prevPartPositions[2].x, prevPartPositions[2].y + swimOffset2, prevPartPositions[2].z);
         this.partYRot[2] = calculateYaw(prevPartPositions[1], prevPartPositions[2]);
         this.partXRot[2] = calculatePitch(prevPartPositions[1], prevPartPositions[2]);
         this.body.moveTo(prevPartPositions[2].x,
-                prevPartPositions[2].y + swimCycle * 2,
+                prevPartPositions[2].y + swimOffset2,
                 prevPartPositions[2].z,
                 partYRot[2],
                 partXRot[2]);
 
-        this.partPosition[3] = new Vec3(prevPartPositions[3].x, prevPartPositions[3].y + swimCycle * 8, prevPartPositions[3].z);
+        this.partPosition[3] = new Vec3(prevPartPositions[3].x, prevPartPositions[3].y + swimOffset3, prevPartPositions[3].z);
         this.partYRot[3] = calculateYaw(prevPartPositions[2], prevPartPositions[3]);
-        this.partXRot[3] = calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 1.5f - swimCycle * 20f;
+        this.partXRot[3] = calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 1.5f - (this.platformsStable ? 0 : swimCycle * 20f);
         this.tail.moveTo(prevPartPositions[3].x,
-                prevPartPositions[3].y + swimCycle * 8,
+                prevPartPositions[3].y + swimOffset3,
                 prevPartPositions[3].z,
                 partYRot[3],
                 partXRot[3]);
@@ -3125,7 +3211,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         Vec3 flukeTarget = new Vec3(
                 tail.getX() + flukeOffset.x,
-                tail.getY() + flukeOffset.y + swimCycle * 5.5f,
+                tail.getY() + flukeOffset.y + swimOffset4,
                 tail.getZ() + flukeOffset.z
         );
 
@@ -3136,18 +3222,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         this.partPosition[4] = flukeTarget;
         this.partYRot[4] = flukeYaw;
-        this.partXRot[4] = flukePitch * 1.5f + swimCycle * 30f;
+        this.partXRot[4] = flukePitch * 1.5f + (this.platformsStable ? 0 : swimCycle * 30f);
         this.fluke.moveTo(
                 flukeTarget.x,
                 flukeTarget.y,
                 flukeTarget.z,
                 flukeYaw,
-                (flukePitch * 1.5f + swimCycle * 30f)
+                (flukePitch * 1.5f + (this.platformsStable ? 0 : swimCycle * 30f))
         );
 
-        // --- TRAIL PARTICLES (Ported from 1.21.1) ---
-        if (this.level().isClientSide && this.isInWater() && this.getDeltaMovement().lengthSqr() > PARTICLE_SPEED_THRESHOLD_SQR) {
-            for (int i : new int[]{2, 4}) { // Body and Fluke rastro
+        // Particles only when NOT stable
+        if (this.level().isClientSide && this.isInWater() && !this.platformsStable && this.getDeltaMovement().lengthSqr() > PARTICLE_SPEED_THRESHOLD_SQR) {
+            for (int i : new int[]{2, 4}) { // Body and Fluke trail
                 float offset = (i == 2) ? 4 : 0;
                 for (int side : SIDES) {
                     Vec3 particlePos = partPosition[i].add(new Vec3((offset + subEntities[i].getBbWidth() / 2) * side, 0, subEntities[i].getBbWidth() / 2).yRot(-partYRot[i] * Mth.DEG_TO_RAD));
@@ -3186,7 +3272,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public HullbackWalkableEntity spawnPlatform(int index) {
         if (!this.isDeadOrDying()) {
             HullbackWalkableEntity part = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), this.level());
-            part.setPos(this.getSubEntities()[index].getX(), this.position().y + 4.7, this.getSubEntities()[index].getZ());
+            part.setPos(this.getSubEntities()[index].getX(), this.position().y + currentPlatformHeight, this.getSubEntities()[index].getZ());
             if (this.level().addFreshEntity(part)) {
                 return part;
             }
@@ -3216,27 +3302,105 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     private void updateWalkablePlatforms() {
+        // Uses fixed and stable height
+        double platformY = this.getY() + currentPlatformHeight;
+        
         if (this.moving_nose == null) {
             this.moving_nose = spawnPlatform(0);
         } else {
-            this.moving_nose.moveTo(this.nose.getX(), this.getY() + 4.7, this.nose.getZ());
-            this.moving_nose.setDeltaMovement(this.getDeltaMovement());
+            this.moving_nose.moveTo(this.nose.getX(), platformY, this.nose.getZ());
+            this.moving_nose.setYRot(this.nose.getYRot());
+            
+            // CRITICAL: Delta movement ZERO when stable
+            if (this.platformsStable) {
+                this.moving_nose.setDeltaMovement(Vec3.ZERO);
+            } else {
+                this.moving_nose.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
+            }
         }
 
         if (this.moving_head == null) {
             this.moving_head = spawnPlatform(1);
         } else {
-            this.moving_head.moveTo(this.head.getX(), this.getY() + 4.7, this.head.getZ());
-            this.moving_head.setDeltaMovement(this.getDeltaMovement());
+            this.moving_head.moveTo(this.head.getX(), platformY, this.head.getZ());
+            this.moving_head.setYRot(this.head.getYRot());
+            
+            if (this.platformsStable) {
+                this.moving_head.setDeltaMovement(Vec3.ZERO);
+            } else {
+                this.moving_head.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
+            }
         }
 
         if (this.moving_body == null) {
             this.moving_body = spawnPlatform(2);
         } else {
-            this.moving_body.moveTo(this.body.getX(), this.getY() + 4.7, this.body.getZ());
-            this.moving_body.setDeltaMovement(this.getDeltaMovement());
+            this.moving_body.moveTo(this.body.getX(), platformY, this.body.getZ());
+            this.moving_body.setYRot(this.body.getYRot());
+            
+            if (this.platformsStable) {
+                this.moving_body.setDeltaMovement(Vec3.ZERO);
+            } else {
+                this.moving_body.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
+            }
         }
     }
 
+
+    private void updatePlatformHeight() {
+        boolean isMounted = this.getControllingPassenger() != null;
+        float target = isMounted ? 4.0f : 4.55f;
+
+        // Detects state change
+        if (wasMounted != isMounted) {
+            platformHeightCooldown = 40; // 2 seconds
+        }
+        wasMounted = isMounted;
+
+        this.targetPlatformHeight = target;
+        
+        // Waits for cooldown to finish before adjusting
+        if (platformHeightCooldown > 0) {
+            platformHeightCooldown--;
+            if (platformHeightCooldown > 20) return; // Waits 1 full second before starting
+        }
+        
+        // More aggressive Lerp to avoid infinite drift
+        float lerpSpeed = 0.1f;
+        float newHeight = (float) Mth.lerp(lerpSpeed, this.currentPlatformHeight, targetPlatformHeight);
+        
+        // Final snap to avoid infinite oscillation (Threshold increased to 0.01)
+        if (Math.abs(newHeight - targetPlatformHeight) < 0.01f) {
+            this.currentPlatformHeight = targetPlatformHeight;
+        } else {
+            this.currentPlatformHeight = newHeight;
+        }
+    }
+
+
+
+    private void updatePlayerStability() {
+        Player nearestPlayer = this.level().getNearestPlayer(this, 10);
+        
+        if (nearestPlayer != null && isPlayerOnPlatform(nearestPlayer)) {
+            double distMoved = nearestPlayer.position().distanceTo(lastPlayerPosition);
+            
+            if (distMoved < STABLE_THRESHOLD) {
+                playerStableTimer++;
+            } else {
+                playerStableTimer = 0;
+            }
+            
+            lastPlayerPosition = nearestPlayer.position();
+        } else {
+            playerStableTimer = 0;
+        }
+    }
+
+    private boolean isPlayerOnPlatform(Player player) {
+        // Fix: Use a bounding box that actually encompasses the deck height
+        AABB deckBox = this.getBoundingBox().inflate(5.0, 0.5, 12.0).move(0, currentPlatformHeight, 0);
+        return deckBox.contains(player.position());
+    }
 
 }
