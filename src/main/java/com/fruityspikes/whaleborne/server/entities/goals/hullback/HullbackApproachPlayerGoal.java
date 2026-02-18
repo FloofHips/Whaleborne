@@ -14,7 +14,7 @@ import net.minecraft.util.Mth;
 import java.util.EnumSet;
 
 public class HullbackApproachPlayerGoal extends Goal {
-    private static final float APPROACH_DISTANCE = 8.0f;
+    private static final float APPROACH_DISTANCE = 6.0f;
     private static final float SIDE_OFFSET = 5.0f;
     private static final float ROTATION_SPEED = 0.8f;
 
@@ -23,10 +23,9 @@ public class HullbackApproachPlayerGoal extends Goal {
     private static Ingredient TEMPT_AXES = Ingredient.of(ItemTags.AXES);
     private final HullbackEntity hullback;
     private final float speedModifier;
-    private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(20.0).ignoreLineOfSight();
+    private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(40.0).ignoreLineOfSight();
     private final TargetingConditions targetingConditions;
     private Player targetPlayer;
-    private int repositionCooldown;
     private boolean approachFromRight;
     private Vec3 targetPosition;
 
@@ -34,7 +33,6 @@ public class HullbackApproachPlayerGoal extends Goal {
         this.hullback = hullback;
         this.speedModifier = speedModifier;
         this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
-        this.repositionCooldown = 200 + hullback.getRandom().nextInt(200);
         this.targetingConditions = TEMP_TARGETING.copy().selector(this::shouldFollow);
     }
 
@@ -46,14 +44,11 @@ public class HullbackApproachPlayerGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (hullback.stationaryTicks > 0) return false;
         if (hullback.hasAnchorDown()) return false;
-
-        // Yield to breaching when air supply is critically low
         if (hullback.getAirSupply() < hullback.getMaxAirSupply() * 0.2) return false;
         if (hullback.isBreaching()) return false;
 
-        this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 50, 30);
+        this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback);
         if (this.targetPlayer == null) return false;
         if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
 
@@ -62,7 +57,6 @@ public class HullbackApproachPlayerGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        // Interrupt immediately if whale needs to breach
         if (hullback.getAirSupply() < hullback.getMaxAirSupply() * 0.2) return false;
         if (hullback.isBreaching()) return false;
         return canUse();
@@ -71,22 +65,14 @@ public class HullbackApproachPlayerGoal extends Goal {
     @Override
     public void start() {
         super.start();
-
+        this.hullback.setApproachingPlayer(true);
+        
         Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
         Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
         this.approachFromRight = toPlayer.dot(whaleRight) > 0;
 
-
         this.hullback.setTarget(this.targetPlayer);
-        Vec3 playerLook = this.targetPlayer.getLookAngle();
-
-        // Calculate perpendicular vector for side offset (Rotate -90 deg around Y)
-        Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-        Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-        this.targetPosition = this.targetPlayer.position()
-                .add(sideOffset)
-                .add(playerLook.scale(-APPROACH_DISTANCE));
-
+        
         hullback.playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
         this.hullback.setMouthTarget(0.2f);
     }
@@ -96,36 +82,35 @@ public class HullbackApproachPlayerGoal extends Goal {
         this.targetPlayer = null;
         this.targetPosition = null;
         this.hullback.setTarget(null);
-        this.repositionCooldown = 100 + hullback.getRandom().nextInt(200);
+        this.hullback.setApproachingPlayer(false);
         this.hullback.getNavigation().stop();
         this.hullback.setMouthTarget(0.0f);
     }
 
     @Override
     public void tick() {
-        this.hullback.setMouthTarget(0.6f);
         if (this.targetPlayer == null) return;
-        if(hullback.tickCount % 200 == 0) {
-            Vec3 playerLook = this.targetPlayer.getLookAngle();
-            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            this.targetPosition = this.targetPlayer.position()
-                    .add(sideOffset)
-                    .add(playerLook.scale(-APPROACH_DISTANCE));
-            this.hullback.getNavigation().moveTo(
-                    targetPosition.x,
-                    targetPosition.y,
-                    targetPosition.z,
-                    this.speedModifier
-            );
+        this.hullback.setMouthTarget(0.6f);
 
-            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-            float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
-            float sideYawOffset = approachFromRight ? -90f : 90f;
-            float targetYaw = desiredYaw + sideYawOffset;
+        // RECALCULATION PER TICK
+        Vec3 playerLook = this.targetPlayer.getLookAngle();
+        Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
+        Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
+        this.targetPosition = this.targetPlayer.position()
+                .add(sideOffset)
+                .add(playerLook.scale(-APPROACH_DISTANCE));
 
-            this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
-            this.hullback.yBodyRot = this.hullback.getYRot();
-        }
+        // NATIVE NAVIGATION: Tries pathfinding
+        this.hullback.getNavigation().moveTo(
+                targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
+
+        // SMOOTH ROTATION
+        Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
+        float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
+        float sideYawOffset = approachFromRight ? -90f : 90f;
+        float targetYaw = desiredYaw + sideYawOffset;
+
+        this.hullback.setYRot(Mth.rotLerp(0.05f, this.hullback.getYRot(), targetYaw));
+        this.hullback.yBodyRot = this.hullback.getYRot();
     }
 }

@@ -22,8 +22,8 @@ public class HullbackAIManager {
     public void registerGoals() {
         // Priority 0: Critical survival and interaction goals
         hullback.goalSelector.addGoal(0, new HullbackBreathAirGoal(hullback));
-        hullback.goalSelector.addGoal(0, new HullbackApproachPlayerGoal(hullback, 0.01f));
-        hullback.goalSelector.addGoal(0, new HullbackArmorPlayerGoal(hullback, 0.005f));
+        hullback.goalSelector.addGoal(0, new HullbackApproachPlayerGoal(hullback, 1.2f));
+        hullback.goalSelector.addGoal(0, new HullbackArmorPlayerGoal(hullback, 1.2f));
 
         // Priority 1-2: Water finding and swimming
         hullback.goalSelector.addGoal(1, new HullbackTryFindWaterGoal(hullback, true));

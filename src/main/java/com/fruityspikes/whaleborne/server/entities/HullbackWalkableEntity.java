@@ -19,23 +19,14 @@ public class HullbackWalkableEntity extends Entity {
         super(entityType, level);
     }
 
-    /*
-    protected void recalculateBoundingBox() {
-        double x = this.getX();
-        double y = this.getY();
-        double z = this.getZ();
-
-        if (this.getMovementEmission().emitsAnything()) {
-            this.setBoundingBox(new AABB(x, y, z, x, y, z));
-        } else {
-            double halfWidth = 2.5;
-            this.setBoundingBox(new AABB(
-                    x - halfWidth, y, z - halfWidth,
-                    x + halfWidth, y + 1, z + halfWidth
-            ));
-        }
+    @Override
+    public void refreshDimensions() {
+        double halfWidth = 2.75; // Total 5.5 to match EntityType
+        this.setBoundingBox(new AABB(
+                getX() - halfWidth, getY(), getZ() - halfWidth,
+                getX() + halfWidth, getY() + 0.5, getZ() + halfWidth
+        ));
     }
-    */
    
     public void tick() {
         super.tick();

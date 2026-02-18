@@ -80,7 +80,7 @@ public class HullbackRandomSwimGoal extends RandomSwimmingGoal {
     @Override
     public void start() {
         if (currentTarget != null) {
-            mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, mob.isSaddled() ? 0.2f : speedModifier);
+            mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, speedModifier);
         }
     }
 

@@ -6,6 +6,9 @@ import com.fruityspikes.whaleborne.server.entities.HullbackWalkableEntity;
 import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySelector;
 import java.util.Arrays;
 
 public class HullbackPartManager {
@@ -82,10 +85,12 @@ public class HullbackPartManager {
         Vec3 delta = hullback.getDeltaMovement();
         float horizontalSpeed = (float) Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         // Disable swimCycle when anchored or stationary (pitch locked) to prevent tilting/wiggling
+        // CRITICAL FIX: Disables swimCycle when platforms are stable
         float swimCycle;
-        if (hullback.isPitchLocked()) {
+        if (hullback.isPitchLocked() || hullback.getStationaryTicks() > 0) {
              swimCycle = 0f;
         } else {
+             // MODIFICATION: swimCycle based on horizontal speed only when free
              swimCycle = Mth.sin(hullback.tickCount * 0.1f) * horizontalSpeed;
         }
         float yawRad = -hullback.getYRot() * Mth.DEG_TO_RAD;
@@ -212,6 +217,17 @@ public class HullbackPartManager {
         return -(float)(Mth.atan2(dy, horizontalDistance) * (180F / Math.PI));
     }
     
+    // ─── Walkable Platforms ──────────────────────────────────────
+    public HullbackWalkableEntity moving_head;
+    public HullbackWalkableEntity moving_nose;
+    public HullbackWalkableEntity moving_body;
+
+    public void discardAllPlatforms() {
+        if (this.moving_nose != null) { this.moving_nose.discard(); this.moving_nose = null; }
+        if (this.moving_head != null) { this.moving_head.discard(); this.moving_head = null; }
+        if (this.moving_body != null) { this.moving_body.discard(); this.moving_body = null; }
+    }
+
     public HullbackWalkableEntity spawnPlatform(int index) {
         if (!hullback.isDeadOrDying()) {
             HullbackWalkableEntity part = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), hullback.level());
@@ -221,5 +237,54 @@ public class HullbackPartManager {
             }
         }
         return null;
+    }
+
+    public void updateStationaryPlatforms(float currentPlatformHeight, Vec3 deltaMovement) {
+        if (this.moving_nose != null) {
+            this.moving_nose.moveTo(this.subEntities[0].getX(), hullback.getY() + currentPlatformHeight, this.subEntities[0].getZ());
+            this.moving_nose.setDeltaMovement(deltaMovement);
+        }
+        if (this.moving_head != null) {
+            this.moving_head.moveTo(this.subEntities[1].getX(), hullback.getY() + currentPlatformHeight, this.subEntities[1].getZ());
+            this.moving_head.setDeltaMovement(deltaMovement);
+        }
+        if (this.moving_body != null) {
+            this.moving_body.moveTo(this.subEntities[2].getX(), hullback.getY() + currentPlatformHeight, this.subEntities[2].getZ());
+            this.moving_body.setDeltaMovement(deltaMovement);
+        }
+    }
+
+    public void moveEntitiesOnTop(int index, boolean platformsStable) {
+        HullbackPartEntity part = subEntities[index];
+        Vec3 offset = partPosition[index].subtract(oldPartPosition[index]);
+
+        // Increased threshold to avoid micro-movements
+        if (offset.length() <= 0.001) return;
+        
+        // If platforms are not stable, reduce movement
+        float movementFactor = platformsStable ? 1.0F : 0.5F;
+
+        for (net.minecraft.world.entity.Entity entity : hullback.level().getEntities(part, part.getBoundingBox().inflate(0F, 0.01F, 0F), net.minecraft.world.entity.EntitySelector.NO_SPECTATORS.and((entity) -> (!entity.isPassenger())))) {
+            if (!entity.noPhysics && !(entity instanceof HullbackPartEntity) && !(entity instanceof HullbackEntity) && !(entity instanceof HullbackWalkableEntity)) {
+                
+                // Smooth movement for players
+                if (entity instanceof net.minecraft.world.entity.player.Player) {
+                    movementFactor *= 0.8F; // 20% smoother movement for players
+                }
+
+                double gravity = entity.isNoGravity() ? 0 : 0.08D;
+                if (entity instanceof net.minecraft.world.entity.LivingEntity living) {
+                    net.minecraft.world.entity.ai.attributes.AttributeInstance attribute = living.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.GRAVITY);
+                    gravity = attribute.getValue();
+                }
+                
+                Vec3 smoothedOffset = offset.scale(movementFactor);
+                
+                // Use smoothed offset
+                float f2 = 1.0F; 
+                entity.move(net.minecraft.world.entity.MoverType.SHULKER, new Vec3((double) (f2 * (float) smoothedOffset.x), (double) (f2 * (float) smoothedOffset.y), (double) (f2 * (float) smoothedOffset.z)));
+                entity.hurtMarked = true;
+            }
+        }
     }
 }

@@ -116,6 +116,16 @@ public class HullbackControlManager {
             }
         }
 
+        if (this.whale.isInWater()) {
+            float currentPitch = this.whale.getXRot();
+            float maxPitch = 25f; // Maximum tilt angle in degrees
+
+            if (Math.abs(currentPitch) > maxPitch) {
+                this.whale.setXRot(Mth.clamp(currentPitch, -maxPitch, maxPitch));
+                this.whale.xRotO = this.whale.getXRot();
+            }
+        }
+
         boolean vectorControl = isVectorControlActive();
         
         float xxa = player.xxa;
@@ -160,5 +170,158 @@ public class HullbackControlManager {
         }
 
         return new Vec3(0, 0, zza); 
+    }
+    public static class HullbackBodyRotationControl extends net.minecraft.world.entity.ai.control.BodyRotationControl {
+        private final HullbackEntity hullback;
+
+        public HullbackBodyRotationControl(HullbackEntity hullback) {
+            super(hullback);
+            this.hullback = hullback;
+        }
+
+        @Override
+        public void clientTick() {
+            if (hullback.getStationaryTicks() > 0) {
+                return;
+            }
+            hullback.setYBodyRot(hullback.getYRot());
+        }
+    }
+
+    /** Prevents SmoothSwimmingMoveControl from rotating the entity when stationary. */
+    public static class StationaryAwareMoveControl extends net.minecraft.world.entity.ai.control.SmoothSwimmingMoveControl {
+        private final HullbackEntity hullback;
+
+        public StationaryAwareMoveControl(HullbackEntity entity, int maxTurnX, int maxTurnY, float inWaterSpeedModifier, float outsideWaterSpeedModifier, boolean applyGravity) {
+            super(entity, maxTurnX, maxTurnY, inWaterSpeedModifier, outsideWaterSpeedModifier, applyGravity);
+            this.hullback = entity;
+        }
+
+        @Override
+        public void tick() {
+            if (hullback.getStationaryTicks() > 0 || hullback.isPitchLocked()) {
+                this.operation = Operation.WAIT;
+                this.mob.setSpeed(0.0F);
+                // Also force XRot to 0 if locked
+                if (hullback.isPitchLocked()) {
+                    hullback.setXRot(0f);
+                }
+                return;
+            }
+            if (this.mob.isInWater()) {
+                this.mob.setSpeed((float) this.mob.getAttributeValue(HullbackEntity.getSwimSpeed()));
+            } else {
+                this.mob.setSpeed((float) this.mob.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED));
+            }
+            super.tick();
+
+            // Limit pitch angle during AI movement to prevent excessive tilting
+            if (this.mob.isInWater()) {
+                this.mob.setXRot(Mth.clamp(this.mob.getXRot(), -20f, 20f));
+            }
+        }
+    }
+
+    /** Prevents SmoothSwimmingLookControl from rotating the entity when stationary. */
+    public static class StationaryAwareLookControl extends net.minecraft.world.entity.ai.control.SmoothSwimmingLookControl {
+        private final HullbackEntity hullback;
+
+        public StationaryAwareLookControl(HullbackEntity entity, int maxTurnDegrees) {
+            super(entity, maxTurnDegrees);
+            this.hullback = entity;
+        }
+
+        @Override
+        public void tick() {
+            if (hullback.getStationaryTicks() > 0) {
+                return;
+            }
+            super.tick();
+        }
+    }
+
+    public static class HullbackMoveControl extends net.minecraft.world.entity.ai.control.MoveControl {
+        private final HullbackEntity hullback;
+        private final int maxTurnX = 1;
+        private final int maxTurnY = 2;
+        private final float inWaterSpeedModifier = 1.0F;
+        private final float outsideWaterSpeedModifier = 1.0F;
+        private final boolean applyGravity = true;
+
+        public HullbackMoveControl(HullbackEntity entity) {
+            super(entity);
+            this.hullback = entity;
+        }
+
+        @Override
+        public void tick() {
+            if (hullback.getStationaryTicks() > 0 || hullback.isPitchLocked()) {
+                this.mob.setSpeed(0.0F);
+                this.mob.setZza(0.0F);
+                this.mob.setYya(0.0F);
+                // Force XRot to 0 if locked
+                if (hullback.isPitchLocked()) {
+                    hullback.setXRot(0f);
+                }
+                return;
+            }
+
+            if (this.applyGravity && this.mob.isInWater()) {
+                this.mob.setDeltaMovement(this.mob.getDeltaMovement().add(0.0, 0.005, 0.0));
+            }
+
+            if (this.operation == Operation.MOVE_TO && !this.mob.getNavigation().isDone()) {
+                double d0 = this.wantedX - this.mob.getX();
+                double d1 = this.wantedY - this.mob.getY();
+                double d2 = this.wantedZ - this.mob.getZ();
+                double d3 = d0 * d0 + d1 * d1 + d2 * d2;
+                if (d3 < 2.5000003E-7F) {
+                    this.mob.setZza(0.0F);
+                } else {
+                    float f = (float)(Mth.atan2(d2, d0) * 180.0F / (float)Math.PI) - 90.0F;
+                    this.mob.setYRot(this.rotlerp(this.mob.getYRot(), f, (float)this.maxTurnY));
+                    this.mob.yBodyRot = this.mob.getYRot();
+                    this.mob.yHeadRot = this.mob.getYRot();
+
+                    double baseSpeed = this.mob.isInWater() ?
+                            this.mob.getAttributeValue(HullbackEntity.getSwimSpeed()) :
+                            this.mob.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
+
+                    float f1 = (float)(this.speedModifier * baseSpeed);
+
+                    if (this.mob.isInWater()) {
+                        this.mob.setSpeed(f1 * this.inWaterSpeedModifier);
+                        double d4 = Math.sqrt(d0 * d0 + d2 * d2);
+                        if (Math.abs(d1) > 1.0E-5F || Math.abs(d4) > 1.0E-5F) {
+                            float f3 = -((float)(Mth.atan2(d1, d4) * 180.0F / (float)Math.PI));
+                            
+                            // Limit pitch angle during AI movement to prevent excessive tilting
+                            f3 = Mth.clamp(f3, -20f, 20f);
+
+                            f3 = Mth.clamp(Mth.wrapDegrees(f3), (float)(-this.maxTurnX), (float)this.maxTurnX);
+                            this.mob.setXRot(this.rotlerp(this.mob.getXRot(), f3, 5.0F));
+                        }
+
+                        float f6 = Mth.cos(this.mob.getXRot() * (float) (Math.PI / 180.0));
+                        float f4 = Mth.sin(this.mob.getXRot() * (float) (Math.PI / 180.0));
+                        this.mob.zza = f6 * f1;
+                        this.mob.yya = -f4 * f1;
+                    } else {
+                        float f5 = Math.abs(Mth.wrapDegrees(this.mob.getYRot() - f));
+                        float f2 = getTurningSpeedFactor(f5);
+                        this.mob.setSpeed(f1 * this.outsideWaterSpeedModifier * f2);
+                    }
+                }
+            } else {
+                this.mob.setSpeed(0.0F);
+                this.mob.setXxa(0.0F);
+                this.mob.setYya(0.0F);
+                this.mob.setZza(0.0F);
+            }
+        }
+
+        private float getTurningSpeedFactor(float p_249853_) {
+            return 1.0F - Mth.clamp((p_249853_ - 10.0F) / 50.0F, 0.0F, 1.0F);
+        }
     }
 }
