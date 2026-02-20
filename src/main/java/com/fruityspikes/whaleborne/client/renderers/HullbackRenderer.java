@@ -161,6 +161,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
             if (Config.armorProgress) {
                 if (progress == 0) {
+                    // Armor is fully intact - render normally
                     armorPart.render(
                             poseStack,
                             buffer.getBuffer(RenderType.entityCutout(getArmor(pEntity))),
@@ -168,7 +169,9 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                             OverlayTexture.pack(0.0F, flag)
                     );
 
-                } else {
+                } else if (!com.fruityspikes.whaleborne.client.compat.ShaderCompatLib.isShaderModLoaded()) {
+                    // Vanilla rendering (no shader mods active)
+                    // Uses the dual-pass dragonExplosionAlpha + entityDecal technique
                     armorPart.render(
                             poseStack,
                             buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
@@ -180,6 +183,20 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                     armorPart.render(
                             poseStack,
                             buffer.getBuffer(RenderType.entityDecal(getArmor(pEntity))),
+                            packedLight,
+                            OverlayTexture.pack(0.0F, flag)
+                    );
+                } else {
+                    // Shader-compatible rendering (Iris/Oculus active)
+                    // Replicates vanilla dragonExplosionAlpha + entityDecal in a single pass:
+                    // Mask alpha is compared against progress*255 as threshold (same as vanilla shader).
+                    // Pixels that survive get wood texture; others are transparent.
+                    ResourceLocation damagedTexture = HullbackArmorTextureManager.getOrCreateDamagedTexture(
+                            pEntity, getArmor(pEntity), pEntity.getArmor().getItem(), progress
+                    );
+                    armorPart.render(
+                            poseStack,
+                            buffer.getBuffer(RenderType.entityCutoutNoCull(damagedTexture)),
                             packedLight,
                             OverlayTexture.pack(0.0F, flag)
                     );
