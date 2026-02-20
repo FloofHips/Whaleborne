@@ -169,6 +169,21 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                             OverlayTexture.pack(0.0F, flag)
                     );
 
+                } else if (com.fruityspikes.whaleborne.client.compat.ShaderCompatLib.isShaderModLoaded()) {
+                    // Shader-compatible rendering (Oculus active)
+                    // Replicates vanilla dragonExplosionAlpha + entityDecal in a single pass:
+                    // Mask alpha is compared against progress*255 as threshold (same as vanilla shader).
+                    // Pixels that survive get wood texture; others are transparent.
+                    ResourceLocation damagedTexture = HullbackArmorTextureManager.getOrCreateDamagedTexture(
+                            pEntity, getArmor(pEntity), pEntity.getArmor().getItem(), progress
+                    );
+                    armorPart.render(
+                            poseStack,
+                            buffer.getBuffer(RenderType.entityCutoutNoCull(damagedTexture)),
+                            packedLight,
+                            OverlayTexture.pack(0.0F, flag)
+                    );
+
                 } else {
                     armorPart.render(
                             poseStack,
