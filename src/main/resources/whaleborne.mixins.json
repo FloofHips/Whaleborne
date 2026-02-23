@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.fruityspikes.whaleborne.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "plugin": "com.fruityspikes.whaleborne.mixin.WhaleborneMixinPlugin",
+  "mixins": [
+    "NeatCompatMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
