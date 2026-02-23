@@ -6,10 +6,10 @@ import com.fruityspikes.whaleborne.client.models.HullbackArmorModel;
 import com.fruityspikes.whaleborne.client.models.HullbackModel;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackPartEntity;
-import com.fruityspikes.whaleborne.server.registries.WBBlockRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBEntityModelLayers;
 import com.fruityspikes.whaleborne.server.registries.WBTagRegistry;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -30,13 +30,11 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.*;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.SkullBlock;
 import net.minecraft.world.level.block.TallSeagrassBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.common.Tags;
 import org.joml.Quaternionf;
 
 import java.util.ArrayList;
@@ -44,6 +42,13 @@ import java.util.List;
 import java.util.Optional;
 
 public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<HullbackEntity, HullbackModel<HullbackEntity>> {
+    public static boolean isRenderingInHealthbarsGui = false;
+
+    // Configurable offset and scale overrides for GUI overlay
+    public static float GUI_HEAD_X = 0.0f;
+    public static float GUI_HEAD_Y = 0.0f;
+    public static float GUI_HEAD_Z = 1.0f;
+    public static float GUI_HEAD_SCALE = 0.5f;
     public static final ResourceLocation MOB_TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/hullback.png");
     public static final ResourceLocation STEEN_TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/steen.png");
     public static final ResourceLocation SADDLE_TEXTURE = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/entity/hullback_saddle.png");
@@ -70,6 +75,82 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
     @Override
     public void render(HullbackEntity pEntity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
+        if (isRenderingInHealthbarsGui) {
+            poseStack.pushPose();
+            
+            // We use the 'O' (Old) variables here because InventoryScreen heavily overrides 
+            // the main rotation variables (yBodyRot, xRot, etc) with a static fake mouse tracking offset. 
+            // Fuzs Healthbars passes fixed mouse coordinates, so the standard variables are totally frozen!
+            float trueBodyRot = pEntity.yBodyRotO;
+            float trueHeadRot = pEntity.yHeadRotO; 
+            float truePitch = pEntity.xRotO;
+            float headYawOffset = trueHeadRot - trueBodyRot;
+
+            ModelPart head = this.model.getHead();
+            ModelPart armorHead = this.armorModel.getHead();
+
+            // Zero out model offsets identically to world rendering so dirt/armor overlays perfectly align
+            head.resetPose();
+            head.setPos(0, 0, 0);
+
+            this.model.setupAnim(pEntity, 0, 0, pEntity.tickCount + partialTicks, headYawOffset, truePitch);
+            if (armorHead != null) {
+                this.armorModel.setupAnim(pEntity, 0, 0, pEntity.tickCount + partialTicks, headYawOffset, truePitch);
+            }
+
+            // Frame centering on the GUI (adjusted slightly to frame the new 0,0,0 origin beautifully)
+            poseStack.translate(GUI_HEAD_X, GUI_HEAD_Y, GUI_HEAD_Z);
+            poseStack.scale(GUI_HEAD_SCALE, GUI_HEAD_SCALE, GUI_HEAD_SCALE);
+            
+            // Rotate the head 180 degrees on X to fix the inverted rendering of Minecraft models
+            poseStack.mulPose(Axis.XP.rotationDegrees(180));
+            
+            // Shift pivot to the face (Z is depth, face is at ~2.5 local)
+            poseStack.translate(0, 0, 2.5f);
+            
+            // Apply the actual WORLD yaw sequence to spin freely
+            poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - trueBodyRot));
+            poseStack.mulPose(Axis.YP.rotationDegrees(headYawOffset));
+            poseStack.mulPose(Axis.XP.rotationDegrees(truePitch));
+
+            // Shift back so the face rests at the frame pivot
+            poseStack.translate(0, 0, -2.5f);
+
+            // Now, EXACTLY like renderPart: apply the logical bounding block center offset
+            float height = 5.0f;
+            float width = 5.0f;
+            poseStack.translate(0, -height/2, -width/2);
+
+            // 1. Render Armor
+            renderArmor(pEntity, poseStack, buffer, packedLight, false, armorHead, 0);
+
+            // 2. Render Crown
+            renderCrown(pEntity, poseStack, buffer, packedLight, false, 0);
+
+            // 3. Render Head
+            VertexConsumer vertexConsumer = buffer.getBuffer(this.model.renderType(this.getTextureLocation(pEntity)));
+            head.render(poseStack, vertexConsumer, packedLight, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
+
+            // 4. Render Dirt (index 0 implies width 5, height 5)
+            poseStack.pushPose();
+            poseStack.translate(-width/2, height/2, 0);
+            renderBottomDirt(poseStack, buffer, packedLight, pEntity, 0);
+            poseStack.translate(0, -height, 0);
+            poseStack.mulPose(Axis.ZN.rotationDegrees(180));
+            poseStack.translate(-width, 0, 0);
+            renderTopDirt(poseStack, buffer, packedLight, pEntity, 0);
+            poseStack.popPose();
+
+            // Restore the model parts so the actual world render doesn't break
+            head.resetPose();
+            if (armorHead != null) {
+                armorHead.resetPose();
+            }
+
+            poseStack.popPose();
+            return;
+        }
+
         super.render(pEntity, entityYaw, partialTicks, poseStack, buffer, packedLight);
 
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getHead(), this.armorModel.getHead(), 0, 5.0F, 5.0F);
@@ -149,29 +230,91 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
         boolean flag = pEntity.hurtTime > 0;
 
-        if (armorPart!=null && pEntity.getArmorProgress() > 0){
+        renderArmor(pEntity, poseStack, buffer, packedLight, flag, armorPart, index);
+
+        renderCrown(pEntity, poseStack, buffer, packedLight, flag, index);
+
+        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(getTextureLocation(pEntity))), packedLight, OverlayTexture.pack(0.0F, flag));
+
+        if(pEntity.isSaddled()) {
+            poseStack.pushPose();
+            poseStack.scale(1.009f, 1.009f, 1.009f);
+            poseStack.translate(0, -0.01f, -0.01f);
+            part.render(
+                    poseStack,
+                    buffer.getBuffer(RenderType.entityCutoutNoCull(SADDLE_TEXTURE)),
+                    packedLight,
+                    OverlayTexture.pack(0.0F, flag)
+            );
+            poseStack.popPose();
+        }
+
+        if(index == 4)
+            poseStack.translate(-0.5f, 0, 0);
+        if(index == 3)
+            poseStack.translate(0.25f, 0, 0);
+        poseStack.translate(-width/2, height/2, 0);
+
+        renderBottomDirt(poseStack, buffer, packedLight, pEntity, index);
+        if(index==0 || index==2){
+            poseStack.translate(0, -height, 0);
+            poseStack.mulPose(Axis.ZN.rotationDegrees(180));
+            poseStack.translate(-width, 0, 0);
+            renderTopDirt(poseStack, buffer, packedLight, pEntity, index);
+        }
+        poseStack.popPose();
+    }
+
+    private void renderCrown(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, int packedLight, boolean flag, int index) {
+        ItemStack crown = pEntity.getCrown();
+        if (index == 0 && !crown.isEmpty()) {
+            poseStack.pushPose();
+            poseStack.translate(0, -4.07, -4);
+            poseStack.mulPose(Axis.XP.rotationDegrees(180));
+            poseStack.mulPose(Axis.YP.rotationDegrees(180));
+
+            boolean isKingGeorge = pEntity.hasCustomName() && pEntity.getCustomName().getString().equalsIgnoreCase("king george");
+            float crownScale = isKingGeorge ? 2.0F : 1.75F;
+            poseStack.scale(crownScale, crownScale, crownScale);
+
+            if (crown.is(ItemTags.SKULLS)) {
+                poseStack.pushPose();
+                poseStack.translate(0, 0, 0.23);
+                Minecraft.getInstance().getItemRenderer().renderStatic(crown, ItemDisplayContext.FIXED, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
+                poseStack.popPose();
+            } else if (crown.getItem() instanceof BlockItem) {
+                poseStack.pushPose();
+                poseStack.translate(0, -0.65f, 0);
+                poseStack.scale(1.5f, 1.5f, 1.5f);
+                Minecraft.getInstance().getItemRenderer().renderStatic(crown, ItemDisplayContext.FIXED, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
+                poseStack.popPose();
+            } else {
+                Minecraft.getInstance().getItemRenderer().renderStatic(crown, ItemDisplayContext.HEAD, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
+            }
+            poseStack.popPose();
+        }
+    }
+
+    private void renderArmor(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, int packedLight, boolean flag, ModelPart armorPart, int index) {
+        if (armorPart != null && pEntity.getArmorProgress() > 0) {
             poseStack.pushPose();
             poseStack.translate(0, -1.5f, 0);
-            poseStack.scale(1.005f,1.005f,1.005f );
+            poseStack.scale(1.005f, 1.005f, 1.005f);
             float progress = 1 - pEntity.getArmorProgress();
 
-            if (index == 2){
+            if (index == 2) {
                 renderFixedNameTag(pEntity, poseStack, buffer, packedLight);
             }
 
             if (Config.armorProgress) {
                 if (progress == 0) {
-                    // Armor is fully intact - render normally
                     armorPart.render(
                             poseStack,
                             buffer.getBuffer(RenderType.entityCutout(getArmor(pEntity))),
                             packedLight,
                             OverlayTexture.pack(0.0F, flag)
                     );
-
                 } else if (!com.fruityspikes.whaleborne.client.compat.ShaderCompatLib.isShaderModLoaded()) {
-                    // Vanilla rendering (no shader mods active)
-                    // Uses the dual-pass dragonExplosionAlpha + entityDecal technique
                     armorPart.render(
                             poseStack,
                             buffer.getBuffer(RenderType.dragonExplosionAlpha(ARMOR_PROGRESS)),
@@ -179,7 +322,6 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                             OverlayTexture.pack(0.0F, flag),
                             (int)(progress * 255) << 24 | 0xFFFFFF
                     );
-
                     armorPart.render(
                             poseStack,
                             buffer.getBuffer(RenderType.entityDecal(getArmor(pEntity))),
@@ -187,10 +329,6 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
                             OverlayTexture.pack(0.0F, flag)
                     );
                 } else {
-                    // Shader-compatible rendering (Iris/Oculus active)
-                    // Replicates vanilla dragonExplosionAlpha + entityDecal in a single pass:
-                    // Mask alpha is compared against progress*255 as threshold (same as vanilla shader).
-                    // Pixels that survive get wood texture; others are transparent.
                     ResourceLocation damagedTexture = HullbackArmorTextureManager.getOrCreateDamagedTexture(
                             pEntity, getArmor(pEntity), pEntity.getArmor().getItem(), progress
                     );
@@ -220,54 +358,6 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
             poseStack.popPose();
         }
-
-        ItemStack crown = pEntity.getCrown();
-
-        if(index == 0 && !crown.isEmpty()){
-            poseStack.pushPose();
-            poseStack.translate(0,-4.07, -4);
-            poseStack.mulPose(Axis.XP.rotationDegrees(180));
-            poseStack.mulPose(Axis.YP.rotationDegrees(180));
-
-            if (crown.is(ItemTags.SKULLS)) {
-                poseStack.pushPose();
-                poseStack.translate(0,0,0.23);
-                Minecraft.getInstance().getItemRenderer().renderStatic(crown, ItemDisplayContext.FIXED, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
-                poseStack.popPose();
-            } else
-                Minecraft.getInstance().getItemRenderer().renderStatic(crown, ItemDisplayContext.HEAD, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
-            poseStack.popPose();
-        }
-
-        part.render(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(getTextureLocation(pEntity))), packedLight, OverlayTexture.pack(0.0F, flag));
-
-        if(pEntity.isSaddled()) {
-            poseStack.pushPose();
-            poseStack.scale(1.009f, 1.009f, 1.009f);
-            poseStack.translate(0, -0.01f, -0.01f);
-            part.render(
-                    poseStack,
-                    buffer.getBuffer(RenderType.entityCutoutNoCull(SADDLE_TEXTURE)),
-                    packedLight,
-                    OverlayTexture.pack(0.0F, flag)
-            );
-            poseStack.popPose();
-        }
-
-        if(index == 4)
-            poseStack.translate(-0.5f, 0, 0);
-        if(index == 3)
-            poseStack.translate(0.25f, 0, 0);
-        poseStack.translate(-width/2, height/2, 0);
-
-        renderBottomDirt(poseStack, buffer, packedLight, pEntity, index);
-        if(index==0 || index==2){
-            poseStack.translate(0, -height, 0);
-            poseStack.mulPose(Axis.ZN.rotationDegrees(180));
-            poseStack.translate(-width, 0, 0);
-            rendertTopDirt(poseStack, buffer, packedLight, pEntity, index);
-        }
-        poseStack.popPose();
     }
 
     private void renderFixedNameTag(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
@@ -310,7 +400,7 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
         }
     }
 
-    private void rendertTopDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight, HullbackEntity parent, int index) {
+    private void renderTopDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight, HullbackEntity parent, int index) {
         boolean flag = parent.hurtTime > 0;
         BlockState[][] array = parent.getWhaleDirt().getDirtArray(index, false);
 

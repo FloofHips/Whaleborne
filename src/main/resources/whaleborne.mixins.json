@@ -4,11 +4,13 @@
   "package": "com.fruityspikes.whaleborne.mixin",
   "compatibilityLevel": "JAVA_21",
   "plugin": "com.fruityspikes.whaleborne.mixin.WhaleborneMixinPlugin",
-  "mixins": [
-    "NeatCompatMixin",
-    "HealthBarsCompatMixin",
-    "HealthBarsVisibilityMixin"
-  ],
+    "mixins": [
+        "NeatCompatMixin",
+        "HealthBarsCompatMixin",
+        "HealthBarsVisibilityMixin",
+        "HealthBarsGuiMixin",
+        "HealthBarsPickMixin"
+    ],
   "injectors": {
     "defaultRequire": 1
   }
