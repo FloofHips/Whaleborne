@@ -1,10 +1,12 @@
 {
-  "type": "neoforge:add_spawns",
+  "type": "whaleborne:configurable_spawns",
   "biomes": "#minecraft:is_deep_ocean",
-  "spawners": {
-    "type": "whaleborne:hullback",
-    "maxCount": 1,
-    "minCount": 1,
-    "weight": 1
-  }
+  "spawners": [
+    {
+      "type": "whaleborne:hullback",
+      "maxCount": 1,
+      "minCount": 1,
+      "weight": 1
+    }
+  ]
 }

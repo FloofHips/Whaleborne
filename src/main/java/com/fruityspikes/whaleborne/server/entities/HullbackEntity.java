@@ -139,6 +139,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private Vec3 currentTarget;
     public int stationaryTicks;
     public boolean HAS_MOBIUS_SPAWNED = false;
+    public int ticksSinceSpawn = 0;
     public float AttributeSpeedModifier = 1;
     public float newRotY = this.getYRot();
     private float mouthOpenProgress;
@@ -300,6 +301,20 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         ).isEmpty();
     }
 
+    @Override
+    public void checkDespawn() {
+        // Custom checkDespawn: only resets noActionTime when a player is within simulation distance.
+        // Distance-based despawn is fully disabled — lifespan is controlled by our tick() timer.
+        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            int simDistBlocks = serverLevel.getServer().getPlayerList().getSimulationDistance() * 16;
+            double simDistSq = (double) simDistBlocks * simDistBlocks;
+            net.minecraft.world.entity.player.Player nearest = this.level().getNearestPlayer(this, -1.0);
+            if (nearest != null && nearest.distanceToSqr(this) < simDistSq) {
+                this.setNoActionTime(0);
+            }
+        }
+    }
+
     public static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes()
             .add(Attributes.MAX_HEALTH, 100.0)
@@ -385,6 +400,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
         CompoundTag hasMobiusSpawned = new CompoundTag();
         hasMobiusSpawned.putBoolean("HasMobiusSpawned", HAS_MOBIUS_SPAWNED);
+        compound.putInt("TicksSinceSpawn", ticksSinceSpawn);
 
         for (int i = 0; i < 7; i++) {
             Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
@@ -410,6 +426,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         }
 
         HAS_MOBIUS_SPAWNED = compound.getBoolean("HasMobiusSpawned");
+        ticksSinceSpawn = compound.getInt("TicksSinceSpawn");
 
         for (int i = 0; i < 7; i++) {
             String seatKey = "Seat_" + i;
@@ -678,6 +695,27 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
     @Override
     public void tick() {
+        if (!this.level().isClientSide && this.isAlive()) {
+            // Grace zone: pause despawn timer if any player is within the configured radius
+            int graceRadius = com.fruityspikes.whaleborne.Config.hullbackDespawnGraceRadius;
+            boolean inGraceZone = false;
+            if (graceRadius > 0) {
+                double graceDistSq = (double) graceRadius * graceRadius;
+                net.minecraft.world.entity.player.Player nearestPlayer = this.level().getNearestPlayer(this, -1.0);
+                inGraceZone = nearestPlayer != null && nearestPlayer.distanceToSqr(this) < graceDistSq;
+            }
+            if (!inGraceZone) {
+                ticksSinceSpawn++;
+            }
+            if (!this.isPersistenceRequired() && !this.isTamed() && !this.hasCustomName()) {
+                long maxTicks = (long) com.fruityspikes.whaleborne.Config.hullbackDespawnTimeTicks * com.fruityspikes.whaleborne.Config.hullbackDespawnTimeMultiplier;
+                if (ticksSinceSpawn >= maxTicks) {
+                    this.discard();
+                    return;
+                }
+            }
+        }
+
         if (this.level().isClientSide && this.getStationaryTicks() > 0) {
              this.setDeltaMovement(Vec3.ZERO);
         }

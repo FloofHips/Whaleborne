@@ -43,6 +43,7 @@ public class Whaleborne
         WBSoundRegistry.SOUND_EVENTS.register(modEventBus);
         WBLootModifierRegistry.LOOT_MODIFIER_SERIALIZERS.register(modEventBus);
         WBParticleRegistry.PARTICLE_TYPES.register(modEventBus);
+        WBBiomeModifierRegistry.register(modEventBus);
         WBCreativeTabsRegistry.CREATIVE_MODE_TABS.register(modEventBus);
 
         NeoForge.EVENT_BUS.register(this);
@@ -51,6 +52,7 @@ public class Whaleborne
         modEventBus.addListener(this::addCreative);
         modEventBus.addListener(this::registerSpawnPlacements);
         modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
+        modContainer.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
     }
     private void commonSetup(final FMLCommonSetupEvent event) {
     }

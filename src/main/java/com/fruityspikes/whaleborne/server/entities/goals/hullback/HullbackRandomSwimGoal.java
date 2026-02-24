@@ -35,7 +35,7 @@ public class HullbackRandomSwimGoal extends RandomSwimmingGoal {
         }
 
         if (!this.forceTrigger) {
-            if (this.mob.getNoActionTime() >= 100) {
+            if (this.mob.getNoActionTime() >= 200) {
                 return false;
             }
             if (this.mob.getRandom().nextInt(60) != 0) {
