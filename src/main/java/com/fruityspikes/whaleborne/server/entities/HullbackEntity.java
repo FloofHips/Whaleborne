@@ -180,6 +180,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     public float AttributeSpeedModifier = 1;
+
+    public int ticksSinceSpawn = 0;
+
     public BlockState[][] headDirt; // 8 x 5
     public BlockState[][] headTopDirt; // 8 x 5
     public BlockState[][] bodyDirt; // 5 x 5
@@ -439,6 +442,20 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
     }
 
+    @Override
+    public void checkDespawn() {
+        // Custom checkDespawn: only resets noActionTime when a player is within simulation distance.
+        // Distance-based despawn is fully disabled — lifespan is controlled by our tick() timer.
+        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            int simDistBlocks = serverLevel.getServer().getPlayerList().getSimulationDistance() * 16;
+            double simDistSq = (double) simDistBlocks * simDistBlocks;
+            net.minecraft.world.entity.player.Player nearest = this.level().getNearestPlayer(this, -1.0);
+            if (nearest != null && nearest.distanceToSqr(this) < simDistSq) {
+                this.setNoActionTime(0);
+            }
+        }
+    }
+
     public static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 100.0)
@@ -604,6 +621,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         compound.put("tailDirt", saveDirtArray(tailDirt));
         compound.put("flukeDirt", saveDirtArray(flukeDirt));
+
+        compound.putInt("TicksSinceSpawn", ticksSinceSpawn);
     }
     public void readAdditionalSaveData(CompoundTag compound) {
         super.readAdditionalSaveData(compound);
@@ -653,6 +672,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
         if (compound.contains("FlukeDirt")) {
             flukeDirt = loadDirtArray(compound.getCompound("FlukeDirt"));
+        }
+
+        if (compound.contains("TicksSinceSpawn")) {
+            ticksSinceSpawn = compound.getInt("TicksSinceSpawn");
         }
 
         syncDirtToClients();
@@ -1356,6 +1379,27 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     @Override
     public void tick() {
+        if (!this.level().isClientSide && this.isAlive()) {
+            // Grace zone: pause despawn timer if any player is within the configured radius
+            int graceRadius = com.fruityspikes.whaleborne.Config.hullbackDespawnGraceRadius;
+            boolean inGraceZone = false;
+            if (graceRadius > 0) {
+                double graceDistSq = (double) graceRadius * graceRadius;
+                net.minecraft.world.entity.player.Player nearestPlayer = this.level().getNearestPlayer(this, -1.0);
+                inGraceZone = nearestPlayer != null && nearestPlayer.distanceToSqr(this) < graceDistSq;
+            }
+            if (!inGraceZone) {
+                ticksSinceSpawn++;
+            }
+            if (!this.isPersistenceRequired() && !this.isTamed() && !this.hasCustomName()) {
+                long maxTicks = (long) com.fruityspikes.whaleborne.Config.hullbackDespawnTimeTicks * com.fruityspikes.whaleborne.Config.hullbackDespawnTimeMultiplier;
+                if (ticksSinceSpawn >= maxTicks) {
+                    this.discard();
+                    return;
+                }
+            }
+        }
+
         if (tickCount % 40 == 0 && !this.level().isClientSide) {
             this.entityData.set(DATA_ARMOR, this.inventory.getItem(INV_SLOT_ARMOR));
         }
@@ -2135,7 +2179,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
 
             if (!this.forceTrigger) {
-                if (this.mob.getNoActionTime() >= 100) {
+                if (this.mob.getNoActionTime() >= 200) {
                     return false;
                 }
 

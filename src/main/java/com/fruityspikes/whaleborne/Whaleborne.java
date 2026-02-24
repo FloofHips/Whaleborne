@@ -58,6 +58,7 @@ public class Whaleborne
         WBLootModifierRegistry.LOOT_MODIFIER_SERIALIZERS.register(modEventBus);
         WBParticleRegistry.PARTICLE_TYPES.register(modEventBus);
         WBCreativeTabsRegistry.CREATIVE_MODE_TABS.register(modEventBus);
+        WBBiomeModifierRegistry.BIOME_MODIFIER_SERIALIZERS.register(modEventBus);
         WhaleborneNetwork.init();
 
         MinecraftForge.EVENT_BUS.register(this);
@@ -65,6 +66,7 @@ public class Whaleborne
         PROXY.init();
         modEventBus.addListener(this::addCreative);
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
     }
     private void commonSetup(final FMLCommonSetupEvent event)
     {
