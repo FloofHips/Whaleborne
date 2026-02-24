@@ -2,7 +2,6 @@ package com.fruityspikes.whaleborne.server.world;
 
 import com.fruityspikes.whaleborne.Config;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
@@ -11,6 +10,7 @@ import net.minecraft.world.level.biome.MobSpawnSettings;
 import net.minecraftforge.common.world.BiomeModifier;
 import net.minecraftforge.common.world.ModifiableBiomeInfo;
 
+import com.fruityspikes.whaleborne.server.registries.WBBiomeModifierRegistry;
 import java.util.List;
 
 public record ConfigurableSpawnModifier(HolderSet<Biome> biomes, List<MobSpawnSettings.SpawnerData> spawners) implements BiomeModifier {
@@ -25,7 +25,12 @@ public record ConfigurableSpawnModifier(HolderSet<Biome> biomes, List<MobSpawnSe
     @Override
     public void modify(Holder<Biome> biome, Phase phase, ModifiableBiomeInfo.BiomeInfo.Builder builder) {
         if (phase == Phase.ADD && this.biomes.contains(biome)) {
-            int weight = Config.HULLBACK_SPAWN_WEIGHT.get();
+            int weight;
+            try {
+                weight = Config.HULLBACK_SPAWN_WEIGHT.get();
+            } catch (Exception e) {
+                weight = 1;
+            }
 
             if (weight > 0) {
                 for (MobSpawnSettings.SpawnerData spawner : this.spawners) {
@@ -38,6 +43,6 @@ public record ConfigurableSpawnModifier(HolderSet<Biome> biomes, List<MobSpawnSe
 
     @Override
     public Codec<? extends BiomeModifier> codec() {
-        return CODEC;
+        return WBBiomeModifierRegistry.CONFIGURABLE_SPAWNS.get();
     }
 }
