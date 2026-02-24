@@ -293,7 +293,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     }
 
     private static boolean hasNearbyHullbacks(LevelAccessor level, BlockPos pos) {
-        AABB checkArea = new AABB(pos).inflate(32, 16, 32);
+        AABB checkArea = new AABB(pos).inflate(16, 8, 16);
         return !level.getEntitiesOfClass(
                 HullbackEntity.class,
                 checkArea,

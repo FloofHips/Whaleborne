@@ -22,7 +22,12 @@ public record ConfigurableSpawnModifier(HolderSet<Biome> biomes, List<MobSpawnSe
     @Override
     public void modify(Holder<Biome> biome, Phase phase, ModifiableBiomeInfo.BiomeInfo.Builder builder) {
         if (phase == Phase.ADD && this.biomes.contains(biome)) {
-            int configWeight = Config.hullbackSpawnWeight;
+            int configWeight;
+            try {
+                configWeight = Config.HULLBACK_SPAWN_WEIGHT.getAsInt();
+            } catch (Exception e) {
+                configWeight = 1; // Fallback to default if config not yet loaded
+            }
             if (configWeight > 0) {
                 for (MobSpawnSettings.SpawnerData spawner : this.spawners) {
                     builder.getMobSpawnSettings().addSpawn(
