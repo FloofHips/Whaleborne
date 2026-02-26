@@ -1,0 +1,16 @@
+{
+  "entries": [
+    {
+      "enum": "net/minecraft/world/entity/MobCategory",
+      "name": "WHALEBORNE_HULLBACK",
+      "constructor": "(Ljava/lang/String;IZZI)V",
+      "parameters": [
+        "whaleborne:hullback",
+        1,
+        true,
+        false,
+        256
+      ]
+    }
+  ]
+}

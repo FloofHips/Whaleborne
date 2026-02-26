@@ -98,7 +98,9 @@ public class HullbackSeatManager {
                             if (passengerEntity.isAlive()) {
                                 Vec3 seatPos = seats[seatIndex]; // Current seat position
                                 // Teleport to sync position before mounting to avoid weird interpolation
-                                passengerEntity.teleportTo(seatPos.x, seatPos.y, seatPos.z);
+                                if (seatPos != null) {
+                                    passengerEntity.teleportTo(seatPos.x, seatPos.y, seatPos.z);
+                                }
                                 
                                 // Force re-mount
                                 passengerEntity.startRiding(whale, true);

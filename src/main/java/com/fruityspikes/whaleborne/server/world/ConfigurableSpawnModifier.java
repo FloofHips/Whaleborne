@@ -22,17 +22,18 @@ public record ConfigurableSpawnModifier(HolderSet<Biome> biomes, List<MobSpawnSe
     @Override
     public void modify(Holder<Biome> biome, Phase phase, ModifiableBiomeInfo.BiomeInfo.Builder builder) {
         if (phase == Phase.ADD && this.biomes.contains(biome)) {
-            int configWeight;
+            double spawnChance;
             try {
-                configWeight = Config.HULLBACK_SPAWN_WEIGHT.getAsInt();
+                spawnChance = Config.HULLBACK_SPAWN_CHANCE.getAsDouble();
             } catch (Exception e) {
-                configWeight = 1; // Fallback to default if config not yet loaded
+                spawnChance = 0.001;
             }
-            if (configWeight > 0) {
+
+            if (spawnChance > 0.0) {
                 for (MobSpawnSettings.SpawnerData spawner : this.spawners) {
                     builder.getMobSpawnSettings().addSpawn(
                             spawner.type.getCategory(),
-                            new MobSpawnSettings.SpawnerData(spawner.type, configWeight, spawner.minCount, spawner.maxCount)
+                            new MobSpawnSettings.SpawnerData(spawner.type, 1, spawner.minCount, spawner.maxCount)
                     );
                 }
             }

@@ -20,7 +20,7 @@ public class WBEntityRegistry {
     public static final DeferredRegister<EntityType<?>> ENTITY_TYPES = DeferredRegister.create(Registries.ENTITY_TYPE, Whaleborne.MODID);
     public static final DeferredHolder<EntityType<?>, EntityType<HullbackEntity>> HULLBACK = ENTITY_TYPES.register(
             "hullback", () ->
-                    EntityType.Builder.of(HullbackEntity::new, WBMobCategories.HULLBACK)
+                    EntityType.Builder.of(HullbackEntity::new, WBMobCategories.getHullbackCategory())
                             .sized(2F, 2F)
                             .eyeHeight(2.0f)  // Eye position above deck level
                             .attach(EntityAttachment.NAME_TAG, 0.0f, 7.0F, 0.0f)  // Name tag just above hitbox

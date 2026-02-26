@@ -9,7 +9,8 @@
         "HealthBarsCompatMixin",
         "HealthBarsVisibilityMixin",
         "HealthBarsGuiMixin",
-        "HealthBarsPickMixin"
+        "HealthBarsPickMixin",
+        "MobCategoryMixin"
     ],
   "injectors": {
     "defaultRequire": 1

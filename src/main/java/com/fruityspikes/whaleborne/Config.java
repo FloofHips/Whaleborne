@@ -13,12 +13,16 @@ public class Config {
     private static final ModConfigSpec.Builder CLIENT_BUILDER = new ModConfigSpec.Builder();
     private static final ModConfigSpec.Builder SERVER_BUILDER = new ModConfigSpec.Builder();
 
-    public static final ModConfigSpec.IntValue HULLBACK_SPAWN_WEIGHT = SERVER_BUILDER
-            .comment("Chance/Weight of a Hullback spawning.",
-                     "Weight determines how often the Hullback will be chosen from the list of creatures that can spawn in the ocean.",
-                     "Higher value = more common. Vanilla Squid weight is 10, Vanilla Dolphin weight is 2. The Hullback is extremely rare by default.",
-                     "Setting this to 0 will disable Hullback natural spawning entirely.")
-            .defineInRange("hullbackSpawnWeight", 1, 0, 100);
+    public static final ModConfigSpec.DoubleValue HULLBACK_SPAWN_CHANCE = SERVER_BUILDER
+            .comment("Probability of a Hullback spawn attempt succeeding (0.0 to 1.0).",
+                     "0.001 = 0.1% chance per spawn attempt. 0.0 disables natural spawning entirely.",
+                     "The Hullback uses its own spawn category and does not compete with other ocean mobs.")
+            .defineInRange("hullbackSpawnChance", 0.001, 0.0, 1.0);
+
+    public static final ModConfigSpec.IntValue HULLBACK_SPAWN_CAP = SERVER_BUILDER
+            .comment("Maximum number of wild Hullbacks allowed in the nearby area.",
+                     "Once this cap is reached, no more will spawn until existing ones despawn or are tamed.")
+            .defineInRange("hullbackSpawnCap", 1, 0, 10);
 
     public static final ModConfigSpec.IntValue HULLBACK_DESPAWN_TIME_TICKS = SERVER_BUILDER
             .comment("Base time in ticks before a wild hullback despawns.")
@@ -65,7 +69,8 @@ public class Config {
     static final ModConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
     static final ModConfigSpec SERVER_SPEC = SERVER_BUILDER.build();
 
-    public static int hullbackSpawnWeight;
+    public static double hullbackSpawnChance;
+    public static int hullbackSpawnCap;
     public static int hullbackDespawnTimeTicks;
     public static int hullbackDespawnTimeMultiplier;
     public static int hullbackDespawnGraceRadius;
@@ -88,7 +93,8 @@ public class Config {
         }
         
         if (event.getConfig().getSpec() == SERVER_SPEC) {
-            hullbackSpawnWeight = HULLBACK_SPAWN_WEIGHT.get();
+            hullbackSpawnChance = HULLBACK_SPAWN_CHANCE.get();
+            hullbackSpawnCap = HULLBACK_SPAWN_CAP.get();
             hullbackDespawnTimeTicks = HULLBACK_DESPAWN_TIME_TICKS.get();
             hullbackDespawnTimeMultiplier = HULLBACK_DESPAWN_TIME_MULTIPLIER.get();
             hullbackDespawnGraceRadius = HULLBACK_DESPAWN_GRACE_RADIUS.get();
