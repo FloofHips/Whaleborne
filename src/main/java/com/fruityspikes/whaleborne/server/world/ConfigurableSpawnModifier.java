@@ -25,17 +25,17 @@ public record ConfigurableSpawnModifier(HolderSet<Biome> biomes, List<MobSpawnSe
     @Override
     public void modify(Holder<Biome> biome, Phase phase, ModifiableBiomeInfo.BiomeInfo.Builder builder) {
         if (phase == Phase.ADD && this.biomes.contains(biome)) {
-            int weight;
+            double spawnChance;
             try {
-                weight = Config.HULLBACK_SPAWN_WEIGHT.get();
+                spawnChance = Config.HULLBACK_SPAWN_CHANCE.get();
             } catch (Exception e) {
-                weight = 1;
+                spawnChance = 0.001;
             }
 
-            if (weight > 0) {
+            if (spawnChance > 0.0) {
                 for (MobSpawnSettings.SpawnerData spawner : this.spawners) {
                     builder.getMobSpawnSettings().addSpawn(spawner.type.getCategory(),
-                            new MobSpawnSettings.SpawnerData(spawner.type, weight, spawner.minCount, spawner.maxCount));
+                            new MobSpawnSettings.SpawnerData(spawner.type, 1, spawner.minCount, spawner.maxCount));
                 }
             }
         }

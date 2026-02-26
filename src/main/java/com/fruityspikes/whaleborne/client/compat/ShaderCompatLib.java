@@ -16,8 +16,18 @@ public class ShaderCompatLib {
     public static boolean isShaderModLoaded() {
         if (cachedResult == null) {
             boolean oculus = ModList.get().isLoaded("oculus");
-            cachedResult = oculus;
-            Whaleborne.LOGGER.info("Shader mod detection: Oculus={}, using safe render path={}", oculus, cachedResult);
+            boolean optifine = ModList.get().isLoaded("optifine");
+            
+            if (!optifine) {
+                try {
+                    Class.forName("net.optifine.Config");
+                    optifine = true;
+                } catch (ClassNotFoundException ignored) {
+                }
+            }
+            
+            cachedResult = oculus || optifine;
+            Whaleborne.LOGGER.info("Shader mod detection: Oculus={}, Optifine={}, using safe render path={}", oculus, optifine, cachedResult);
         }
         return cachedResult;
     }

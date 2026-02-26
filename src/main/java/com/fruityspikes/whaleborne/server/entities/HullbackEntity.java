@@ -81,6 +81,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private static final UUID SAIL_SPEED_MODIFIER_UUID = UUID.fromString("12345678-1234-1234-1234-1234567890ab");
     private static final double PARTICLE_SPEED_THRESHOLD_SQR = 0.01;
     private static final int[] SIDES = {-1, 1};
+    private boolean isFreshSpawn = true;
     private boolean validatedAfterLoad = false;
     private float leftEyeYaw, rightEyeYaw, eyePitch;
     private LazyOptional<IItemHandler> itemHandler = LazyOptional.empty();
@@ -217,6 +218,46 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.lookControl = new SmoothSwimmingLookControl(this, 1) {
             @Override
             public void tick() {
+                // --- POST-SPAWN VALIDATION (LOGIN DESYNC FIX AND MULTIPLAYER-SAFE) ---
+                // Only fresh spawned entities will do this check, and only once (at tick 40).
+                if (!HullbackEntity.this.level().isClientSide && HullbackEntity.this.isFreshSpawn && HullbackEntity.this.tickCount == 40) {
+                    int spawnCap;
+                    try {
+                        spawnCap = Config.HULLBACK_SPAWN_CAP.get();
+                    } catch (Exception e) {
+                        spawnCap = 1;
+                    }
+
+                    AABB checkArea = HullbackEntity.this.getBoundingBox().inflate(128, 64, 128);
+                    List<HullbackEntity> nearbyHullbacks = HullbackEntity.this.level().getEntitiesOfClass(
+                            HullbackEntity.class,
+                            checkArea,
+                            e -> e.isAlive() && !e.isTamed()
+                    );
+
+                    int higherPriorityCount = 0;
+
+                    for (HullbackEntity other : nearbyHullbacks) {
+                        if (other == HullbackEntity.this) continue;
+
+                        // Old entities (read from disk) always bear absolute priority over fresh ones.
+                        if (!other.isFreshSpawn) {
+                            higherPriorityCount++;
+                        } 
+                        // If the other entity is also new (competing), we use the UUID to decide who stays.
+                        // compareTo < 0 ensures that only one counts the other, creating a mathematically perfect queue.
+                        else if (other.getUUID().compareTo(HullbackEntity.this.getUUID()) < 0) {
+                            higherPriorityCount++;
+                        }
+                    }
+
+                    // If the number of Hullbacks with higher priority already fills the cap, this entity deletes itself.
+                    if (higherPriorityCount >= spawnCap) {
+                        HullbackEntity.this.discard();
+                        return;
+                    }
+                }
+
                 if (HullbackEntity.this.stationaryTicks > 0) return;
                 super.tick();
             }
@@ -266,11 +307,27 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             return false;
         }
 
-        if (hasNearbyHullbacks(level, pos)) {
+        if (hasReachedSpawnCap(level, pos)) {
+            return false;
+        }
+
+        double spawnChance;
+        try {
+            spawnChance = Config.HULLBACK_SPAWN_CHANCE.get();
+        } catch (Exception e) {
+            spawnChance = 0.001;
+        }
+
+        if (random.nextDouble() >= spawnChance) {
             return false;
         }
 
         return true;
+    }
+
+    @Override
+    public int getMaxSpawnClusterSize() {
+        return 1;
     }
 
     private static boolean hasSpawnSpace(LevelAccessor level, BlockPos pos) {
@@ -301,13 +358,37 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return true;
     }
 
-    private static boolean hasNearbyHullbacks(LevelAccessor level, BlockPos pos) {
-        AABB checkArea = new AABB(pos).inflate(16, 8, 16);
-        return !level.getEntitiesOfClass(
+    private static boolean hasReachedSpawnCap(LevelAccessor level, BlockPos pos) {
+        int spawnCap;
+        try {
+            spawnCap = Config.HULLBACK_SPAWN_CAP.get();
+        } catch (Exception e) {
+            spawnCap = 1;
+        }
+
+        // We define the search radius. 64 is a good balance between performance and safety.
+        int radius = 64; 
+        
+        BlockPos minPos = pos.offset(-radius, -32, -radius);
+        BlockPos maxPos = pos.offset(radius, 32, radius);
+
+        // SMART LOAD CHECK:
+        // If not all chunks containing our bounding box are loaded, the 'getEntitiesOfClass' method
+        // would be inaccurate. Because of this, we abort the spawning attempt returning 'true' (cap reached).
+        if (!level.hasChunksAt(minPos, maxPos)) {
+            return true; 
+        }
+
+        // Now that we know that the area is safe and 100% visible to the code, we proceed counting.
+        AABB checkArea = new AABB(minPos.getX(), minPos.getY(), minPos.getZ(), maxPos.getX(), maxPos.getY(), maxPos.getZ());
+        
+        int nearbyCount = level.getEntitiesOfClass(
                 HullbackEntity.class,
                 checkArea,
                 e -> e.isAlive() && !e.isTamed()
-        ).isEmpty();
+        ).size();
+
+        return nearbyCount >= spawnCap;
     }
 
     @Override
@@ -625,7 +706,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         compound.putInt("TicksSinceSpawn", ticksSinceSpawn);
     }
     public void readAdditionalSaveData(CompoundTag compound) {
-        super.readAdditionalSaveData(compound);
+    super.readAdditionalSaveData(compound);
+    this.isFreshSpawn = false;
         ListTag items = compound.getList("Items", 10);
 
         for(int i = 0; i < items.size(); i++) {
@@ -1822,7 +1904,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                             if (passengerEntity.isAlive()) {
                                 Vec3 seatPos = seats[seatIndex]; // Current seat position
                                 // Teleport to sync position before mounting to avoid weird interpolation
-                                passengerEntity.teleportTo(seatPos.x, seatPos.y, seatPos.z);
+                                if (seatPos != null) {
+                                    passengerEntity.teleportTo(seatPos.x, seatPos.y, seatPos.z);
+                                }
 
                                 // Force re-mount
                                 passengerEntity.startRiding(this, true);
