@@ -345,6 +345,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 for (int z = (int)spawnCheckArea.minZ; z <= spawnCheckArea.maxZ; z++) {
                     mutablePos.set(x, y, z);
                     BlockState state = level.getBlockState(mutablePos);
+                    if (state.isAir() || !state.getFluidState().isEmpty()) continue;
+                    
                     if (state.isSolid() && state.getCollisionShape(level, mutablePos) != Shapes.empty()) {
                          solidCount++;
                          if (solidCount > maxSolidAllowed) {

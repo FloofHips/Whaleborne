@@ -110,6 +110,8 @@ public class Whaleborne
             event.registerAboveAll("whaleborne_anchor_overlay", (gui, poseStack, partialTick, width, height) -> {
                 Player player = Minecraft.getInstance().player;
 
+                if (player == null) return;
+
                 if (player.getVehicle() instanceof HelmEntity) {
                     if (player.getRootVehicle() instanceof HullbackEntity hullback) {
                         for (Entity passenger : hullback.getPassengers()) {
