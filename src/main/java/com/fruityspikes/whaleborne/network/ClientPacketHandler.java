@@ -7,6 +7,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public class ClientPacketHandler {
     public static void handleDirtSync(SyncHullbackDirtPayload payload) {
+        if (Minecraft.getInstance().level == null) return;
         Entity entity = Minecraft.getInstance().level.getEntity(payload.entityId());
         if (entity instanceof HullbackEntity hullback) {
             BlockState[][] dirtArray = SyncHullbackDirtPayload.deserializeDirtArray(payload.dirtData());

@@ -84,9 +84,7 @@ public class SailEntity extends WhaleWidgetEntity{
         ItemStack banner = getBanner();
 
         if (!banner.isEmpty()) {
-            CompoundTag tag = new CompoundTag();
-            banner.save(this.registryAccess(), tag);
-            compound.put("Banner", tag);
+            compound.put("Banner", banner.save(this.registryAccess()));
         }
     }
 

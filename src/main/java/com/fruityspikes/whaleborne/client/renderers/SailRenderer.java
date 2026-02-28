@@ -22,9 +22,12 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.item.BannerItem;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BannerPatternLayers;
 import net.minecraft.world.level.block.entity.BannerPattern;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<SailEntity> {
@@ -71,9 +74,12 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
         SailEntity sail = (SailEntity) entity;
         ItemStack item = sail.getBanner();
         
-        List<Pair<Holder<BannerPattern>, DyeColor>> list = List.of(); 
+        List<Pair<Holder<BannerPattern>, DyeColor>> list = new ArrayList<>();
         if (!item.isEmpty() && item.getItem() instanceof BannerItem) {
-             // Placeholder logic
+            BannerPatternLayers layers = item.getOrDefault(DataComponents.BANNER_PATTERNS, BannerPatternLayers.EMPTY);
+            for (BannerPatternLayers.Layer layer : layers.layers()) {
+                list.add(new Pair<>(layer.pattern(), layer.color()));
+            }
         }
 
         poseStack.popPose();
@@ -132,7 +138,6 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
             renderSailSegment(poseStack, multiBufferSource.getBuffer(RenderType.entityCutoutNoCull(TARP_TEXTURE)), edge4, edge5, width, packedLight, overlay, baseRed, baseGreen, baseBlue, alpha);
 
             for(int i = 0; i < 17 && i < patterns.size(); ++i) {
-                if (i==0) continue;
                 Pair<Holder<BannerPattern>, DyeColor> pair = patterns.get(i);
                 int patternColorInt = pair.getSecond().getTextureDiffuseColor();
                 float patternRed = ((patternColorInt >> 16) & 0xFF) / 255.0F;

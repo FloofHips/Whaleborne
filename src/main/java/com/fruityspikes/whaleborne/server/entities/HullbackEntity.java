@@ -297,6 +297,8 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
                 for (int z = (int)spawnCheckArea.minZ; z <= spawnCheckArea.maxZ; z++) {
                     mutablePos.set(x, y, z);
                     BlockState state = level.getBlockState(mutablePos);
+                    if (state.isAir() || !state.getFluidState().isEmpty()) continue;
+
                     if (state.isSolid() && state.getCollisionShape(level, mutablePos) != Shapes.empty()) {
                         solidCount++;
                         if (solidCount > maxSolidAllowed) {
