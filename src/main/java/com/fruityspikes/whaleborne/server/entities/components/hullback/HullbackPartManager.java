@@ -11,6 +11,16 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
 import java.util.Arrays;
 
+/**
+ * Manages the multipart body segments and walkable platform entities for the Hullback.
+ *
+ * Positions all sub-entities (nose, head, body, tail, fluke) relative to the whale,
+ * computes per-part yaw/pitch rotations for smooth body articulation, calculates
+ * seat anchor points for riding entities, and handles spawning/discarding of
+ * walkable platform entities when stationary.
+ *
+ * Updated every tick via manageMultipartPhysics() in HullbackEntity.tick().
+ */
 public class HullbackPartManager {
     private final HullbackEntity hullback;
     public final HullbackPartEntity[] subEntities;

@@ -16,6 +16,17 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
+/**
+ * Manages movement and rotation controls for the Hullback entity.
+ *
+ * Processes player steering input, client-side control state prediction,
+ * and vector control toggling (mouse vs keyboard steering).
+ *
+ * Also contains inner classes for stationary-aware move/look/body rotation
+ * controls that prevent AI from rotating the whale when anchored or stationary.
+ *
+ * Called during tick() from HullbackEntity.
+ */
 public class HullbackControlManager {
     private final HullbackEntity whale;
     

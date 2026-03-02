@@ -24,6 +24,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Manages the vegetation and debris ("dirt") growing on the Hullback's body.
+ *
+ * Initializes dirt arrays (top and bottom) for each body part on spawn,
+ * grows/places/removes dirt entries via randomTick(), clears top dirt when
+ * tamed (clean top = taming condition), serializes dirt state in NBT, and
+ * syncs dirt state to clients via syncDirtToClients().
+ *
+ * Ticked every game tick from handleDirtTicks() in HullbackEntity.tick().
+ * Each randomTick() call has its own independent random gate (6/30000 chance).
+ */
 public class HullbackDirt {
     private final HullbackEntity whale;
     

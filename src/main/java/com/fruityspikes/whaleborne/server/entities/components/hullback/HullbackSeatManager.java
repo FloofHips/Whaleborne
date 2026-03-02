@@ -16,6 +16,16 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Manages the 7 seat slots on the Hullback entity.
+ *
+ * Assigns/unassigns passengers and equipment to specific seat indices,
+ * validates seat assignments against actual passengers, looks up seats
+ * by entity, and rotates seated passengers to follow the whale's body.
+ *
+ * Seat data is stored via EntityDataAccessor for client-server synchronization.
+ * Validated periodically from HullbackEntity.tick().
+ */
 public class HullbackSeatManager {
     private final HullbackEntity whale;
     private final EntityDataAccessor<Optional<UUID>>[] seatAccessors;

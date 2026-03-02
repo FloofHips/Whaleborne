@@ -137,6 +137,8 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
             renderSailSegment(poseStack, multiBufferSource.getBuffer(RenderType.entityCutoutNoCull(TARP_TEXTURE)), edge3, edge4, width, packedLight, overlay, baseRed, baseGreen, baseBlue, alpha);
             renderSailSegment(poseStack, multiBufferSource.getBuffer(RenderType.entityCutoutNoCull(TARP_TEXTURE)), edge4, edge5, width, packedLight, overlay, baseRed, baseGreen, baseBlue, alpha);
 
+            // In 1.21.1, BANNER_PATTERNS does not include the base color at index 0
+            // (unlike 1.20.1's createPatterns()), so no skip needed here.
             for(int i = 0; i < 17 && i < patterns.size(); ++i) {
                 Pair<Holder<BannerPattern>, DyeColor> pair = patterns.get(i);
                 int patternColorInt = pair.getSecond().getTextureDiffuseColor();
@@ -191,9 +193,11 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
         addVertex(vertexConsumer, matrix, x1, bottomY, bottomZ, u1, v1, red, green, blue, alpha, (int)(packedLight * bottomLight), overlay, nx, 0f, -nz);
     }
 
+    // Uses the same addVertex helper as renderSailSegment for vertex precision consistency.
+    // Small Z-offset prevents Z-fighting between banner pattern and base sail quads.
     private void renderBannerSailSegment(PoseStack poseStack, VertexConsumer vertexConsumer, Vec3 topEdge, Vec3 bottomEdge, float width, int packedLight, int overlay, float red, float green, float blue, float alpha) {
         org.joml.Matrix4f matrix = poseStack.last().pose();
-        
+
         float x0 = (-width / 2f);
         float x1 = (width / 2f);
         float topY = ((float) topEdge.y * 3.55f);
@@ -201,34 +205,32 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
         float bottomY = ((float) bottomEdge.y * 3.55f);
         float bottomZ = ((float) bottomEdge.z);
 
-        // Calculate which segment we're rendering based on Y position
-        float segmentHeight = 0.25f; // Each segment is 0.25 of total height
-        float segmentIndex = (float) (topEdge.y / segmentHeight); // 0, 1, 2, or 3
+        float segmentHeight = 0.25f;
+        float segmentIndex = (float) (topEdge.y / segmentHeight);
 
-        // Map each segment to a portion of the banner texture
         float u0 = 0.0f;
         float u1 = 0.333f;
 
-        // Each segment gets 1/4 of the texture height (0.25)
         float v0 = (segmentIndex * 0.25f) * 0.666f;
-        float v1 = (segmentIndex + 0.99f) * 0.25f * 0.666f;
-
-        float minLight = 0.9f;
-        float topLight = (minLight + (1f - minLight) * v0);
-        float bottomLight = (minLight + (1f - minLight) * v1);
+        float v1 = (segmentIndex + 1) * 0.25f * 0.666f;
 
         float nx = 0f;
         float nz = -1f;
 
-        addVertex(vertexConsumer, matrix, x0, topY, topZ, u0, v0, red, green, blue, alpha, packedLight, overlay, nx, 0f, nz);
-        addVertex(vertexConsumer, matrix, x1, topY, topZ, u1, v0, red, green, blue, alpha, packedLight, overlay, nx, 0f, nz);
-        addVertex(vertexConsumer, matrix, x1, bottomY, bottomZ, u1, v1, red, green, blue, alpha, packedLight, overlay, nx, 0f, nz);
-        addVertex(vertexConsumer, matrix, x0, bottomY, bottomZ, u0, v1, red, green, blue, alpha, packedLight, overlay, nx, 0f, nz);
+        // Z-offset to push pattern slightly in front/behind the base sail
+        float zOff = 0.001f;
 
-        addVertex(vertexConsumer, matrix, x1, topY, topZ, u1, v0, red, green, blue, alpha, packedLight, overlay, nx, 0f, -nz);
-        addVertex(vertexConsumer, matrix, x0, topY, topZ, u0, v0, red, green, blue, alpha, packedLight, overlay, nx, 0f, -nz);
-        addVertex(vertexConsumer, matrix, x0, bottomY, bottomZ, u0, v1, red, green, blue, alpha, packedLight, overlay, nx, 0f, -nz);
-        addVertex(vertexConsumer, matrix, x1, bottomY, bottomZ, u1, v1, red, green, blue, alpha, packedLight, overlay, nx, 0f, -nz);
+        // Front face (offset forward)
+        addVertex(vertexConsumer, matrix, x0, topY, topZ + zOff, u0, v0, red, green, blue, alpha, packedLight, overlay, nx, 0f, nz);
+        addVertex(vertexConsumer, matrix, x1, topY, topZ + zOff, u1, v0, red, green, blue, alpha, packedLight, overlay, nx, 0f, nz);
+        addVertex(vertexConsumer, matrix, x1, bottomY, bottomZ + zOff, u1, v1, red, green, blue, alpha, packedLight, overlay, nx, 0f, nz);
+        addVertex(vertexConsumer, matrix, x0, bottomY, bottomZ + zOff, u0, v1, red, green, blue, alpha, packedLight, overlay, nx, 0f, nz);
+
+        // Back face (offset backward)
+        addVertex(vertexConsumer, matrix, x1, topY, topZ - zOff, u1, v0, red, green, blue, alpha, packedLight, overlay, nx, 0f, -nz);
+        addVertex(vertexConsumer, matrix, x0, topY, topZ - zOff, u0, v0, red, green, blue, alpha, packedLight, overlay, nx, 0f, -nz);
+        addVertex(vertexConsumer, matrix, x0, bottomY, bottomZ - zOff, u0, v1, red, green, blue, alpha, packedLight, overlay, nx, 0f, -nz);
+        addVertex(vertexConsumer, matrix, x1, bottomY, bottomZ - zOff, u1, v1, red, green, blue, alpha, packedLight, overlay, nx, 0f, -nz);
     }
     
     private void addVertex(VertexConsumer builder, org.joml.Matrix4f matrix, float x, float y, float z, float u, float v, float r, float g, float b, float a, int light, int overlay, float nx, float ny, float nz) {

@@ -37,6 +37,21 @@ public class Config {
                      "Setting this to 0 disables the grace zone entirely.")
             .defineInRange("hullbackDespawnGraceRadius", 16, 0, 256);
 
+    public static final ModConfigSpec.DoubleValue HULLBACK_DEPTH_SAILING = SERVER_BUILDER
+            .comment("Target Y offset from sea level when a player is actively sailing at the helm.",
+                     "Negative values submerge the whale. -4.55 aligns the deck nicely with the waterline.")
+            .defineInRange("hullbackDepthSailing", -4.55, -20.0, 0.0);
+
+    public static final ModConfigSpec.DoubleValue HULLBACK_DEPTH_BOARDING = SERVER_BUILDER
+            .comment("Target Y offset from sea level when the Hullback is tamed, anchored or stationary.",
+                     "-5.0 provides a stable boarding height for players.")
+            .defineInRange("hullbackDepthBoarding", -5.0, -20.0, 0.0);
+
+    public static final ModConfigSpec.DoubleValue HULLBACK_DEPTH_WILD = SERVER_BUILDER
+            .comment("Target Y offset from sea level for wild/active Hullbacks.",
+                     "-6.5 keeps wild whales slightly deeper.")
+            .defineInRange("hullbackDepthWild", -6.5, -20.0, 0.0);
+
     public static final ModConfigSpec.BooleanValue ARMOR_PROGRESS = CLIENT_BUILDER
             .comment("Shows hullback building and damage progress. Turning this off solve incompatibility issues with shaders but will sacrifice some visual flair")
             .define("hullbackArmorProgress", true);
@@ -74,6 +89,9 @@ public class Config {
     public static int hullbackDespawnTimeTicks;
     public static int hullbackDespawnTimeMultiplier;
     public static int hullbackDespawnGraceRadius;
+    public static double hullbackDepthSailing;
+    public static double hullbackDepthBoarding;
+    public static double hullbackDepthWild;
 
     public static boolean armorProgress;
     public static double soundDistance;
@@ -98,6 +116,9 @@ public class Config {
             hullbackDespawnTimeTicks = HULLBACK_DESPAWN_TIME_TICKS.get();
             hullbackDespawnTimeMultiplier = HULLBACK_DESPAWN_TIME_MULTIPLIER.get();
             hullbackDespawnGraceRadius = HULLBACK_DESPAWN_GRACE_RADIUS.get();
+            hullbackDepthSailing = HULLBACK_DEPTH_SAILING.get();
+            hullbackDepthBoarding = HULLBACK_DEPTH_BOARDING.get();
+            hullbackDepthWild = HULLBACK_DEPTH_WILD.get();
         }
     }
 }

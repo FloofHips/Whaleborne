@@ -80,15 +80,27 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     // DIRT_TICK_CHANCE / DIRT_TICK_DENOMINATOR removed — random gate now lives
     // inside HullbackDirt.randomTick(), matching the original 1.20.1 structure.
     private static final int POST_LOAD_VALIDATION_DELAY_TICKS = 5;
-    private static final int STATIONARY_TICKS_PLAYER_ABOVE = 60; // Increased from 40
-    private static final int STATIONARY_TICKS_DISMOUNT = 200; // Increased from 120
+    private static final int STATIONARY_TICKS_PLAYER_ABOVE = 60;
+    private static final int STATIONARY_TICKS_DISMOUNT = 200;
     private static final int STATIONARY_TICKS_INITIAL = 60;
-    private static final int STATIONARY_MINIMUM_THRESHOLD = 30; // Minimum time before state changes
-    private static final int PLAYER_ABOVE_COOLDOWN_TICKS = 20; // Cooldown between detections
+    private static final int STATIONARY_MINIMUM_THRESHOLD = 30;
+    private static final int PLAYER_ABOVE_COOLDOWN_TICKS = 20;
     private static final int DIRT_INITIAL_SYNC_TICK = 10;
     private static final int EARLY_TICK_THRESHOLD = 20;
     private static final double SPEED_THRESHOLD_MOUTH_OPEN_SQR = SPEED_THRESHOLD_MOUTH_OPEN * SPEED_THRESHOLD_MOUTH_OPEN;
     private static final double PARTICLE_SPEED_THRESHOLD_SQR = 0.03 * 0.03;
+
+    // ─── Buoyancy / Depth Constants (see Config for runtime values) ───
+    private static final double BUOYANCY_DEADZONE = 0.05;
+    private static final double BUOYANCY_FORCE_FACTOR = 0.2;
+    private static final double BUOYANCY_FORCE_MAX = 0.1;
+    private static final double WILD_BUOYANCY_UP_FACTOR = 0.02;
+    private static final double WILD_BUOYANCY_UP_MAX = 0.03;
+    private static final double WILD_SINK_FORCE = -0.05;
+    private static final float MAX_RIDING_PITCH = 25f;
+    private static final double LAND_FRICTION = 0.3;
+    private static final double ICE_FRICTION = 0.05;
+    private static final double LAND_SPEED_SCALE = 0.1;
     private static final int[] SIDES = {-1, 1};
 
     // ─── Static fields ───────────────────────────────────────────
@@ -125,7 +137,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
     // ─── Component Managers ──────────────────────────────────────
     public final HullbackPartManager partManager;
-    public final HullbackDirt HullbackDirt;
+    public final HullbackDirt hullbackDirt;
     public final HullbackSeatManager hullbackSeatManager;
     public final HullbackAIManager aiManager;
     public final HullbackEquipmentManager equipmentManager;
@@ -165,7 +177,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     }
 
     public HullbackDirt getWhaleDirt() {
-        return this.HullbackDirt;
+        return this.hullbackDirt;
     }
 
     public boolean isPitchLocked() {
@@ -219,8 +231,8 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         this.partManager = new HullbackPartManager(this, this.subEntities);
         this.partManager.init();
 
-        this.HullbackDirt = new HullbackDirt(this);
-        this.HullbackDirt.init();
+        this.hullbackDirt = new HullbackDirt(this);
+        this.hullbackDirt.init();
 
         this.hullbackSeatManager = new HullbackSeatManager(this, 
             DATA_SEAT_0, DATA_SEAT_1, DATA_SEAT_2, DATA_SEAT_3, 
@@ -442,8 +454,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         compound.put("Items", listtag);
 
 
-        CompoundTag hasMobiusSpawned = new CompoundTag();
-        hasMobiusSpawned.putBoolean("HasMobiusSpawned", HAS_MOBIUS_SPAWNED);
+        compound.putBoolean("HasMobiusSpawned", HAS_MOBIUS_SPAWNED);
         compound.putInt("TicksSinceSpawn", ticksSinceSpawn);
 
         for (int i = 0; i < 7; i++) {
@@ -454,7 +465,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
                 compound.putUUID(seatKey, occupant.get());
             }
         }
-        this.HullbackDirt.addAdditionalSaveData(compound);
+        this.hullbackDirt.addAdditionalSaveData(compound);
     }
     public void readAdditionalSaveData(CompoundTag compound) {
     super.readAdditionalSaveData(compound);
@@ -483,7 +494,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
             }
         }
 
-        this.HullbackDirt.readAdditionalSaveData(compound);
+        this.hullbackDirt.readAdditionalSaveData(compound);
         this.updateContainerEquipment();
     }
 
@@ -806,7 +817,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         }
 
         if (!this.level().isClientSide && this.tickCount == 20) {
-            this.getWhaleDirt().syncDirtToClients();
+            this.hullbackDirt.syncDirtToClients();
         }
 
         // 1. Capture rotation snapshot BEFORE AI and movement processing
@@ -877,7 +888,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         }
 
         if (this.tickCount == DIRT_INITIAL_SYNC_TICK) {
-            HullbackDirt.syncDirtToClients();
+            hullbackDirt.syncDirtToClients();
         }
     }
 
@@ -926,7 +937,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
             this.setFlag(4, !saddle.isEmpty());
 
             sendHurtSyncPacket();
-            HullbackDirt.syncDirtToClients();
+            hullbackDirt.syncDirtToClients();
         }
     }
 
@@ -1087,17 +1098,17 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private void handleDirtTicks() {
         if (!level().isClientSide) {
             // Bottom dirt always ticks (each call rolls independently inside randomTick)
-            this.HullbackDirt.randomTick(this.head.name, true);
-            this.HullbackDirt.randomTick(this.body.name, true);
-            this.HullbackDirt.randomTick(this.tail.name, true);
-            this.HullbackDirt.randomTick(this.fluke.name, true);
+            this.hullbackDirt.randomTick(this.head.name, true);
+            this.hullbackDirt.randomTick(this.body.name, true);
+            this.hullbackDirt.randomTick(this.tail.name, true);
+            this.hullbackDirt.randomTick(this.fluke.name, true);
 
             // Top dirt ticks only if NOT tamed
             if (!isTamed()) {
-                this.HullbackDirt.randomTick(this.head.name, false);
-                this.HullbackDirt.randomTick(this.body.name, false);
+                this.hullbackDirt.randomTick(this.head.name, false);
+                this.hullbackDirt.randomTick(this.body.name, false);
             } else {
-                HullbackDirt.clearTopDirt();
+                hullbackDirt.clearTopDirt();
             }
         }
     }
@@ -1337,7 +1348,6 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     @Override
     protected void removePassenger(Entity passenger) {
         if(passenger instanceof Player)
-        if(passenger instanceof Player)
             stationaryTicks = STATIONARY_TICKS_DISMOUNT;
         if(passenger.isRemoved())
             for (int i = 0; i < 7; i++) {
@@ -1409,14 +1419,14 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
             travelVector = new Vec3(0, 0, 0);
         }
 
-        // AGGRESSIVE LAND SPEED REDUCTION: Scale input vector before vanilla physics
+        // Aggressive land speed reduction: scale input vector before vanilla physics
         if (!this.isHullbackInWater()) {
-            travelVector = travelVector.multiply(0.1, 1.0, 0.1);
+            travelVector = travelVector.multiply(LAND_SPEED_SCALE, 1.0, LAND_SPEED_SCALE);
         }
 
-        // Logic: Target specific depth (-5.0 from sea level)
-        // This must run even when RIDDEN and regardless of EffectiveAI to maintain buoyancy.
-        boolean isBreachingAction = this.isBreaching; // Assume this flag is managed elsewhere
+        // Buoyancy: target specific depth from sea level.
+        // Must run even when ridden and regardless of EffectiveAI.
+        boolean isBreachingAction = this.isBreaching;
         
         // Robust submerged checks
         boolean noseSubmerged = this.getPartManager() != null && 
@@ -1424,57 +1434,32 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
                                this.getPartManager().subEntities.length > 0 && 
                                this.getPartManager().subEntities[0].isEyeInFluidType(Fluids.WATER.getFluidType());
         boolean bodySubmerged = this.getFluidTypeHeight(Fluids.WATER.getFluidType()) > 0.1;
-        boolean inWater = this.isInWater() || bodySubmerged; // logic: if nose is NOT submerged, we might be "walking on water" but only if we are actually in water. If on land, isInWater is false.
+        boolean inWater = this.isInWater() || bodySubmerged;
 
         if (inWater && !isBreachingAction) {
             boolean isAtHelm = this.getControllingPassenger() != null && this.getControllingPassenger().getVehicle() instanceof HelmEntity;
             boolean shouldBeAtBoardingLevel = this.hasAnchorDown() || this.getStationaryTicks() > 0 || (this.isTamed() && !isAtHelm);
 
             if (isAtHelm) {
-                // SAILING AT HELM: Maintain target depth -4.55 for perfect deck alignment
-                double targetY = this.level().getSeaLevel() - 4.55;
-                double currentY = this.getY();
-                double diff = targetY - currentY;
-                
-                // FIX: Aggressive Deadzone (Snap)
-                if (Math.abs(diff) < 0.05) {
-                    this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
-                    this.setPos(this.getX(), targetY, this.getZ()); // Hard Snap
-                } else {
-                    double verticalForce = Mth.clamp(diff * 0.2, -0.1, 0.1);
-                    this.setDeltaMovement(this.getDeltaMovement().add(0, verticalForce, 0));
-                }
+                applyBuoyancy(Config.hullbackDepthSailing);
             } else if (shouldBeAtBoardingLevel) {
-                // TAMED, ANCHORED OR STATIONARY: Maintain stable -5.0 depth
-                double targetY = this.level().getSeaLevel() - 5.0;
-                double currentY = this.getY();
-                double diff = targetY - currentY;
-                
-                if (Math.abs(diff) < 0.05) {
-                    this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
-                    this.setPos(this.getX(), targetY, this.getZ()); // Hard Snap
-                } else {
-                    double verticalForce = Mth.clamp(diff * 0.2, -0.1, 0.1);
-                    this.setDeltaMovement(this.getDeltaMovement().add(0, verticalForce, 0));
-                }
+                applyBuoyancy(Config.hullbackDepthBoarding);
             } else {
-                // WILD / ACTIVE: Maintain a safe depth (e.g. -6.5)
-                double targetY = this.level().getSeaLevel() - 6.5;
+                // Wild / Active: gentle upward pull, sink if nose is out of water
+                double targetY = this.level().getSeaLevel() + Config.hullbackDepthWild;
                 double currentY = this.getY();
                 double diff = targetY - currentY;
                 
                 if (currentY < targetY) {
-                    double verticalForce = Mth.clamp(diff * 0.02, 0, 0.03); 
+                    double verticalForce = Mth.clamp(diff * WILD_BUOYANCY_UP_FACTOR, 0, WILD_BUOYANCY_UP_MAX); 
                     this.setDeltaMovement(this.getDeltaMovement().add(0, verticalForce, 0));
                 } else if (!noseSubmerged) {
-                    this.setDeltaMovement(this.getDeltaMovement().add(0, -0.05, 0));
+                    this.setDeltaMovement(this.getDeltaMovement().add(0, WILD_SINK_FORCE, 0));
                 }
             }
         }
 
-
-        // This ensures the whale doesn't freeze in a tilted state when stopping.
-        // PITCH STABILIZATION: Reset XRot to 0 if not controlled or ANCHORED/STATIONARY
+        // Pitch stabilization: prevent freezing in a tilted state when stopping
         if (!this.level().isClientSide && !isBreachingAction && (this.getControllingPassenger() == null || this.hasAnchorDown() || this.getStationaryTicks() > 0)) {
             if (this.hasAnchorDown() || this.getStationaryTicks() > 0) {
                 this.pitchLocked = true;
@@ -1485,35 +1470,43 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
                  this.setXRot(Mth.rotLerp(lerpSpeed, this.getXRot(), 0f));
             }
         } else {
-             // If breaching or moving freely, ensure lock is released (though applyHardLock also manages this)
              if (isBreachingAction) this.pitchLocked = false;
         }
 
-        
-        // Pitch stabilization is now handled by applyEnhancedPitchControl in tick()
-        // and StationaryAwareMoveControl to prevent fighting.
-
         super.travel(travelVector);
 
-        // EXTRA FRICTION ON LAND (Compensate for vanilla travel logic)
-        // Only apply friction if on ground to allow air momentum (jumps/lunges)
+        // Extra friction on land (compensate for vanilla travel logic)
         if (!this.isHullbackInWater() && this.onGround()) {
             BlockState surface = this.getBlockStateOn();
-            double friction = 0.3; // Standard land: Very heavy
+            double friction = LAND_FRICTION;
             
-            // SPECIAL: If on ice, apply even more friction to remove the "slide"
             if (surface.is(net.minecraft.world.level.block.Blocks.ICE) || 
                 surface.is(net.minecraft.world.level.block.Blocks.PACKED_ICE) || 
                 surface.is(net.minecraft.world.level.block.Blocks.BLUE_ICE)) {
-                friction = 0.05; // Ice: Extremely locked down
+                friction = ICE_FRICTION;
             }
 
             this.setDeltaMovement(this.getDeltaMovement().multiply(friction, 1.0, friction));
         }
 
-        // Final anchor lock to be sure (prevents drift from super.travel)
+        // Final anchor lock (prevents drift from super.travel)
         if (this.hasAnchorDown() && this.isInWater()) {
             this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
+        }
+    }
+
+    /** Applies buoyancy targeting a specific depth offset from sea level. */
+    private void applyBuoyancy(double depthOffset) {
+        double targetY = this.level().getSeaLevel() + depthOffset;
+        double currentY = this.getY();
+        double diff = targetY - currentY;
+        
+        if (Math.abs(diff) < BUOYANCY_DEADZONE) {
+            this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
+            this.setPos(this.getX(), targetY, this.getZ());
+        } else {
+            double verticalForce = Mth.clamp(diff * BUOYANCY_FORCE_FACTOR, -BUOYANCY_FORCE_MAX, BUOYANCY_FORCE_MAX);
+            this.setDeltaMovement(this.getDeltaMovement().add(0, verticalForce, 0));
         }
     }
 
@@ -1561,10 +1554,9 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         // Limit pitch during swimming to prevent excessive tilting
         if (this.isInWater()) {
             float currentPitch = this.getXRot();
-            float maxPitch = 25f; // Maximum tilt angle in degrees
 
-            if (Math.abs(currentPitch) > maxPitch) {
-                this.setXRot(Mth.clamp(currentPitch, -maxPitch, maxPitch));
+            if (Math.abs(currentPitch) > MAX_RIDING_PITCH) {
+                this.setXRot(Mth.clamp(currentPitch, -MAX_RIDING_PITCH, MAX_RIDING_PITCH));
                 this.xRotO = this.getXRot();
             }
         }

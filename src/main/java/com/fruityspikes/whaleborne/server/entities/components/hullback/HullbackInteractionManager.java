@@ -182,7 +182,7 @@ public class HullbackInteractionManager {
         InteractionResult removalResult = this.handleVegetationRemoval(player, hand, part, top);
         if (removalResult == InteractionResult.PASS) {
             // Check if any dirt remains
-            for (BlockState[] states : hullback.HullbackDirt.headTopDirt) {
+            for (BlockState[] states : hullback.hullbackDirt.headTopDirt) {
                 for (BlockState state : states) {
                     if (state != Blocks.AIR.defaultBlockState()) {
                         hullback.setMouthTarget(0.5f);
@@ -191,7 +191,7 @@ public class HullbackInteractionManager {
                     }
                 }
             }
-            for (BlockState[] blockStates : hullback.HullbackDirt.bodyTopDirt) {
+            for (BlockState[] blockStates : hullback.hullbackDirt.bodyTopDirt) {
                 for (BlockState blockState : blockStates) {
                     if (blockState != Blocks.AIR.defaultBlockState()) {
                         hullback.setMouthTarget(0.5f);
@@ -226,7 +226,7 @@ public class HullbackInteractionManager {
     }
 
     public InteractionResult handleVegetationRemoval(Player player, InteractionHand hand, HullbackPartEntity part, boolean top) {
-        BlockState[][] dirtArray = hullback.HullbackDirt.getDirtArrayForPart(part, top);
+        BlockState[][] dirtArray = hullback.hullbackDirt.getDirtArrayForPart(part, top);
         ItemStack held = player.getItemInHand(hand);
 
         for (int x = 0; x < dirtArray.length; x++) {
@@ -271,7 +271,7 @@ public class HullbackInteractionManager {
                             SoundSource.PLAYERS, 1.0F, 1.0f);
 
                     hullback.setMouthTarget(1.0f);
-                    hullback.HullbackDirt.syncDirtToClients();
+                    hullback.hullbackDirt.syncDirtToClients();
                 } else {
                     dirtArray[x][y] = Blocks.AIR.defaultBlockState();
                 }
