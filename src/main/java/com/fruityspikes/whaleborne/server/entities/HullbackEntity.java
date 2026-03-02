@@ -78,9 +78,16 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class HullbackEntity extends WaterAnimal implements ContainerListener, HasCustomInventoryScreen, PlayerRideableJumping, Saddleable {
+    // ─── Constants ───────────────────────────────────────────────
     private static final UUID SAIL_SPEED_MODIFIER_UUID = UUID.fromString("12345678-1234-1234-1234-1234567890ab");
     private static final double PARTICLE_SPEED_THRESHOLD_SQR = 0.01;
     private static final int[] SIDES = {-1, 1};
+
+    // ─── Buoyancy / Depth Constants (see Config for runtime values) ───
+    private static final double BUOYANCY_DEADZONE = 0.05;
+    private static final double BUOYANCY_FORCE_FACTOR = 0.2;
+    private static final double BUOYANCY_FORCE_MAX = 0.1;
+    private static final double WILD_SINK_FORCE = -0.05;
     private boolean isFreshSpawn = true;
     private boolean validatedAfterLoad = false;
     private float leftEyeYaw, rightEyeYaw, eyePitch;
@@ -2925,21 +2932,21 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
                 if (isAtHelm || (this.getStationaryTicks() > 0) || this.isTamed() || this.hasAnchorDown()) {
                     // HELM, STATIONARY, TAMED, ANCHORED: Maintain target depth
-                    double targetY = this.level().getSeaLevel() - (isAtHelm ? 4.55 : 5.0);
+                    double targetY = this.level().getSeaLevel() + (isAtHelm ? Config.hullbackDepthSailing : Config.hullbackDepthBoarding);
                     double diff = targetY - this.getY();
 
-                    // FIX: Aggressive Deadzone (Snap)
-                    if (Math.abs(diff) < 0.05) {
+                    // Aggressive Deadzone (Snap)
+                    if (Math.abs(diff) < BUOYANCY_DEADZONE) {
                         this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
-                        this.setPos(this.getX(), targetY, this.getZ()); // Hard Snap
+                        this.setPos(this.getX(), targetY, this.getZ());
                     } else {
-                        double verticalSpeed = Mth.clamp(diff * 0.2, -0.1, 0.1);
+                        double verticalSpeed = Mth.clamp(diff * BUOYANCY_FORCE_FACTOR, -BUOYANCY_FORCE_MAX, BUOYANCY_FORCE_MAX);
                         this.setDeltaMovement(this.getDeltaMovement().x, verticalSpeed, this.getDeltaMovement().z);
                     }
                 } else {
-                    // WILD / STATIONARY (WILD): Only push down if surfacing
+                    // WILD: Only push down if surfacing
                     if (!noseSubmerged) {
-                        this.setDeltaMovement(this.getDeltaMovement().add(0, -0.05, 0));
+                        this.setDeltaMovement(this.getDeltaMovement().add(0, WILD_SINK_FORCE, 0));
                     }
                 }
             }
@@ -2971,8 +2978,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             // WIPE VERTICAL DRIFT IF AT HELM OR TAMED/STATIONARY IN DEADZONE
             if ((this.getControllingPassenger() != null || this.isTamed() || this.hasAnchorDown() || this.getStationaryTicks() > 0) && this.isInWater()) {
-                double targetY = this.getControllingPassenger() != null ? this.level().getSeaLevel() - 4.55 : this.level().getSeaLevel() - 5.0;
-                if (Math.abs(targetY - this.getY()) < 0.051) {
+                double targetY = this.level().getSeaLevel() + (this.getControllingPassenger() != null ? Config.hullbackDepthSailing : Config.hullbackDepthBoarding);
+                if (Math.abs(targetY - this.getY()) < BUOYANCY_DEADZONE + 0.001) {
                     this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
                     this.setPos(this.getX(), targetY, this.getZ());
                 }
