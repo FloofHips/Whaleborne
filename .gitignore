@@ -24,7 +24,3 @@ runs
 run-data
 
 repo
-build_output.txt
-
-# vscode
-.vscode/

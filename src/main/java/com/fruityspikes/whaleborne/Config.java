@@ -101,6 +101,10 @@ public class Config {
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event)
     {
+        if (!(event instanceof ModConfigEvent.Loading || event instanceof ModConfigEvent.Reloading)) {
+            return;
+        }
+
         if (event.getConfig().getSpec() == CLIENT_SPEC) {
             armorProgress = ARMOR_PROGRESS.get();
             soundDistance = SOUND_DISTANCE.get();
