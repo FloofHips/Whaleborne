@@ -54,6 +54,7 @@ import net.minecraft.world.item.*;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -227,7 +228,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             public void tick() {
                 // --- POST-SPAWN VALIDATION (LOGIN DESYNC FIX AND MULTIPLAYER-SAFE) ---
                 // Only fresh spawned entities will do this check, and only once (at tick 40).
-                if (!HullbackEntity.this.level().isClientSide && HullbackEntity.this.isFreshSpawn && HullbackEntity.this.tickCount == 40) {
+                if (!HullbackEntity.this.level().isClientSide && HullbackEntity.this.isFreshSpawn && !HullbackEntity.this.isPersistenceRequired() && HullbackEntity.this.tickCount == 40) {
                     int spawnCap;
                     try {
                         spawnCap = Config.HULLBACK_SPAWN_CAP.get();
@@ -303,6 +304,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     public boolean checkSpawnRules(LevelAccessor level, MobSpawnType spawnReason) {
         return checkHullbackSpawnRules((EntityType<HullbackEntity>) this.getType(), level, spawnReason, this.blockPosition(), level.getRandom());
+    }
+
+    @Override
+    public SpawnGroupData finalizeSpawn(ServerLevelAccessor level, DifficultyInstance difficulty, MobSpawnType spawnType, @Nullable SpawnGroupData spawnData, @Nullable CompoundTag dataTag) {
+        if (spawnType == MobSpawnType.SPAWN_EGG || spawnType == MobSpawnType.COMMAND) {
+            this.setPersistenceRequired();
+        }
+        return super.finalizeSpawn(level, difficulty, spawnType, spawnData, dataTag);
     }
 
     public static boolean checkHullbackSpawnRules(EntityType<HullbackEntity> type, LevelAccessor level, MobSpawnType spawnType, BlockPos pos, RandomSource random) {
@@ -2732,7 +2741,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         public boolean canUse() {
             if (isBeached)
-                return mob.tickCount > 20 && (!this.mob.isEyeInFluidType(Fluids.WATER.getFluidType()) || !this.mob.level().getFluidState(mob.blockPosition().above(3)).is(FluidTags.WATER));
+                return mob.tickCount > 20 && !this.mob.isEyeInFluidType(Fluids.WATER.getFluidType()) && !this.mob.level().getFluidState(mob.blockPosition().above(3)).is(FluidTags.WATER);
             return mob.tickCount > 20 && !mob.level().getFluidState(mob.blockPosition().below()).is(FluidTags.WATER);
         }
 
@@ -2839,7 +2848,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             if (isBeached) {
                 this.mob.setAirSupply(this.mob.getMaxAirSupply());
 
-                if (this.mob.level().isClientSide) {
+                if (this.mob.level().isClientSide && partPosition != null && partPosition.length > 2) {
                     for (int i = 0; i < 20; i++) {
                         this.mob.level().addParticle(ParticleTypes.BUBBLE,
                                 ((HullbackEntity) mob).partPosition[2].x,
@@ -2852,23 +2861,25 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     ((HullbackEntity) mob).mouthTarget = 0.0f;
                 }
 
-                Vec3 particlePos = partPosition[1].add(new Vec3(0, 7, 0));
-                double x = particlePos.x;
-                double y = particlePos.y;
-                double z = particlePos.z;
+                if (partPosition != null && partPosition.length > 1) {
+                    Vec3 particlePos = partPosition[1].add(new Vec3(0, 7, 0));
+                    double x = particlePos.x;
+                    double y = particlePos.y;
+                    double z = particlePos.z;
 
-                if (this.mob.level() instanceof ServerLevel serverLevel) {
-                    serverLevel.sendParticles(
-                            WBParticleRegistry.SMOKE.get(),
-                            x,
-                            y,
-                            z,
-                            50,
-                            0.2,
-                            0.2,
-                            0.2,
-                            0.02
-                    );
+                    if (this.mob.level() instanceof ServerLevel serverLevel) {
+                        serverLevel.sendParticles(
+                                WBParticleRegistry.SMOKE.get(),
+                                x,
+                                y,
+                                z,
+                                50,
+                                0.2,
+                                0.2,
+                                0.2,
+                                0.02
+                        );
+                    }
                 }
 
                 this.mob.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), Config.SOUND_DISTANCE.get().floatValue() * 1.5f, 1);
