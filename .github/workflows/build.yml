@@ -4,11 +4,9 @@ on:
   push:
     branches:
       - main
-      - '1.20.1-fix'
   pull_request:
     branches:
       - main
-      - '1.20.1-fix'
 
 jobs:
   build:
@@ -30,4 +28,4 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
-        run: ./gradlew build
+        run: ./gradlew clean build --refresh-dependencies
