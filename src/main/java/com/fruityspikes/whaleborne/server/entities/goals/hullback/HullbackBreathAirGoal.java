@@ -102,7 +102,9 @@ public class HullbackBreathAirGoal extends Goal {
 
         this.hullback.setAirSupply(this.hullback.getMaxAirSupply());
 
-        if (this.hullback.level().isClientSide) {
+        if (this.hullback.level().isClientSide && this.hullback.getPartManager() != null
+                && this.hullback.getPartManager().partPosition != null
+                && this.hullback.getPartManager().partPosition.length > 2) {
             for (int i = 0; i < 20; i++) {
                 this.hullback.level().addParticle(ParticleTypes.BUBBLE,
                         this.hullback.getPartManager().partPosition[2].x,
@@ -115,23 +117,27 @@ public class HullbackBreathAirGoal extends Goal {
             this.hullback.setMouthTarget(0.0f);
         }
 
-        Vec3 particlePos = this.hullback.getPartManager().partPosition[1].add(new Vec3(0, 7, 0));
-        double x = particlePos.x;
-        double y = particlePos.y;
-        double z = particlePos.z;
+        if (this.hullback.getPartManager() != null
+                && this.hullback.getPartManager().partPosition != null
+                && this.hullback.getPartManager().partPosition.length > 1) {
+            Vec3 particlePos = this.hullback.getPartManager().partPosition[1].add(new Vec3(0, 7, 0));
+            double x = particlePos.x;
+            double y = particlePos.y;
+            double z = particlePos.z;
 
-        if (this.hullback.level() instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(
-                    WBParticleRegistry.SMOKE.get(),
-                    x,
-                    y,
-                    z,
-                    50,
-                    0.2,
-                    0.2,
-                    0.2,
-                    0.02
-            );
+            if (this.hullback.level() instanceof ServerLevel serverLevel) {
+                serverLevel.sendParticles(
+                        WBParticleRegistry.SMOKE.get(),
+                        x,
+                        y,
+                        z,
+                        50,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.02
+                );
+            }
         }
 
         this.hullback.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), 3.0f, 1);

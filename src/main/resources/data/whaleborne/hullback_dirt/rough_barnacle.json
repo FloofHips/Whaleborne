@@ -1,7 +1,7 @@
 {
   "block": "whaleborne:rough_barnacle",
   "placements": ["body_top", "head_top", "body_bottom", "head_bottom"],
-  "placement_chance": 0.07,
+  "placement_chance": 0.025,
   "removable_with": ["axe"],
   "growth": "whaleborne:rough_barnacle",
   "growth_properties": {

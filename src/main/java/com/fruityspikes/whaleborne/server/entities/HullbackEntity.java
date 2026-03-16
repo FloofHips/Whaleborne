@@ -48,6 +48,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.AABB;
@@ -259,6 +260,14 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     @Override
     public boolean checkSpawnRules(LevelAccessor level, MobSpawnType spawnReason) {
         return checkHullbackSpawnRules((EntityType<HullbackEntity>) this.getType(), level, spawnReason, this.blockPosition(), level.getRandom());
+    }
+
+    @Override
+    public SpawnGroupData finalizeSpawn(ServerLevelAccessor level, DifficultyInstance difficulty, MobSpawnType spawnType, @Nullable SpawnGroupData spawnData) {
+        if (spawnType == MobSpawnType.SPAWN_EGG || spawnType == MobSpawnType.COMMAND) {
+            this.setPersistenceRequired();
+        }
+        return super.finalizeSpawn(level, difficulty, spawnType, spawnData);
     }
 
     public static boolean checkHullbackSpawnRules(EntityType<HullbackEntity> type, LevelAccessor level, MobSpawnType spawnType, BlockPos pos, RandomSource random) {
@@ -753,7 +762,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     public void tick() {
     // --- POST-SPAWN VALIDATION (LOGIN DESYNC FIX AND MULTIPLAYER-SAFE) ---
     // Only fresh spawned entities will do this check, and only once (at tick 40).
-    if (!this.level().isClientSide && this.isFreshSpawn && this.tickCount == 40) {
+    if (!this.level().isClientSide && this.isFreshSpawn && !this.isPersistenceRequired() && this.tickCount == 40) {
         int spawnCap;
         try {
             spawnCap = Config.HULLBACK_SPAWN_CAP.get();

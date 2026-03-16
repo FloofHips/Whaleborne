@@ -32,7 +32,7 @@ public class HullbackTryFindWaterGoal extends Goal {
         if (mob instanceof HullbackEntity hullback && hullback.stationaryTicks > 0) return false;
         
         if(isBeached)
-            return mob.tickCount > 20 && (!this.mob.isEyeInFluidType(Fluids.WATER.getFluidType()) || !this.mob.level().getFluidState(this.mob.blockPosition().above(3)).is(FluidTags.WATER));
+            return mob.tickCount > 20 && !this.mob.isEyeInFluidType(Fluids.WATER.getFluidType()) && !this.mob.level().getFluidState(this.mob.blockPosition().above(3)).is(FluidTags.WATER);
         return mob.tickCount > 20 && !mob.level().getFluidState(mob.blockPosition().below()).is(FluidTags.WATER);
     }
 
@@ -142,7 +142,9 @@ public class HullbackTryFindWaterGoal extends Goal {
             if(mob instanceof HullbackEntity hullback) {
                 hullback.setAirSupply(hullback.getMaxAirSupply());
 
-                if (hullback.level().isClientSide) {
+                if (hullback.level().isClientSide && hullback.getPartManager() != null
+                        && hullback.getPartManager().partPosition != null
+                        && hullback.getPartManager().partPosition.length > 2) {
                     for (int i = 0; i < 20; i++) {
                         hullback.level().addParticle(ParticleTypes.BUBBLE,
                                 hullback.getPartManager().partPosition[2].x,
@@ -155,23 +157,27 @@ public class HullbackTryFindWaterGoal extends Goal {
                     hullback.setMouthTarget(0.0f);
                 }
 
-                Vec3 particlePos = hullback.getPartManager().partPosition[1].add(new Vec3(0, 7, 0));
-                double x = particlePos.x;
-                double y = particlePos.y;
-                double z = particlePos.z;
+                if (hullback.getPartManager() != null
+                        && hullback.getPartManager().partPosition != null
+                        && hullback.getPartManager().partPosition.length > 1) {
+                    Vec3 particlePos = hullback.getPartManager().partPosition[1].add(new Vec3(0, 7, 0));
+                    double x = particlePos.x;
+                    double y = particlePos.y;
+                    double z = particlePos.z;
 
-                if (hullback.level() instanceof ServerLevel serverLevel) {
-                    serverLevel.sendParticles(
-                            WBParticleRegistry.SMOKE.get(),
-                            x,
-                            y,
-                            z,
-                            50,
-                            0.2,
-                            0.2,
-                            0.2,
-                            0.02
-                    );
+                    if (hullback.level() instanceof ServerLevel serverLevel) {
+                        serverLevel.sendParticles(
+                                WBParticleRegistry.SMOKE.get(),
+                                x,
+                                y,
+                                z,
+                                50,
+                                0.2,
+                                0.2,
+                                0.2,
+                                0.02
+                        );
+                    }
                 }
 
                 hullback.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), 1.5f, 1);
