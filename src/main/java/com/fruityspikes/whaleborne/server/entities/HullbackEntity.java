@@ -1571,9 +1571,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         updatePlayerStability();
 
         Set<Entity> movedThisTick = new HashSet<>();
-        for (int i = 0; i < getSubEntities().length; i++) {
-            moveEntitiesOnTop(i, movedThisTick);
-        }
+        //for (int i = 0; i < getSubEntities().length; i++) {
+        //    moveEntitiesOnTop(i, movedThisTick);
+        //}
 
         updateMouthOpening();
 
