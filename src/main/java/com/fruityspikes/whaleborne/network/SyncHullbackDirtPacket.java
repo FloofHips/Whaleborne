@@ -54,6 +54,7 @@ public class SyncHullbackDirtPacket {
     public static void handle(SyncHullbackDirtPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             if (ctx.get().getDirection().getReceptionSide().isClient()) {
+                if (Minecraft.getInstance().level == null) return;
                 Entity entity = Minecraft.getInstance().level.getEntity(packet.getEntityId());
                 if (entity instanceof HullbackEntity hullback) {
                     BlockState[][] dirtArray = deserializeDirtArray(packet.getDirtData());

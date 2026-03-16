@@ -12,6 +12,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.Registries;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
@@ -74,10 +76,19 @@ import net.minecraftforge.network.PacketDistributor;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 public class HullbackEntity extends WaterAnimal implements ContainerListener, HasCustomInventoryScreen, PlayerRideableJumping, Saddleable {
+    // ─── Constants ───────────────────────────────────────────────
     private static final UUID SAIL_SPEED_MODIFIER_UUID = UUID.fromString("12345678-1234-1234-1234-1234567890ab");
+    private static final double PARTICLE_SPEED_THRESHOLD_SQR = 0.01;
+    private static final int[] SIDES = {-1, 1};
+
+    // ─── Buoyancy / Depth Constants (see Config for runtime values) ───
+    private static final double BUOYANCY_DEADZONE = 0.05;
+    private static final double BUOYANCY_FORCE_FACTOR = 0.2;
+    private static final double BUOYANCY_FORCE_MAX = 0.1;
+    private static final double WILD_SINK_FORCE = -0.05;
+    private boolean isFreshSpawn = true;
     private boolean validatedAfterLoad = false;
     private float leftEyeYaw, rightEyeYaw, eyePitch;
     private LazyOptional<IItemHandler> itemHandler = LazyOptional.empty();
@@ -85,6 +96,15 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private boolean tamedCoolDown;
     private Vec3 currentTarget;
     public int stationaryTicks;
+    private boolean isBreaching;
+
+    public void setBreaching(boolean breaching) {
+        this.isBreaching = breaching;
+    }
+
+    public boolean isBreaching() {
+        return isBreaching;
+    }
     public SimpleContainer inventory = new SimpleContainer(3) {
         @Override
         public void setChanged() {
@@ -106,6 +126,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_4 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
     private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_5 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
     private static final EntityDataAccessor<Optional<UUID>> DATA_SEAT_6 = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<Boolean> DATA_VECTOR_CONTROL = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> DATA_STATIONARY_TICKS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> DATA_MOUTH_TARGET = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.FLOAT);
+
+    // Performance cache for third-person mod detection
+    private static Boolean IS_THIRD_PERSON_MOD_LOADED = null;
     public final HullbackPartEntity head;
     public final HullbackPartEntity nose;
     public final HullbackPartEntity body;
@@ -126,12 +152,45 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public float newRotY = this.getYRot();
     private float mouthOpenProgress;
     private float mouthTarget;
+    private boolean wasPilotControlled = false;
+    private boolean pitchLocked = false;
+    private boolean platformsStable = false; // Added for Integrated Fix
+    private boolean isApproachingPlayer = false; // Flag to apply movement during approach
+    private float currentPlatformHeight = 4.55f;
+    private float targetPlatformHeight = 4.55f;
+    private float oldPlatformHeight = 4.55f; // Rastreia a altura do tick anterior
+    private int platformHeightCooldown = 0;
+    private boolean wasMounted = false;
+    private static final float PLATFORM_HEIGHT_THRESHOLD = 0.002f;
+    private int playerStableTimer = 0;
+    private Vec3 lastPlayerPosition = Vec3.ZERO;
+    private static final double STABLE_THRESHOLD = 0.01;
+
+    public void setApproachingPlayer(boolean approaching) {
+        this.isApproachingPlayer = approaching;
+    }
+
+    public boolean isApproachingPlayer() {
+        return this.isApproachingPlayer;
+    }
+
+    @Override
+    public void setXRot(float xRot) {
+        if (pitchLocked) {
+            super.setXRot(0f);
+        } else {
+            super.setXRot(xRot);
+        }
+    }
 
     public static UUID getSailSpeedModifierUuid() {
         return SAIL_SPEED_MODIFIER_UUID;
     }
 
     public float AttributeSpeedModifier = 1;
+
+    public int ticksSinceSpawn = 0;
+
     public BlockState[][] headDirt; // 8 x 5
     public BlockState[][] headTopDirt; // 8 x 5
     public BlockState[][] bodyDirt; // 5 x 5
@@ -162,8 +221,54 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.inventory.addListener(this);
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
 
-        this.moveControl = new SmoothSwimmingMoveControl(this, 1, 2, 0.1F, 0.1F, true);
-        this.lookControl = new SmoothSwimmingLookControl(this, 1);
+        this.moveControl = new StationaryAwareMoveControl(this);
+        this.lookControl = new SmoothSwimmingLookControl(this, 1) {
+            @Override
+            public void tick() {
+                // --- POST-SPAWN VALIDATION (LOGIN DESYNC FIX AND MULTIPLAYER-SAFE) ---
+                // Only fresh spawned entities will do this check, and only once (at tick 40).
+                if (!HullbackEntity.this.level().isClientSide && HullbackEntity.this.isFreshSpawn && HullbackEntity.this.tickCount == 40) {
+                    int spawnCap;
+                    try {
+                        spawnCap = Config.HULLBACK_SPAWN_CAP.get();
+                    } catch (Exception e) {
+                        spawnCap = 1;
+                    }
+
+                    AABB checkArea = HullbackEntity.this.getBoundingBox().inflate(128, 64, 128);
+                    List<HullbackEntity> nearbyHullbacks = HullbackEntity.this.level().getEntitiesOfClass(
+                            HullbackEntity.class,
+                            checkArea,
+                            e -> e.isAlive() && !e.isTamed()
+                    );
+
+                    int higherPriorityCount = 0;
+
+                    for (HullbackEntity other : nearbyHullbacks) {
+                        if (other == HullbackEntity.this) continue;
+
+                        // Old entities (read from disk) always bear absolute priority over fresh ones.
+                        if (!other.isFreshSpawn) {
+                            higherPriorityCount++;
+                        } 
+                        // If the other entity is also new (competing), we use the UUID to decide who stays.
+                        // compareTo < 0 ensures that only one counts the other, creating a mathematically perfect queue.
+                        else if (other.getUUID().compareTo(HullbackEntity.this.getUUID()) < 0) {
+                            higherPriorityCount++;
+                        }
+                    }
+
+                    // If the number of Hullbacks with higher priority already fills the cap, this entity deletes itself.
+                    if (higherPriorityCount >= spawnCap) {
+                        HullbackEntity.this.discard();
+                        return;
+                    }
+                }
+
+                if (HullbackEntity.this.stationaryTicks > 0) return;
+                super.tick();
+            }
+        };
 
         this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F);
         this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F);
@@ -176,9 +281,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.moving_body = null;
 
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
-        //this.moving_subEntities = new HullbackPartWalkableEntity[]{this.moving_nose, this.moving_head, this.moving_body, this.moving_tail, this.moving_fluke};
-        this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
-
+        
         this.prevPartPositions = new Vec3[5];
         this.partPosition = new Vec3[5];
         this.partYRot = new float[5];
@@ -189,7 +292,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         Arrays.fill(partPosition, Vec3.ZERO);
         this.mouthOpenProgress = 0.0f;
         this.currentTarget = this.position();
-        //createInventory();
+        
         if(!level.isClientSide) initDirt();
         else initClientDirt();
 
@@ -211,19 +314,37 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             return false;
         }
 
-        if (hasNearbyHullbacks(level, pos)) {
+        if (hasReachedSpawnCap(level, pos)) {
+            return false;
+        }
+
+        double spawnChance;
+        try {
+            spawnChance = Config.HULLBACK_SPAWN_CHANCE.get();
+        } catch (Exception e) {
+            spawnChance = 0.001;
+        }
+
+        if (random.nextDouble() >= spawnChance) {
             return false;
         }
 
         return true;
     }
 
-    private static boolean hasSpawnSpace(LevelAccessor level, BlockPos pos) {
+    @Override
+    public int getMaxSpawnClusterSize() {
+        return 1;
+    }
 
-        int checkRadius = 10;
-        int heightCheck = 6;
+    private static boolean hasSpawnSpace(LevelAccessor level, BlockPos pos) {
+        int checkRadius = 5; 
+        int heightCheck = 4; 
 
         AABB spawnCheckArea = new AABB(pos).inflate(checkRadius, heightCheck, checkRadius);
+
+        int solidCount = 0;
+        int maxSolidAllowed = 20;
 
         BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
         for (int x = (int)spawnCheckArea.minX; x <= spawnCheckArea.maxX; x++) {
@@ -231,8 +352,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 for (int z = (int)spawnCheckArea.minZ; z <= spawnCheckArea.maxZ; z++) {
                     mutablePos.set(x, y, z);
                     BlockState state = level.getBlockState(mutablePos);
+                    if (state.isAir() || !state.getFluidState().isEmpty()) continue;
+                    
                     if (state.isSolid() && state.getCollisionShape(level, mutablePos) != Shapes.empty()) {
-                        return false;
+                         solidCount++;
+                         if (solidCount > maxSolidAllowed) {
+                             return false; 
+                         }
                     }
                 }
             }
@@ -241,13 +367,37 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return true;
     }
 
-    private static boolean hasNearbyHullbacks(LevelAccessor level, BlockPos pos) {
-        AABB checkArea = new AABB(pos).inflate(32, 16, 32);
-        return !level.getEntitiesOfClass(
+    private static boolean hasReachedSpawnCap(LevelAccessor level, BlockPos pos) {
+        int spawnCap;
+        try {
+            spawnCap = Config.HULLBACK_SPAWN_CAP.get();
+        } catch (Exception e) {
+            spawnCap = 1;
+        }
+
+        // We define the search radius. 64 is a good balance between performance and safety.
+        int radius = 64; 
+        
+        BlockPos minPos = pos.offset(-radius, -32, -radius);
+        BlockPos maxPos = pos.offset(radius, 32, radius);
+
+        // SMART LOAD CHECK:
+        // If not all chunks containing our bounding box are loaded, the 'getEntitiesOfClass' method
+        // would be inaccurate. Because of this, we abort the spawning attempt returning 'true' (cap reached).
+        if (!level.hasChunksAt(minPos, maxPos)) {
+            return true; 
+        }
+
+        // Now that we know that the area is safe and 100% visible to the code, we proceed counting.
+        AABB checkArea = new AABB(minPos.getX(), minPos.getY(), minPos.getZ(), maxPos.getX(), maxPos.getY(), maxPos.getZ());
+        
+        int nearbyCount = level.getEntitiesOfClass(
                 HullbackEntity.class,
                 checkArea,
                 e -> e.isAlive() && !e.isTamed()
-        ).isEmpty();
+        ).size();
+
+        return nearbyCount >= spawnCap;
     }
 
     @Override
@@ -382,8 +532,37 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
     }
 
+    @Override
+    public void checkDespawn() {
+        // Custom checkDespawn: only resets noActionTime when a player is within simulation distance.
+        // Distance-based despawn is fully disabled — lifespan is controlled by our tick() timer.
+        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            int simDistBlocks = serverLevel.getServer().getPlayerList().getSimulationDistance() * 16;
+            double simDistSq = (double) simDistBlocks * simDistBlocks;
+            net.minecraft.world.entity.player.Player nearest = this.level().getNearestPlayer(this, -1.0);
+            if (nearest != null && nearest.distanceToSqr(this) < simDistSq) {
+                this.setNoActionTime(0);
+            }
+        }
+    }
+
     public static AttributeSupplier.Builder createAttributes() {
-        return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 100.0).add(Attributes.MOVEMENT_SPEED, 1.2000000476837158).add(Attributes.ATTACK_DAMAGE, 3.0);
+        return Mob.createMobAttributes()
+                .add(Attributes.MAX_HEALTH, 100.0)
+                .add(Attributes.MOVEMENT_SPEED, 0.1)
+                .add(Attributes.ATTACK_DAMAGE, 3.0)
+                .add(Attributes.KNOCKBACK_RESISTANCE, 1.0)
+                .add(net.minecraftforge.common.ForgeMod.SWIM_SPEED.get(), 1.2);
+    }
+
+    @Override
+    protected void registerGoals() {
+        this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
+        this.goalSelector.addGoal(1, new HullbackApproachPlayerGoal(this, 1.2f));
+        this.goalSelector.addGoal(2, new HullbackTryFindWaterGoal(this, true));
+        this.goalSelector.addGoal(2, new HullbackArmorPlayerGoal(this, 1.2f)); 
+        this.goalSelector.addGoal(3, new HullbackRandomSwimGoal(this, 1.0D, 10));
+        this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
     }
 
     protected int getInventorySize() {
@@ -405,7 +584,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
 
         this.inventory.addListener(this);
-        this.updateContainerEquipment();
+        this.moveControl = new StationaryAwareMoveControl(this);
+        this.lookControl = new StationaryAwareLookControl(this);
         this.itemHandler = LazyOptional.of(() -> new InvWrapper(this.inventory));
     }
     public void updateContainerEquipment() {
@@ -470,13 +650,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     protected void setFlag(int flagId, boolean value) {
-        byte b0 = (Byte)this.entityData.get(DATA_ID_FLAGS);
+        byte flags = this.entityData.get(DATA_ID_FLAGS);
         if (value) {
-            this.entityData.set(DATA_ID_FLAGS, (byte)(b0 | flagId));
+            this.entityData.set(DATA_ID_FLAGS, (byte)(flags | flagId));
         } else {
-            this.entityData.set(DATA_ID_FLAGS, (byte)(b0 & ~flagId));
+            this.entityData.set(DATA_ID_FLAGS, (byte)(flags & ~flagId));
         }
     }
+
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_ID_FLAGS, (byte)0);
@@ -492,6 +673,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.entityData.define(DATA_CROWN_ID, ItemStack.EMPTY);
         this.entityData.define(DATA_ARMOR, ItemStack.EMPTY);
         this.entityData.define(DATA_MOUTH_PROGRESS, 0f);
+        this.entityData.define(DATA_VECTOR_CONTROL, false);
+        this.entityData.define(DATA_STATIONARY_TICKS, 0);
     }
     public void addAdditionalSaveData(CompoundTag compound) {
         super.addAdditionalSaveData(compound);
@@ -512,20 +695,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         CompoundTag hasMobiusSpawned = new CompoundTag();
         hasMobiusSpawned.putBoolean("HasMobiusSpawned", HAS_MOBIUS_SPAWNED);
 
-        //System.out.println("Saving seat data:");
-
         for (int i = 0; i < 7; i++) {
             Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
             String seatKey = "Seat_" + i;
 
-            //System.out.println("Seat " + i + ": " + occupant);
-
             if (occupant.isPresent()) {
                 compound.putUUID(seatKey, occupant.get());
-
-                //if (!compound.hasUUID(seatKey)) {
-                //    System.out.println("Failed to write UUID for seat: " + i);
-                //}
             }
         }
         compound.put("HeadDirt", saveDirtArray(headDirt));
@@ -536,9 +711,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         compound.put("tailDirt", saveDirtArray(tailDirt));
         compound.put("flukeDirt", saveDirtArray(flukeDirt));
+
+        compound.putInt("TicksSinceSpawn", ticksSinceSpawn);
     }
     public void readAdditionalSaveData(CompoundTag compound) {
-        super.readAdditionalSaveData(compound);
+    super.readAdditionalSaveData(compound);
+    this.isFreshSpawn = false;
         ListTag items = compound.getList("Items", 10);
 
         for(int i = 0; i < items.size(); i++) {
@@ -549,12 +727,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        this.createInventory();
+        // this.createInventory(); // REMOVED to avoid resetting inventory
         this.entityData.set(DATA_ID_FLAGS, compound.getByte("Flags"));
-        HAS_MOBIUS_SPAWNED = compound.getBoolean("HasMobiusSpawned");
-
-        boolean hasAnySeatData = IntStream.range(0, 7)
-                .anyMatch(i -> compound.hasUUID("Seat_" + i));
+        if (compound.contains("HasMobiusSpawned")) {
+            HAS_MOBIUS_SPAWNED = compound.getBoolean("HasMobiusSpawned");
+        }
 
         for (int i = 0; i < 7; i++) {
             String seatKey = "Seat_" + i;
@@ -565,6 +742,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 this.entityData.set(getSeatAccessor(i), Optional.empty());
             }
         }
+
+        syncDirtToClients();
+        this.updateContainerEquipment();
 
         if (compound.contains("HeadDirt")) {
             headDirt = loadDirtArray(compound.getCompound("HeadDirt"));
@@ -585,9 +765,26 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             flukeDirt = loadDirtArray(compound.getCompound("FlukeDirt"));
         }
 
+        if (compound.contains("TicksSinceSpawn")) {
+            ticksSinceSpawn = compound.getInt("TicksSinceSpawn");
+        }
+
         syncDirtToClients();
         this.updateContainerEquipment();
     }
+
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        super.onSyncedDataUpdated(key);
+        if (DATA_STATIONARY_TICKS.equals(key)) {
+            this.stationaryTicks = this.entityData.get(DATA_STATIONARY_TICKS);
+        }
+    }
+
+    public int getStationaryTicks() {
+        return this.entityData.get(DATA_STATIONARY_TICKS);
+    }
+
 
     private EntityDataAccessor<Optional<UUID>> getSeatAccessor(int seatIndex) {
         return switch (seatIndex) {
@@ -632,34 +829,56 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public float getArmorProgress() {
         return (float) this.entityData.get(DATA_ARMOR).getCount() / 64f;
     }
-    public float getLeftEyeYaw() { return leftEyeYaw; }
-    public float getRightEyeYaw() { return rightEyeYaw; }
-    public float getEyePitch() { return eyePitch; }
+
+    public float getLeftEyeYaw() {
+        return leftEyeYaw;
+    }
+
+    public float getRightEyeYaw() {
+        return rightEyeYaw;
+    }
+
+    public float getEyePitch() {
+        return eyePitch;
+    }
+
     public boolean canBreatheUnderwater() {
         return isVehicle();
     }
-    protected void handleAirSupply(int airSupply) {
-    }
+
+    // Override to suppress default air supply tick — prevents the entity from
+    // trying to surface for air, which would fight the custom buoyancy in travel().
+    @Override
+    protected void handleAirSupply(int airSupply) { }
+
+    @Override
     public int getMaxAirSupply() {
         return 10000;
     }
+
+    @Override
     protected int increaseAirSupply(int currentAir) {
         return this.getMaxAirSupply();
     }
 
+
+
     public boolean isPushable() {
         return false;
     }
+
     public void setId(int p_20235_) {
         super.setId(p_20235_);
 
-        for(int i = 0; i < this.subEntities.length; i++) {
+        for (int i = 0; i < this.subEntities.length; i++) {
             this.subEntities[i].setId(p_20235_ + i + 1);
         }
     }
+
     public HullbackPartEntity[] getSubEntities() {
         return this.subEntities;
     }
+
     protected PathNavigation createNavigation(Level level) {
         return new WaterBoundPathNavigation(this, level);
     }
@@ -680,32 +899,24 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         super.recreateFromPacket(packet);
     }
 
-    //    private void updateWalkerPositions() {
-//        for ( HullbackPartEntity part : getSubEntities()) {
-//            AABB boundingBox = part.getBoundingBoxForCulling().move(0, 0.5f, 0);
-//
-//            List<Entity> riders = level().getEntities(part, boundingBox);
-//            riders.removeIf(rider -> rider.isPassenger());
-//
-//            for (Entity entity : riders) {
-//                if (entity instanceof HullbackEntity || entity instanceof HullbackPartEntity)
-//                    return;
-//                Vec3 offset = new Vec3
-//            }
-//        }
-//    }
-
     private boolean scanPlayerAbove() {
-        for (HullbackPartEntity part : getSubEntities()) {
+        // If approaching, the check is RIGOROUS (0.5 blocks). 
+        // You have to be literally stepping on it to count.
+        double heightCheck = isApproachingPlayer() ? 0.5 : 2.0;
+
+        for (int i = 0; i < 3; i++) { // Nose, Head, Body
+            HullbackPartEntity part = getSubEntities()[i];
             AABB box = part.getBoundingBox();
+            
+            // Reduced inflation to avoid false lateral detection
             AABB topSurface = new AABB(
                     box.minX,
                     box.maxY,
                     box.minZ,
                     box.maxX,
-                    box.maxY + 2.0,
+                    box.maxY + heightCheck, 
                     box.maxZ
-            );
+            ).inflate(0.5, 0.0, 0.5);
 
             List<Entity> entities = level().getEntitiesOfClass(Entity.class, topSurface,
                     entity -> entity instanceof Player &&
@@ -714,16 +925,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             );
 
             if (!entities.isEmpty()) {
-                //playSound(SoundEvents.AMETHYST_BLOCK_CHIME);
-                //for (Entity entity : entities) {
-                //    entity.hurtMarked = true;
-                //    entity.push(0,0.05f,0);
-                //}
                 return true;
             }
         }
         return false;
     }
+    
+
 
     @Override
     public void playAmbientSound() {
@@ -732,7 +940,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         mouthTarget = 0.2f;
 
         for (int side : new int[]{-1, 1}) {
-            Vec3 particlePos = partPosition[1].add(new Vec3(3.5*side, 2, 0).yRot(-partYRot[1]));
+            Vec3 particlePos = partPosition[1].add(new Vec3(3.5 * side, 2, 0).yRot(-partYRot[1]));
             double x = particlePos.x;
             double y = particlePos.y;
             double z = particlePos.z;
@@ -764,47 +972,85 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected SoundEvent getSwimSound() {
         return WBSoundRegistry.HULLBACK_SWIM.get();
     }
+
     @Nullable
     @Override
     protected SoundEvent getHurtSound(DamageSource damageSource) {
         return WBSoundRegistry.HULLBACK_HURT.get();
     }
+
     @Nullable
     @Override
     protected SoundEvent getDeathSound() {
         return WBSoundRegistry.HULLBACK_DEATH.get();
     }
+
     @Nullable
     @Override
     protected SoundEvent getAmbientSound() {
         return WBSoundRegistry.HULLBACK_AMBIENT.get();
     }
 
-    protected void registerGoals() {
-        this.goalSelector.addGoal(0, new HullbackBreathAirGoal(this));
-        this.goalSelector.addGoal(1, new HullbackTryFindWaterGoal(this, true));
-        this.goalSelector.addGoal(2, new HullbackTryFindWaterGoal(this, false));
-        this.goalSelector.addGoal(2, new HullbackRandomSwimGoal(this, 1.0, 10));
-        this.goalSelector.addGoal(0, new HullbackApproachPlayerGoal(this, 0.01f));
-        this.goalSelector.addGoal(0, new HullbackArmorPlayerGoal(this, 0.005f));
-        this.goalSelector.addGoal(3, new FollowBoatGoal(this));
-    }
-
-    public void moveEntitiesOnTop(int index) {
+    public void moveEntitiesOnTop(int index, Set<Entity> movedThisTick) {
         HullbackPartEntity part = getSubEntities()[index];
-        Vec3 offset = partPosition[index].subtract(oldPartPosition[index]);
+        
+        // Body movement calculation
+        Vec3 bodyOffset = partPosition[index].subtract(oldPartPosition[index]);
 
-        if (offset.length() <= 0) return;
-        for (Entity entity : this.level().getEntities(part, part.getBoundingBox().inflate(0F, 0.01F, 0F), EntitySelector.NO_SPECTATORS.and((entity) -> (!entity.isPassenger())))) {
-            if (!entity.noPhysics && !(entity instanceof HullbackPartEntity) && !(entity instanceof HullbackEntity) && !(entity instanceof HullbackWalkableEntity)) {
-                double gravity = entity.isNoGravity() ? 0 : 0.08D;
-                if (entity instanceof LivingEntity living) {
-                    AttributeInstance attribute = living.getAttribute(net.minecraftforge.common.ForgeMod.ENTITY_GRAVITY.get());
-                    gravity = attribute.getValue();
+        // NEW: Platform height delta calculation (Relative Height Fix)
+        double heightDelta = (double)this.currentPlatformHeight - (double)this.oldPlatformHeight;
+
+        // Total movement = Body Movement + Height Variation
+        Vec3 totalOffset = bodyOffset.add(0, heightDelta, 0);
+
+        // If platforms are stable, DO NOT move anyone
+        if (this.platformsStable) {
+            return;
+        }
+
+        // Tiny threshold to ensure micro-movements are processed (Elevator Problem)
+        if (totalOffset.lengthSqr() < 1.0E-7) return; 
+
+        if (index > 2) return; // Only main platforms (0, 1, 2) move entities
+
+        // Search area expanded vertically (6.0F) to reach the deck
+        for (Entity entity : this.level().getEntities(part, part.getBoundingBox().inflate(0.5F, 6.0F, 0.5F), 
+             EntitySelector.NO_SPECTATORS.and((e) -> (!e.isPassenger())))) {
+            
+            if (!movedThisTick.contains(entity) && !entity.noPhysics && 
+                !(entity instanceof HullbackPartEntity) && 
+                !(entity instanceof HullbackEntity) && 
+                !(entity instanceof HullbackWalkableEntity)) {
+
+                // Checks if the entity is actually ON the platform visually
+                if (entity.getY() < part.getY() + currentPlatformHeight - 0.5) continue;
+                
+                double motionMultiplier = 0.5;
+                double entityMultiplier = motionMultiplier;
+                
+                if (entity instanceof Player player) {
+                    entityMultiplier *= 0.8;
+                    
+                    // If the player has been stable for more than 1 second, reduces horizontal movement
+                    if (playerStableTimer > 20) {
+                        entityMultiplier *= 0.1;
+                    }
+                    
+                    // --- ELEVATOR AND RELATIVE HEIGHT FIX ---
+                    // For the Player, we apply 100% of the vertical variation to ensure smooth contact
+                    Vec3 moveVec = new Vec3(totalOffset.x * entityMultiplier, totalOffset.y, totalOffset.z * entityMultiplier);
+                    
+                    entity.move(MoverType.SHULKER, moveVec);
+                    
+                    player.setOnGround(true);
+                    player.fallDistance = 0; // Prevents fall damage accumulated from jitter
+                } else {
+                    Vec3 moveVec = totalOffset.scale(entityMultiplier);
+                    entity.move(MoverType.SHULKER, moveVec);
                 }
-                float f2 = 1.0F;
-                entity.move(MoverType.SHULKER, new Vec3((double) (f2 * (float) offset.x), (double) (f2 * (float) offset.y), (double) (f2 * (float) offset.z)));
+                
                 entity.hurtMarked = true;
+                movedThisTick.add(entity);
             }
         }
     }
@@ -824,8 +1070,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return super.mobInteract(player, hand);
     }
 
-    public InteractionResult interactDebug(Player player, InteractionHand hand){
-        if(!isTamed()){
+    public InteractionResult interactDebug(Player player, InteractionHand hand) {
+        if (!isTamed()) {
             setTamed(true);
             this.setPersistenceRequired();
             //equipSaddle();
@@ -833,7 +1079,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
 
         System.out.println(level() + ": Seat Data: ");
-        for(int i = 0; i<7 ; i++){
+        for (int i = 0; i < 7; i++) {
             System.out.println("Seat " + i + ": " + this.entityData.get(getSeatAccessor(i)));
         }
 
@@ -841,6 +1087,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         return InteractionResult.SUCCESS;
     }
+
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
         if (seatIndex < 0 || seatIndex >= 7) {
             return InteractionResult.FAIL;
@@ -897,6 +1144,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         //entity.discard();
         return InteractionResult.FAIL;
     }
+
     private InteractionResult mountPlayer(Player player, int seatIndex) {
         for (int i = 0; i < 7; i++) {
             Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
@@ -913,6 +1161,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             return InteractionResult.FAIL;
         }
     }
+
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         mouthTarget = 0.2f;
         if ((handleVegetationRemoval(player, hand, part, top)) == InteractionResult.PASS) {
@@ -942,7 +1191,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
 
             for (int side : new int[]{-1, 1}) {
-                Vec3 particlePos = partPosition[1].add(new Vec3(4*side, 2, 0).yRot(partYRot[1]));
+                Vec3 particlePos = partPosition[1].add(new Vec3(4 * side, 2, 0).yRot(partYRot[1]));
                 double x = particlePos.x;
                 double y = particlePos.y;
                 double z = particlePos.z;
@@ -980,8 +1229,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                                 new BlockParticleOption(ParticleTypes.BLOCK, applyProperties(entry.block(), entry.blockProperties())),
                                 position().x, position().y + yOffset, position().z,
                                 60,
-                                3,0.2,-3
-                                ,0);
+                                3, 0.2, -3
+                                , 0);
 
                         dirtArray[x][y] = Blocks.AIR.defaultBlockState();
 
@@ -1040,8 +1289,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 }
             }
             return InteractionResult.PASS;
-        }
-        else if (heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
+        } else if (heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
             if (!isSaddled()) {
                 mouthTarget = 0.3f;
                 playSound(WBSoundRegistry.HULLBACK_MAD.get());
@@ -1050,7 +1298,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             ItemStack currentArmor = this.inventory.getItem(INV_SLOT_ARMOR);
 
-            if (currentArmor.getCount() == currentArmor.getMaxStackSize()){
+            if (currentArmor.getCount() == currentArmor.getMaxStackSize()) {
                 mouthTarget = 0.3f;
                 playSound(WBSoundRegistry.HULLBACK_MAD.get());
                 return InteractionResult.PASS;
@@ -1086,8 +1334,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                         SoundSource.PLAYERS, 1.0F, 1.0F);
                 this.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.ITEM_FRAME_REMOVE_ITEM,
-                        SoundSource.PLAYERS, 1.0F, 0.5f + ((float) currentArmor.getCount() /64));
-                if(currentArmor.getCount()==64){
+                        SoundSource.PLAYERS, 1.0F, 0.5f + ((float) currentArmor.getCount() / 64));
+                if (currentArmor.getCount() == 64) {
                     this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                             SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
                             SoundSource.PLAYERS, 2.0F, 1.0F);
@@ -1140,7 +1388,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     public boolean hurt(DamageSource source, float amount) {
         ItemStack armorStack = this.inventory.getItem(INV_SLOT_ARMOR);
-        ItemStack armorStackClient = this.entityData.get(DATA_ARMOR);
 
         float resistance = 1;
         if (armorStack.getItem() instanceof BlockItem blockItem) {
@@ -1154,26 +1401,21 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (!armorStack.isEmpty()) {
             float blockChance = resistance / 70f;
             if (this.random.nextFloat() < blockChance) {
-            amount = 0;
-            this.playSound(SoundEvents.SHIELD_BLOCK, 1.0F, 0.8F + this.random.nextFloat() * 0.4F);
-            this.playSound(WBSoundRegistry.HULLBACK_HAPPY.get(), 1.0F, 0.8F + this.random.nextFloat() * 0.4F);
-            updateContainerEquipment();
-            return super.hurt(source, amount);
+                this.playSound(SoundEvents.SHIELD_BLOCK, 1.0F, 0.8F + this.random.nextFloat() * 0.4F);
+                this.playSound(WBSoundRegistry.HULLBACK_HAPPY.get(), 1.0F, 0.8F + this.random.nextFloat() * 0.4F);
+                updateContainerEquipment();
+                return super.hurt(source, 0); // Blocked completely (parity with Ref)
             }
 
             mouthTarget = 0.8f;
             int originalCount = armorStack.getCount();
-            int armorDamage = Math.min(originalCount, (int)Math.ceil(amount));
+            int armorDamage = Math.min(originalCount, (int) Math.ceil(amount));
             armorStack.shrink(armorDamage);
             this.inventory.setItem(INV_SLOT_ARMOR, armorStack);
             this.entityData.set(DATA_ARMOR, armorStack);
             this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.random.nextFloat() * 0.4F);
             playSound(WBSoundRegistry.HULLBACK_MAD.get());
-            float remainingDamage = amount - armorDamage;
-            if (remainingDamage > 0) {
-                updateContainerEquipment();
-                return super.hurt(source, remainingDamage);
-            }
+            float remainingDamage = Math.max(0, amount - armorDamage);
             updateContainerEquipment();
             return super.hurt(source, remainingDamage);
         }
@@ -1218,14 +1460,38 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     public void onAddedToWorld() {
         super.onAddedToWorld();
+        // ENSURE data-synchers match the inventory on load to prevent UI wipes
         this.updateContainerEquipment();
-        this.inventory.setItem(INV_SLOT_ARMOR, this.entityData.get(DATA_ARMOR));
+        this.entityData.set(DATA_ARMOR, this.inventory.getItem(INV_SLOT_ARMOR));
+        this.entityData.set(DATA_CROWN_ID, this.inventory.getItem(INV_SLOT_CROWN));
     }
+
+    private record RotationSnapshot(float yaw, float bodyYaw, float headYaw) {}
+
     @Override
     public void tick() {
-        super.tick();
+        if (!this.level().isClientSide && this.isAlive()) {
+            // Grace zone: pause despawn timer if any player is within the configured radius
+            int graceRadius = com.fruityspikes.whaleborne.Config.hullbackDespawnGraceRadius;
+            boolean inGraceZone = false;
+            if (graceRadius > 0) {
+                double graceDistSq = (double) graceRadius * graceRadius;
+                net.minecraft.world.entity.player.Player nearestPlayer = this.level().getNearestPlayer(this, -1.0);
+                inGraceZone = nearestPlayer != null && nearestPlayer.distanceToSqr(this) < graceDistSq;
+            }
+            if (!inGraceZone) {
+                ticksSinceSpawn++;
+            }
+            if (!this.isPersistenceRequired() && !this.isTamed() && !this.hasCustomName()) {
+                long maxTicks = (long) com.fruityspikes.whaleborne.Config.hullbackDespawnTimeTicks * com.fruityspikes.whaleborne.Config.hullbackDespawnTimeMultiplier;
+                if (ticksSinceSpawn >= maxTicks) {
+                    this.discard();
+                    return;
+                }
+            }
+        }
 
-        if(tickCount % 40 == 0) {
+        if (tickCount % 40 == 0 && !this.level().isClientSide) {
             this.entityData.set(DATA_ARMOR, this.inventory.getItem(INV_SLOT_ARMOR));
         }
 
@@ -1233,43 +1499,53 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.inventory.setItem(INV_SLOT_ARMOR, getArmor());
         }
 
-        if (stationaryTicks>0){
-            stopMoving();
-            stationaryTicks--;
+        // Capture rotation snapshot for Hard Lock (Ported from 1.21.1 setup)
+        RotationSnapshot snapshot = new RotationSnapshot(this.getYRot(), this.yBodyRot, this.yHeadRot);
+
+        updateModifiers(); // Update speed modifiers every tick for instant acceleration response
+        handleStationaryState();
+
+        if (!this.level().isClientSide) {
+            this.entityData.set(DATA_STATIONARY_TICKS, stationaryTicks);
         }
 
-        if (scanPlayerAbove())
-            stationaryTicks=5;
+        // Core entity tick (ONLY ONCE)
+        super.tick();
 
-        if (stationaryTicks==0) {
-            if (this.moving_nose != null) {
-                this.moving_nose.discard();
-                this.moving_nose = null;
-            }
-            if (this.moving_head != null) {
-                this.moving_head.discard();
-                this.moving_head = null;
-            }
-            if (this.moving_body != null) {
-                this.moving_body.discard();
-                this.moving_body = null;
+        // Apply Hard Lock if stationary to prevent snapping caused by AI combat/movement
+        // BREATHING COMPATIBILITY: Do NOT lock pitch if the whale is trying to breach/breathe!
+        boolean isBreachingAction = false;
+        // Seek the goal if present
+        for (net.minecraft.world.entity.ai.goal.WrappedGoal goal : this.goalSelector.getAvailableGoals()) {
+            if (goal.getGoal() instanceof HullbackBreathAirGoal breachGoal) {
+                if (breachGoal.isBreaching()) isBreachingAction = true;
             }
         }
 
-        if(!this.isEyeInFluidType(Fluids.WATER.getFluidType()))
+        applyEnhancedPitchControl(snapshot, isBreachingAction);
+
+
+
+        // Discard logic: Only if NOT stationary (moving freely) AND not approaching
+        if (stationaryTicks == 0 && !scanPlayerAbove() && !isApproachingPlayer()) {
+            if (this.moving_nose != null) { this.moving_nose.discard(); this.moving_nose = null; }
+            if (this.moving_head != null) { this.moving_head.discard(); this.moving_head = null; }
+            if (this.moving_body != null) { this.moving_body.discard(); this.moving_body = null; }
+        }
+
+        if (!this.isEyeInFluidType(Fluids.WATER.getFluidType()))
             mouthTarget = 1;
 
-        if(!isSaddled() && !level().isClientSide){
-            if(!getPassengers().isEmpty()) {
+        if (!isSaddled() && !level().isClientSide) {
+            if (!getPassengers().isEmpty()) {
                 if (!getInventory().getItem(INV_SLOT_CROWN).isEmpty()) {
                     spawnAtLocation(getInventory().getItem(INV_SLOT_CROWN));
                     getInventory().setItem(INV_SLOT_CROWN, ItemStack.EMPTY);
                 }
                 ejectPassengers();
             }
-        }
-        else {
-            if(getArmorProgress() < 0.45f && getInventory().getItem(INV_SLOT_ARMOR).getCount() < 64 && !level().isClientSide) {
+        } else {
+            if (getArmorProgress() < 0.45f && getInventory().getItem(INV_SLOT_ARMOR).getCount() < 64 && !level().isClientSide) {
                 if (!getInventory().getItem(INV_SLOT_CROWN).isEmpty()) {
                     spawnAtLocation(getInventory().getItem(INV_SLOT_CROWN));
                     getInventory().setItem(INV_SLOT_CROWN, ItemStack.EMPTY);
@@ -1283,37 +1559,36 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         updatePartPositions();
         rotatePassengers();
 
-        if(this.getSubEntities()[1].isEyeInFluidType(Fluids.WATER.getFluidType()) && this.tickCount % 80 == 0)
+        if (this.getSubEntities()[1].isEyeInFluidType(Fluids.WATER.getFluidType()) && this.tickCount % 80 == 0)
             this.heal(0.25f);
 
         if (this.getDeltaMovement().length() > 0.3) {
             mouthTarget = 0.8f;
         }
 
-//        for (int i = 0; i < getSubEntities().length; i++) {
-//            //if (part.getDeltaMovement().length() > 0) {
-//            moveEntitiesOnTop(i);
-//            //}
-//        }
+        updatePlatformHeight();
+        // REMOVED: Unconditional updateWalkablePlatforms() (it was forcing phantom spawns)
+        updatePlayerStability();
+
+        Set<Entity> movedThisTick = new HashSet<>();
+        for (int i = 0; i < getSubEntities().length; i++) {
+            moveEntitiesOnTop(i, movedThisTick);
+        }
 
         updateMouthOpening();
-//        if (!level().isClientSide && getControllingPassenger() instanceof Player player) {
-//            setYRot(Mth.rotLerp(0.8f, getYRot(), getYRot() - player.xxa));
-//        }
-        if (getControllingPassenger() instanceof Player player) {
-            if(player.xxa != 0)
-                setYRot(Mth.rotLerp(0.8f, getYRot(), getYRot() - player.xxa));
+
+        if (this.level().isClientSide && this.getControllingPassenger() instanceof Player player && player.isLocalPlayer()) {
+            boolean shouldBeVector = isVectorControlActiveClient();
+            if (this.entityData.get(DATA_VECTOR_CONTROL) != shouldBeVector) {
+                WhaleborneNetwork.INSTANCE.sendToServer(new com.fruityspikes.whaleborne.network.ToggleControlPayload(shouldBeVector));
+            }
         }
-//        if(this.getControllingPassenger() instanceof Player){
-//            //if(this.level().isClientSide){
-//               // System.out.println(newRotY);
-//                //System.out.println(this.entityData.get(DATA_Y_ROT));
-//                this.setYRot(Mth.rotLerp(0.8f, this.getYRot(), newRotY));
-//            //}
-//        }
+
         if (this.tickCount % 80 == 0)
             mouthTarget = 0;
 
+        // Updates the previous height for the delta calculation in the next tick
+        this.oldPlatformHeight = this.currentPlatformHeight;
         if (this.tickCount % 20 == 0)
             validateAssignments();
 
@@ -1322,7 +1597,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         yHeadRot = yBodyRot + (partYRot[0] - partYRot[4]) * 1.5f;
 
-        if (isTamed() && partPosition!=null && partYRot!=null && partXRot!=null){
+        if (isTamed() && partPosition != null && partYRot != null && partXRot != null) {
             seats[0] = partPosition[0].add((seatOffsets[0]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
             seats[1] = partPosition[0].add((seatOffsets[1]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
             seats[2] = partPosition[2].add((seatOffsets[2]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
@@ -1341,13 +1616,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             oldSeats[6] = oldPartPosition[4].add((seatOffsets[6]).xRot(oldPartXRot[4] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[4] * Mth.DEG_TO_RAD));
         }
 
-        if(!level().isClientSide){
+        if (!level().isClientSide) {
             randomTickDirt(headDirt, true, getPartName(head));
             randomTickDirt(bodyDirt, true, getPartName(body));
             randomTickDirt(tailDirt, true, getPartName(tail));
             randomTickDirt(flukeDirt, true, getPartName(fluke));
 
-            if(!isTamed()){
+            if (!isTamed()) {
                 randomTickDirt(headTopDirt, false, getPartName(head));
                 randomTickDirt(bodyTopDirt, false, getPartName(body));
             } else {
@@ -1364,21 +1639,21 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        for (int i=0; i < subEntities.length; i++) {
+        for (int i = 0; i < subEntities.length; i++) {
             subEntities[i].tick();
 
-            if(i == 2 || i == 4) {
+            if (i == 2 || i == 4) {
                 float offset = 0;
                 if (this.level().isClientSide && this.isInWater() && this.getDeltaMovement().length() > 0.03) {
                     for (int side : new int[]{-1, 1}) {
-                        if(i == 2)
+                        if (i == 2)
                             offset = 4;
-                        Vec3 particlePos = partPosition[i].add(new Vec3((offset + subEntities[i].getSize().width / 2)*side, 0, subEntities[i].getSize().width / 2).yRot(partYRot[i]));
+                        Vec3 particlePos = partPosition[i].add(new Vec3((offset + subEntities[i].getSize().width / 2) * side, 0, subEntities[i].getSize().width / 2).yRot(partYRot[i]));
                         double x = particlePos.x;
                         double y = particlePos.y;
                         double z = particlePos.z;
 
-                        for(int j = 0; j < 4; ++j) {
+                        for (int j = 0; j < 4; ++j) {
                             this.level().addParticle(ParticleTypes.BUBBLE, x, y, z, 0.0, 0.1, 0.0);
                             this.level().addParticle(ParticleTypes.BUBBLE, x, y, z, 0.0, 0.1, 0.0);
                         }
@@ -1386,74 +1661,1418 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 }
             }
         }
+
+        // FINAL FIX: Removed the "12 blocks" check within tick().
+        // Platform appearance now depends EXCLUSIVELY on stationaryTicks being > 0.
+        // The stationaryTicks, in turn, is only set in handleStationaryState if the whale ACTUALLY stops or gets close.
+        if (this.getStationaryTicks() > 0) {
+            updateWalkablePlatforms();
+        }
     }
 
-    public boolean hasAnchorDown() {
+
+
+    private void handleStationaryState() {
+        // Maximum priority: If breathing, it doesn't stop.
+        if (this.isBreaching()) return;
+
+        LivingEntity currentPilot = getControllingPassenger();
+        
+        if (!wasPilotControlled && currentPilot != null) {
+            this.isApproachingPlayer = false;
+        }
+        
+        // Manage pilot -> dismounted transition (PORTED FROM 1.21.1)
+        if (currentPilot != null) {
+            this.stationaryTicks = 0; // Fix: Immediate acceleration when mounted (Fixes Speed Lag)
+            this.wasPilotControlled = true;
+            this.platformsStable = false;
+        } else if (this.wasPilotControlled) {
+            // Increase initial time after dismount
+            stationaryTicks = 200; 
+            this.wasPilotControlled = false;
+            this.platformsStable = false;
+        }
+        wasPilotControlled = currentPilot != null;
+
+        // CONFLICT LOGIC FIXED:
+        boolean playerDetectedOnTop = scanPlayerAbove();
+        
+        if (currentPilot == null && playerDetectedOnTop) {
+            if (this.isApproachingPlayer) {
+                // If the approach AI (scissor) is active:
+                // ONLY accepts turning into a statue if the whale has already arrived (nearly zero speed).
+                // If it's still fast, IGNORE the player and continue swimming.
+                if (this.getDeltaMovement().horizontalDistance() < 0.2) {
+                    stationaryTicks = Math.max(this.stationaryTicks, 60);
+                    this.setApproachingPlayer(false); // Arrived at destination, turns off approach.
+                }
+            } else {
+                // Default behavior (no tool in hand)
+                stationaryTicks = Math.max(this.stationaryTicks, 60);
+            }
+        }
+
+        // Counter execution
+        if (stationaryTicks > 0) {
+            // If still marked as "approaching", it DOES NOT stop movement,
+            // allows the AI to finish the path smoothly.
+            if (!isApproachingPlayer) {
+                stopMoving();
+            }
+            stationaryTicks--;
+        }
+        
+        // Platform stabilization (Only activates if it actually stops)
+        if (stationaryTicks > 10 && Math.abs(this.getDeltaMovement().y) < 0.005) { 
+            this.platformsStable = true;
+        } else {
+            this.platformsStable = false;
+        }
+    }
+
+    private void applyEnhancedPitchControl(RotationSnapshot snapshot, boolean isBreaching) {
+        boolean shouldLockPitch = false;
+          
+        // Hard Lock Conditions: Anchored OR (Stationary AND Stable AND Not Approaching)
+        if (this.hasAnchorDown()) {
+            shouldLockPitch = true;
+        } else if (this.getStationaryTicks() > 0 && this.platformsStable && !this.isApproachingPlayer) {
+             shouldLockPitch = true;
+        }
+        
+        if (shouldLockPitch && !isBreaching) {
+            // Restore rotation from snapshot to prevent spinning
+            this.setYRot(snapshot.yaw());
+            this.setYBodyRot(snapshot.bodyYaw());
+            this.setYHeadRot(snapshot.headYaw());
+            this.yRotO = snapshot.yaw();
+            this.yBodyRotO = snapshot.bodyYaw();
+            this.yHeadRotO = snapshot.headYaw();
+            
+            this.pitchLocked = true;
+            super.setXRot(0f);
+            this.xRotO = 0f;
+            this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
+        } else {
+            this.pitchLocked = false;
+        }
+    }
+
+    public void setMouthTarget(float mouthTarget) {
+        this.mouthTarget = mouthTarget;
+    }
+
+    @Override
+    protected BodyRotationControl createBodyControl() {
+        return new BodyRotationControl(this) {
+            @Override
+            public void clientTick() {
+                if (HullbackEntity.this.stationaryTicks > 0) return;
+                super.clientTick();
+            }
+        };
+    }
+
+    @Override
+    public void onPlayerJump(int i) {
+
+    }
+
+    @Override
+    public boolean canJump() {
+        return true;
+    }
+
+    @Override
+    public void handleStartJump(int i) {
+
+    }
+
+    @Override
+    public void handleStopJump() {
+
+    }
+
+    // PASSENGERS
+    @Override
+    public boolean canAddPassenger(Entity passenger) {
+        return (getPassengers().size() < 7);
+    }
+
+    private int getPartIndexForSeat(int seatIndex) {
+        if (seatIndex == 0 || seatIndex == 1) {
+            return 0; // Head
+        } else if (seatIndex >= 2 && seatIndex <= 5) {
+            return 2; // Body
+        } else if (seatIndex == 6) {
+            return 4; // Fluke
+        }
+        return 2; // Default to body if unknown
+    }
+
+    @Override
+    protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
+        if (!this.hasPassenger(passenger)) return;
+
+        int seatIndex = getSeatByEntity(passenger);
+        if (seatIndex == -1) {
+            return;
+        }
+
+        float yOffset = 0;
+        if (this.getArmorProgress() == 0)
+            yOffset = 0.5F;
+
+        if (seatIndex < seats.length) {
+            if (seats[seatIndex] != null)
+                callback.accept(passenger,
+                        seats[seatIndex].x,
+                        seats[seatIndex].y - yOffset + passenger.getMyRidingOffset(),
+                        seats[seatIndex].z);
+        }
+    }
+
+    private void updateModifiers() {
+        double speedModifier = 0.0;
+
+        // 1. Calculate potential speed from sails
         for (Entity passenger : getPassengers()) {
-            if (passenger instanceof AnchorEntity anchor) {
-                if (anchor.isDown()) return true;
-                break;
+            if (passenger instanceof SailEntity sail) {
+                speedModifier += sail.getSpeedModifier();
+            }
+        }
+
+        // 2. Enforce Pilot Requirement (HELM ONLY)
+        // Check if the controller is actually at a HelmEntity to apply sail bonus
+        LivingEntity pilot = this.getControllingPassenger();
+        if (pilot == null || !(pilot.getVehicle() instanceof HelmEntity)) {
+            speedModifier = 0.0;
+        }
+
+        AttributeInstance inst = this.getAttribute(net.minecraftforge.common.ForgeMod.SWIM_SPEED.get());
+        if (inst != null) {
+            // 3. Always remove the old modifier first to ensure a clean state
+            if (inst.getModifier(SAIL_SPEED_MODIFIER_UUID) != null) {
+                inst.removeModifier(SAIL_SPEED_MODIFIER_UUID);
+            }
+
+            // 4. Only add the new modifier if it's non-zero
+            if (speedModifier > 0.0) {
+                inst.addPermanentModifier(new AttributeModifier(
+                        SAIL_SPEED_MODIFIER_UUID,
+                        Whaleborne.MODID + ":sail_speed_modifier",
+                        speedModifier,
+                        AttributeModifier.Operation.ADDITION
+                ));
+            }
+        }
+    }
+
+    public static Attribute getSwimSpeed() {
+        return ForgeMod.SWIM_SPEED.isPresent() ? ForgeMod.SWIM_SPEED.get() : Attributes.MOVEMENT_SPEED;
+    }
+
+    public int getSeatByEntity(Entity entity) {
+        if (entity != null) {
+            for (int seatIndex = 0; seatIndex < 7; seatIndex++) {
+                Optional<UUID> seatOccupant = this.entityData.get(getSeatAccessor(seatIndex));
+                if (seatOccupant.isPresent() && seatOccupant.get().equals(entity.getUUID())) {
+                    return seatIndex;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private void validateAssignments() {
+        Set<UUID> currentPassengerUUIDs = this.getPassengers().stream()
+                .map(Entity::getUUID)
+                .collect(Collectors.toSet());
+
+        for (int seatIndex = 0; seatIndex < 7; seatIndex++) {
+            EntityDataAccessor<Optional<UUID>> seatAccessor = getSeatAccessor(seatIndex);
+            Optional<UUID> assignedUUID = this.entityData.get(seatAccessor);
+
+            if (assignedUUID.isPresent()) {
+                UUID uuid = assignedUUID.get();
+
+                if (!currentPassengerUUIDs.contains(uuid)) {
+                    boolean shouldClear = true;
+
+                    // "Smart" Check & Active Recovery
+                    if (this.level() instanceof ServerLevel serverLevel) {
+                        Entity passengerEntity = serverLevel.getEntity(uuid);
+
+                        if (passengerEntity == null) {
+                            // Entity still loading or dead. Wait up to 60s.
+                            if (this.tickCount < 1200) {
+                                shouldClear = false;
+                            }
+                        } else {
+                            if (passengerEntity.isAlive()) {
+                                Vec3 seatPos = seats[seatIndex]; // Current seat position
+                                // Teleport to sync position before mounting to avoid weird interpolation
+                                if (seatPos != null) {
+                                    passengerEntity.teleportTo(seatPos.x, seatPos.y, seatPos.z);
+                                }
+
+                                // Force re-mount
+                                passengerEntity.startRiding(this, true);
+
+                                // Do NOT clear the seat, we just fixed it.
+                                shouldClear = false;
+                            }
+                        }
+                    }
+
+                    if (shouldClear) {
+                        //Whaleborne.LOGGER.debug("Clearing seat assignment: seat {} for {}", seatIndex, uuid);
+                        this.entityData.set(seatAccessor, Optional.empty());
+                    }
+                } else {
+                    Entity passenger = getEntityByUUID(uuid);
+                    if (passenger != null && getSeatByEntity(passenger) != seatIndex) {
+                        //Whaleborne.LOGGER.debug("Correcting mismatched seat assignment: {} was in seat {} but belongs in {}",
+                        //passenger, seatIndex, getSeatByEntity(passenger));
+                        this.entityData.set(seatAccessor, Optional.empty());
+                    }
+                }
+            }
+        }
+    }
+
+    public void assignSeat(int seatIndex, @Nullable Entity passenger) {
+        if (passenger == null) {
+            this.entityData.set(getSeatAccessor(seatIndex), Optional.empty());
+        } else {
+            this.entityData.set(getSeatAccessor(seatIndex), Optional.of(passenger.getUUID()));
+        }
+        if (this.level() instanceof ServerLevel) {
+            PacketDistributor.TRACKING_ENTITY.with(() -> this)
+                    .send(new ClientboundSetPassengersPacket(this));
+        }
+    }
+
+    public Optional<Entity> getPassengerForSeat(int seatIndex) {
+        if (seatIndex < 0 || seatIndex >= 7) return Optional.empty();
+
+        return this.entityData.get(getSeatAccessor(seatIndex))
+                .flatMap(uuid -> this.getPassengers().stream()
+                        .filter(p -> p.getUUID().equals(uuid))
+                        .findFirst());
+    }
+
+    private boolean isPassengerAssigned(Entity passenger) {
+        for (int i = 0; i < 7; i++) {
+            Optional<UUID> seatUUID = this.entityData.get(getSeatAccessor(i));
+            if (seatUUID.isPresent() && seatUUID.get().equals(passenger.getUUID())) {
+                return true;
             }
         }
         return false;
     }
 
-    public HullbackWalkableEntity spawnPlatform(int index) {
-        if (!this.isDeadOrDying()) {
-            HullbackWalkableEntity part = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), this.level());
-            part.setPos(this.getSubEntities()[index].getX(), this.position().y + 4.7, this.getSubEntities()[index].getZ());
-            if (this.level().addFreshEntity(part)) {
-                return part;
+    private int findFreeSeat() {
+        for (int i = 0; i < 7; i++) {
+            if (this.entityData.get(getSeatAccessor(i)).isEmpty()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    @Override
+    protected void addPassenger(Entity passenger) {
+        super.addPassenger(passenger);
+        if (this.level() instanceof ServerLevel) {
+            PacketDistributor.TRACKING_ENTITY.with(() -> this)
+                    .send(new ClientboundSetPassengersPacket(this));
+        }
+    }
+
+    @Override
+    protected void removePassenger(Entity passenger) {
+        if (passenger instanceof Player)
+            stationaryTicks = 100;
+        if (passenger.isRemoved())
+            for (int i = 0; i < 7; i++) {
+                Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
+                if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
+                    this.entityData.set(getSeatAccessor(i), Optional.empty());
+                }
+            }
+        super.removePassenger(passenger);
+    }
+
+    @Override
+    public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
+        int seatIndex = getSeatByEntity(passenger);
+        if (seatIndex != -1) {
+            for (int i = 0; i < 7; i++) {
+                Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
+                if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
+                    this.entityData.set(getSeatAccessor(i), Optional.empty());
+                }
+            }
+
+            if (seatIndex >= 0 && seatIndex < seats.length) {
+                Vec3 seatPos = seats[seatIndex];
+                return new Vec3(seatPos.x, seatPos.y, seatPos.z);
+            }
+        }
+        return super.getDismountLocationForPassenger(passenger);
+    }
+
+    public void rotatePassengers() {
+        for (Entity passenger : getPassengers()) {
+            int seat = getSeatByEntity(passenger);
+            int partIndex;
+            float offset = 0;
+            if (seat == 0 || seat == 1) {
+                partIndex = 0;
+            } else if (seat == 2 || seat == 4) {
+                partIndex = 2;
+                offset = -1;
+            } else if (seat == 3 || seat == 5) {
+                partIndex = 2;
+                offset = 1;
+            } else if (seat == 6) {
+                partIndex = 4;
+            } else {
+                continue;
+            }
+
+            if (!(passenger instanceof Player)) {
+                if (!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())) {
+                    if (passenger instanceof SailEntity) {
+                        passenger.yRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), oldPartYRot[partIndex]) + offset);
+                        passenger.xRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), oldPartXRot[partIndex]));
+                        passenger.setYRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]) + offset);
+                        passenger.setXRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
+                    } else {
+                        passenger.yRotO = oldPartYRot[partIndex];
+                        passenger.xRotO = oldPartXRot[partIndex];
+                        passenger.setYRot((partYRot[partIndex]) + offset);
+                        passenger.setXRot(partXRot[partIndex]);
+                    }
+                }
+            }
+        }
+    }
+
+    @Nullable
+    @Override
+    public LivingEntity getControllingPassenger() {
+        for (int i = 0; i < 7; i++) {
+            Optional<UUID> seatOccupant = this.entityData.get(getSeatAccessor(i));
+            if (seatOccupant.isPresent()) {
+                Entity entity = getEntityByUUID(seatOccupant.get());
+
+                if (entity instanceof HelmEntity helm) {
+                    LivingEntity controller = helm.getControllingPassenger();
+                    if (controller != null) {
+                        return controller;
+                    }
+                }
             }
         }
         return null;
     }
 
-    public void stopMoving(){
-        this.getNavigation().stop();
+    public Entity getEntityByUUID(UUID uuid) {
+        for (Entity entity : getPassengers()) {
 
-        if (this.moving_nose == null) {
-            this.moving_nose = spawnPlatform(0);
-        } else {
-            if (this.tickCount % 5 == 0) {}
-                //this.moving_nose.moveTo(this.nose.getX(), this.getY() + 4.7, this.nose.getZ());
+            if (entity.getUUID().equals(uuid))
+                return entity;
         }
-
-        if (this.moving_head == null) {
-            this.moving_head = spawnPlatform(1);
-        } else {
-            if (this.tickCount % 5 == 0) {}
-                //this.moving_head.moveTo(this.head.getX(), this.getY() + 4.7, this.head.getZ());
-        }
-
-        if (this.moving_body == null) {
-            this.moving_body = spawnPlatform(2);
-        } else {
-            if (this.tickCount % 5 == 0) {}
-                //this.moving_body.moveTo(this.body.getX(), this.getY() + 4.7, this.body.getZ());
-        }
-
-        this.setPos(this.xo, this.yo, this.zo);
-        this.setYRot(yRotO);
-        this.setXRot(xRotO);
-        //this.setXxa(0.0F);
-        //this.setYya(0.0F);
+        return null;
     }
 
-//    private void updateWalkerPositions() {
-//        for ( HullbackPartEntity part : getSubEntities()) {
-//            AABB boundingBox = part.getBoundingBoxForCulling().move(0, 0.5f, 0);
-//
-//            List<Entity> riders = level().getEntities(part, boundingBox);
-//            riders.removeIf(rider -> rider.isPassenger());
-//
-//            for (Entity entity : riders) {
-//                if (entity instanceof HullbackEntity || entity instanceof HullbackPartEntity)
-//                    return;
-//                Vec3 offset = new Vec3
-//            }
-//        }
-//    }
+    private void syncMovement() {
+        if (!this.level().isClientSide) {
+            PacketDistributor.TRACKING_ENTITY.with(() -> this)
+                    .send(new ClientboundSetEntityMotionPacket(this.getId(), this.getDeltaMovement()));
+        }
+    }
+
+
+    public void setVectorControl(boolean active) {
+        this.entityData.set(DATA_VECTOR_CONTROL, active);
+    }
+
+
+    @Override
+    protected float getRiddenSpeed(Player player) {
+        return (float) (this.isHullbackInWater() ? this.getAttributeValue(net.minecraftforge.common.ForgeMod.SWIM_SPEED.get()) : this.getAttributeValue(Attributes.MOVEMENT_SPEED));
+    }
+
+    @Override
+    public boolean canBeRiddenUnderFluidType(FluidType type, Entity rider) {
+        return true;
+    }
+
+    @Override
+    public void openCustomInventoryScreen(Player player) {
+        openHullbackMenu(player);
+    }
+
+    private void openHullbackMenu(Player player) {
+        if (!level().isClientSide && player instanceof ServerPlayer serverPlayer && serverPlayer.getRootVehicle() instanceof HullbackEntity) {
+            NetworkHooks.openScreen(serverPlayer, new MenuProvider() {
+                @Override
+                public Component getDisplayName() {
+                    return HullbackEntity.this.getDisplayName();
+                }
+
+                @Override
+                public AbstractContainerMenu createMenu(int windowId, Inventory playerInventory, Player player) {
+                    return new HullbackMenu(windowId, playerInventory, HullbackEntity.this);
+                }
+            }, buf -> buf.writeInt(this.getId()));
+        }
+    }
+
+    protected class StationaryAwareMoveControl extends MoveControl {
+        private final int maxTurnX = 1;
+        private final int maxTurnY = 2;
+        private final float inWaterSpeedModifier = 1.0F;
+        private final float outsideWaterSpeedModifier = 1.0F;
+        private final boolean applyGravity = true;
+
+        public StationaryAwareMoveControl(HullbackEntity entity) {
+            super(entity);
+        }
+
+        @Override
+        public void tick() {
+            // INTEGRATED FIX: Allow movement if approaching player, even if stationary
+            if ((HullbackEntity.this.getStationaryTicks() > 0 && !HullbackEntity.this.isApproachingPlayer()) || HullbackEntity.this.pitchLocked) {
+                this.mob.setSpeed(0.0F);
+                this.mob.setZza(0.0F);
+                this.mob.setYya(0.0F);
+                // Also force XRot to 0 if locked, though setXRot override handles most of it
+                if (HullbackEntity.this.pitchLocked) {
+                    HullbackEntity.this.setXRot(0f);
+                }
+                return;
+            }
+
+            if (this.applyGravity && this.mob.isInWater()) {
+                this.mob.setDeltaMovement(this.mob.getDeltaMovement().add(0.0, 0.005, 0.0));
+            }
+
+            if (this.operation == MoveControl.Operation.MOVE_TO && !this.mob.getNavigation().isDone()) {
+                double d0 = this.wantedX - this.mob.getX();
+                double d1 = this.wantedY - this.mob.getY();
+                double d2 = this.wantedZ - this.mob.getZ();
+                double d3 = d0 * d0 + d1 * d1 + d2 * d2;
+                if (d3 < 2.5000003E-7F) {
+                    this.mob.setZza(0.0F);
+                } else {
+                    float f = (float)(Mth.atan2(d2, d0) * 180.0F / (float)Math.PI) - 90.0F;
+                    this.mob.setYRot(this.rotlerp(this.mob.getYRot(), f, (float)this.maxTurnY));
+                    this.mob.yBodyRot = this.mob.getYRot();
+                    this.mob.yHeadRot = this.mob.getYRot();
+
+                    // CRITICAL: Use SWIM_SPEED if in water, else MOVEMENT_SPEED
+                    double baseSpeed = this.mob.isInWater() ?
+                            this.mob.getAttributeValue(net.minecraftforge.common.ForgeMod.SWIM_SPEED.get()) :
+                            this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED);
+
+                    float f1 = (float)(this.speedModifier * baseSpeed);
+
+                    if (this.mob.isInWater()) {
+                        this.mob.setSpeed(f1 * this.inWaterSpeedModifier);
+                        double d4 = Math.sqrt(d0 * d0 + d2 * d2);
+                        if (Math.abs(d1) > 1.0E-5F || Math.abs(d4) > 1.0E-5F) {
+                            float f3 = -((float)(Mth.atan2(d1, d4) * 180.0F / (float)Math.PI));
+                            
+                            // Limit pitch angle during AI movement to prevent excessive tilting
+                            f3 = Mth.clamp(f3, -20f, 20f);
+
+                            f3 = Mth.clamp(Mth.wrapDegrees(f3), (float)(-this.maxTurnX), (float)this.maxTurnX);
+                            this.mob.setXRot(this.rotlerp(this.mob.getXRot(), f3, 5.0F));
+                        }
+
+                        float f6 = Mth.cos(this.mob.getXRot() * (float) (Math.PI / 180.0));
+                        float f4 = Mth.sin(this.mob.getXRot() * (float) (Math.PI / 180.0));
+                        this.mob.zza = f6 * f1;
+                        this.mob.yya = -f4 * f1;
+                    } else {
+                        float f5 = Math.abs(Mth.wrapDegrees(this.mob.getYRot() - f));
+                        float f2 = getTurningSpeedFactor(f5);
+                        this.mob.setSpeed(f1 * this.outsideWaterSpeedModifier * f2);
+                    }
+                }
+            } else {
+                this.mob.setSpeed(0.0F);
+                this.mob.setXxa(0.0F);
+                this.mob.setYya(0.0F);
+                this.mob.setZza(0.0F);
+            }
+        }
+
+        private float getTurningSpeedFactor(float p_249853_) {
+            return 1.0F - Mth.clamp((p_249853_ - 10.0F) / 50.0F, 0.0F, 1.0F);
+        }
+    }
+
+    protected class StationaryAwareLookControl extends LookControl {
+        public StationaryAwareLookControl(HullbackEntity entity) {
+            super(entity);
+        }
+
+        @Override
+        public void tick() {
+            if (HullbackEntity.this.getStationaryTicks() > 0) {
+                return;
+            }
+            super.tick();
+        }
+    }
+
+    class HullbackBodyRotationControl extends BodyRotationControl {
+        private final HullbackEntity hullback;
+
+        public HullbackBodyRotationControl(HullbackEntity hullback) {
+            super(hullback);
+            this.hullback = hullback;
+        }
+
+        @Override
+        public void clientTick() {
+            if (this.hullback.getStationaryTicks() > 0) return;
+            super.clientTick();
+        }
+    }
+
+    class HullbackRandomSwimGoal extends RandomSwimmingGoal {
+        private static final int HORIZONTAL_RANGE = 10;
+        private static final int VERTICAL_RANGE = 10;
+        private static final float FRONT_ANGLE = 45.0f;
+        private static final int STUCK_TIMEOUT = 100;
+        private static final double MIN_DISTANCE = 2.0;
+
+        private final HullbackEntity mob;
+        private int stuckTimer = 0;
+        private Vec3 lastPosition = Vec3.ZERO;
+        private Vec3 currentTarget = null;
+
+        public HullbackRandomSwimGoal(HullbackEntity mob, double speed, int interval) {
+            super(mob, speed, interval);
+            this.mob = mob;
+        }
+
+        @Override
+        public boolean canUse() {
+
+            if (mob.hasAnchorDown()) {
+                return false;
+            }
+
+            if (!this.forceTrigger) {
+                if (this.mob.getNoActionTime() >= 200) {
+                    return false;
+                }
+
+                if (this.mob.getRandom().nextInt(reducedTickDelay(this.interval)) != 0) {
+                    return false;
+                }
+            }
+
+            Vec3 vec3 = this.getPosition();
+            if (vec3 == null) {
+                return false;
+            } else {
+                this.wantedX = vec3.x;
+                this.wantedY = vec3.y;
+                this.wantedZ = vec3.z;
+                this.forceTrigger = false;
+                this.currentTarget = getPosition();
+                this.stuckTimer = 0;
+                this.lastPosition = mob.position();
+                this.mob.setNoActionTime(0);
+                return true;
+            }
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            if (currentTarget == null) {
+                return false;
+            }
+
+            Vec3 currentPos = mob.position();
+            if (currentPos.distanceTo(lastPosition) < 0.5) {
+                stuckTimer++;
+            } else {
+                stuckTimer = 0;
+            }
+            lastPosition = currentPos;
+
+            return stuckTimer < STUCK_TIMEOUT &&
+                    currentPos.distanceTo(currentTarget) > MIN_DISTANCE &&
+                    !mob.getNavigation().isDone();
+        }
+
+        @Override
+        public void start() {
+            if (currentTarget != null) {
+                mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, speedModifier);
+            }
+        }
+
+        @Override
+        public void stop() {
+            super.stop();
+            currentTarget = null;
+        }
+
+        @Override
+        public void tick() {
+            super.tick();
+
+            if (!((HullbackEntity)mob).nose.isEyeInFluidType(Fluids.WATER.getFluidType())) {
+                 mob.setDeltaMovement(mob.getDeltaMovement().add(0, -0.1, 0));
+            }
+
+            if (currentTarget != null && mob.getNavigation().isDone() && mob.position().distanceTo(currentTarget) > MIN_DISTANCE) {
+                mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, speedModifier);
+            }
+            if (this.mob.getDeltaMovement().length() > 0.5) mouthTarget = 1;
+        }
+
+        protected Vec3 getPosition() {
+            Vec3 target = Vec3.ZERO;
+            target = mob.getRandom().nextFloat() < 0.7f ?
+                    findPositionInFront() :
+                    BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
+            return target == null ? mob.position() : target;
+        }
+
+        private Vec3 findPositionInFront() {
+            Vec3 lookAngle = mob.getLookAngle();
+            Vec3 mobPos = mob.position();
+
+            for (int i = 0; i < 10; i++) {
+                float angle = mob.getRandom().nextFloat() * FRONT_ANGLE * 2 - FRONT_ANGLE;
+                Vec3 direction = lookAngle.yRot((float) Math.toRadians(angle));
+
+                float distance = HORIZONTAL_RANGE;
+                Vec3 targetPos = mobPos.add(direction.scale(distance));
+
+                targetPos = targetPos.add(0, mob.getRandom().nextFloat() * VERTICAL_RANGE * 2 - VERTICAL_RANGE, 0);
+
+                if (isSwimmablePos(mob, targetPos)) {
+                    return targetPos;
+                }
+            }
+            return BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
+        }
+
+        private boolean isSwimmablePos(PathfinderMob entity, Vec3 targetPos) {
+            return entity.level().getBlockState(BlockPos.containing(targetPos))
+                    .isPathfindable(entity.level(), BlockPos.containing(targetPos), PathComputationType.WATER);
+        }
+    }
+
+    public class HullbackBreathAirGoal extends Goal {
+        private static final int BREACH_HEIGHT = 10; // Blocks above surface to breach
+        private static final float BREACH_SPEED = 1.2f;
+        private static final float ROTATION_SPEED = 10f;
+
+        private final HullbackEntity hullback;
+        private int breachCooldown = 0;
+        private boolean isBreachingGoal = false; // Renamed to avoid confusion with field
+        private Vec3 initialPos;
+
+        public HullbackBreathAirGoal(HullbackEntity hullback) {
+            this.hullback = hullback;
+            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
+        }
+
+        @Override
+        public boolean canUse() {
+            // FIX: Allows surfacing if air is critical, even if stationaryTicks > 0
+            if(hullback.stationaryTicks > 0 && this.hullback.getAirSupply() > 100) return false;
+
+            for (net.minecraft.world.entity.Entity passenger : hullback.getPassengers()) {
+                if (passenger instanceof net.minecraft.world.entity.player.Player) {
+                    return false;
+                }
+            }
+            if (breachCooldown > 0) {
+                breachCooldown--;
+                return false;
+            }
+            return this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() * 0.2;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            return (this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() ||
+                    !this.hullback.isInWater());
+        }
+
+        @Override
+        public void start() {
+            this.isBreachingGoal = true;
+            this.hullback.setBreaching(true);
+            this.initialPos = this.hullback.position();
+            this.hullback.getNavigation().stop();
+
+            int surfaceY = this.hullback.level().getSeaLevel();
+            Vec3 breachTarget = new Vec3(
+                    this.hullback.getX(),
+                    surfaceY + BREACH_HEIGHT,
+                    this.hullback.getZ()
+            );
+
+            this.hullback.getMoveControl().setWantedPosition(
+                    breachTarget.x,
+                    breachTarget.y,
+                    breachTarget.z,
+                    BREACH_SPEED
+            );
+        }
+
+        @Override
+        public void tick() {
+            super.tick();
+
+            float targetXRot = -60f;
+            this.hullback.setXRot(Mth.rotLerp(ROTATION_SPEED * 0.1f, this.hullback.getXRot(), targetXRot));
+
+            if (this.hullback.isInWater()) {
+                float yRotRad = this.hullback.getYRot() * (float) (Math.PI / 180.0);
+                
+                this.hullback.setDeltaMovement(new Vec3(0, 1.2, 0.8).yRot(-yRotRad));
+            }
+
+            if (this.hullback.getY() >= this.hullback.level().getSeaLevel() &&
+                    this.hullback.level().isClientSide) {
+                for (int i = 0; i < 5; i++) {
+                    this.hullback.level().addParticle(ParticleTypes.SPLASH,
+                            this.hullback.getX() + (this.hullback.getRandom().nextFloat() - 0.5f) * 3f,
+                            this.hullback.level().getSeaLevel(),
+                            this.hullback.getZ() + (this.hullback.getRandom().nextFloat() - 0.5f) * 3f,
+                            0, 0.5, 0);
+                }
+            }
+        }
+
+        @Override
+        public void stop() {
+            this.isBreachingGoal = false;
+            this.hullback.setBreaching(false);
+            this.breachCooldown = 200;
+
+            this.hullback.setAirSupply(this.hullback.getMaxAirSupply());
+
+            if (this.hullback.level().isClientSide) {
+                if (this.hullback.getPartPos(2) != null) {
+                    for (int i = 0; i < 20; i++) {
+                        this.hullback.level().addParticle(ParticleTypes.BUBBLE,
+                                this.hullback.getPartPos(2).x,
+                                this.hullback.getPartPos(2).y,
+                                this.hullback.getPartPos(2).z,
+                                (this.hullback.getRandom().nextFloat() - 0.5f) * 0.5f,
+                                this.hullback.getRandom().nextFloat() * 0.5f,
+                                (this.hullback.getRandom().nextFloat() - 0.5f) * 0.5f);
+                    }
+                }
+                this.hullback.setMouthTarget(0.0f);
+            }
+
+            if (this.hullback.getPartPos(1) != null) {
+                Vec3 particlePos = this.hullback.getPartPos(1).add(new Vec3(0, 7, 0));
+                double x = particlePos.x;
+                double y = particlePos.y;
+                double z = particlePos.z;
+
+                if (this.hullback.level() instanceof ServerLevel serverLevel) {
+                      // Check registry existence to avoid error
+                      if (com.fruityspikes.whaleborne.server.registries.WBParticleRegistry.SMOKE != null) {
+                        serverLevel.sendParticles(
+                                com.fruityspikes.whaleborne.server.registries.WBParticleRegistry.SMOKE.get(),
+                                x,
+                                y,
+                                z,
+                                50,
+                                0.2,
+                                0.2,
+                                0.2,
+                                0.02
+                        );
+                    }
+                }
+            }
+
+            this.hullback.playSound(com.fruityspikes.whaleborne.server.registries.WBSoundRegistry.HULLBACK_BREATHE.get(), 3.0f, 1);
+            this.hullback.setXRot(Mth.rotLerp(0.1f, this.hullback.getXRot(), 0));
+        }
+
+        public boolean isBreaching() {
+            return this.isBreachingGoal;
+        }
+    }
+
+
+    public class HullbackArmorPlayerGoal extends Goal {
+        private static final float APPROACH_DISTANCE = 6.0f; // Slightly increased to avoid crude collision
+        private static final float SIDE_OFFSET = 5.0f;
+        private static final float ROTATION_SPEED = 0.8f;
+        private static Ingredient TEMPT_PLANKS = Ingredient.of(WBTagRegistry.HULLBACK_EQUIPPABLE);
+        private static Ingredient TEMPT_WIDGETS = Ingredient.of(WBItemRegistry.SAIL.get(), WBItemRegistry.ANCHOR.get(), WBItemRegistry.MAST.get(), WBItemRegistry.HELM.get(), WBItemRegistry.CANNON.get());
+        private final HullbackEntity hullback;
+        private final float speedModifier;
+        private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(40.0).ignoreLineOfSight(); // Increased range
+        private final TargetingConditions targetingConditions;
+        private Player targetPlayer;
+        private boolean approachFromRight;
+        private Vec3 targetPosition;
+
+        public HullbackArmorPlayerGoal(HullbackEntity hullback, float speedModifier) {
+            this.hullback = hullback;
+            this.speedModifier = speedModifier;
+            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
+            this.targetingConditions = TEMP_TARGETING.copy().selector(this::shouldFollow);
+        }
+
+        private boolean shouldFollow(LivingEntity entity) {
+            if (isSaddled()) {
+                if (getArmorProgress() >= 0.5 && getArmorProgress() < 1)
+                    return TEMPT_PLANKS.test(entity.getMainHandItem()) || TEMPT_PLANKS.test(entity.getOffhandItem()) || TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
+                if (getArmorProgress() == 1)
+                    return TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
+                return TEMPT_PLANKS.test(entity.getMainHandItem()) || TEMPT_PLANKS.test(entity.getOffhandItem());
+            }
+            return false;
+        }
+
+        @Override
+        public boolean canUse() {
+            if (hullback.hasAnchorDown()) return false;
+            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 40, 50, 40);
+            if (this.targetPlayer == null) return false;
+            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback))))
+                return false;
+            return true;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            return canUse();
+        }
+
+        @Override
+        public void start() {
+            this.hullback.setApproachingPlayer(true);
+            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
+            Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
+            this.approachFromRight = toPlayer.dot(whaleRight) > 0;
+            playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
+            this.hullback.mouthTarget = 0.1f;
+        }
+
+        @Override
+        public void stop() {
+            this.hullback.setApproachingPlayer(false);
+            this.targetPlayer = null;
+            this.targetPosition = null;
+            this.hullback.setTarget(null);
+            this.hullback.getNavigation().stop();
+            this.hullback.mouthTarget = 0.0f;
+        }
+
+        @Override
+        public void tick() {
+            if (this.targetPlayer == null) return;
+
+            this.hullback.mouthTarget = 0.6f;
+
+            // Constantly recalculates target for smoothness
+            Vec3 playerLook = this.targetPlayer.getLookAngle();
+            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
+            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
+            this.targetPosition = this.targetPlayer.position()
+                    .add(sideOffset)
+                    .add(playerLook.scale(-APPROACH_DISTANCE));
+
+            double distSqr = this.hullback.position().distanceToSqr(targetPosition);
+
+            // HYBRID NAVIGATION SYSTEM
+            // If standard navigation fails (common on surface) or is too close/far, we use brute force.
+            boolean pathFound = this.hullback.getNavigation().moveTo(targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
+
+            if (!pathFound || this.hullback.getNavigation().isDone()) {
+                // Manual Vector "Push"
+                Vec3 moveDir = targetPosition.subtract(this.hullback.position()).normalize();
+                // Applies smooth speed in the target direction
+                double speed = this.speedModifier * 0.15; // Manual speed fine tuning
+                this.hullback.setDeltaMovement(this.hullback.getDeltaMovement().add(moveDir.scale(speed)));
+                
+                // Manual Rotation (Smooth Look)
+                double d0 = targetPosition.x - this.hullback.getX();
+                double d2 = targetPosition.z - this.hullback.getZ();
+                float targetYaw = (float)(Mth.atan2(d2, d0) * (double)(180F / (float)Math.PI)) - 90.0F;
+                this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
+                this.hullback.yBodyRot = this.hullback.getYRot();
+            }
+        }
+    }
+
+    public class HullbackApproachPlayerGoal extends Goal {
+        private static final float APPROACH_DISTANCE = 6.0f; 
+        private static final float SIDE_OFFSET = 5.0f;
+        
+        private static Ingredient TEMPT_SADDLE = Ingredient.of(Items.SADDLE);
+        private static Ingredient TEMPT_ITEMS = Ingredient.of(Items.SHEARS);
+        private static Ingredient TEMPT_AXES = Ingredient.of(ItemTags.AXES);
+        private final HullbackEntity hullback;
+        private final float speedModifier;
+        private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(40.0).ignoreLineOfSight();
+        private final TargetingConditions targetingConditions;
+        private Player targetPlayer;
+        private boolean approachFromRight;
+        private Vec3 targetPosition;
+
+        public HullbackApproachPlayerGoal(HullbackEntity hullback, float speedModifier) {
+            this.hullback = hullback;
+            this.speedModifier = speedModifier;
+            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
+            this.targetingConditions = TEMP_TARGETING.copy().selector(this::shouldFollow);
+        }
+
+        private boolean shouldFollow(LivingEntity entity) {
+            if (isTamed() && !isSaddled())
+                return TEMPT_SADDLE.test(entity.getMainHandItem()) || TEMPT_SADDLE.test(entity.getOffhandItem()) || TEMPT_ITEMS.test(entity.getMainHandItem()) || TEMPT_ITEMS.test(entity.getOffhandItem()) || TEMPT_AXES.test(entity.getMainHandItem()) || TEMPT_AXES.test(entity.getOffhandItem());
+            return TEMPT_ITEMS.test(entity.getMainHandItem()) || TEMPT_ITEMS.test(entity.getOffhandItem()) || TEMPT_AXES.test(entity.getMainHandItem()) || TEMPT_AXES.test(entity.getOffhandItem());
+        }
+
+        @Override
+        public boolean canUse() {
+            if (hullback.hasAnchorDown()) return false;
+            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 40, 50, 40);
+            if (this.targetPlayer == null) return false;
+            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback))))
+                return false;
+            return true;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            return canUse();
+        }
+
+        @Override
+        public void start() {
+            this.hullback.setApproachingPlayer(true);
+            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
+            Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
+            this.approachFromRight = toPlayer.dot(whaleRight) > 0;
+            this.hullback.setTarget(this.targetPlayer);
+            playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
+            this.hullback.mouthTarget = 0.2f;
+        }
+
+        @Override
+        public void stop() {
+            this.hullback.setApproachingPlayer(false);
+            this.targetPlayer = null;
+            this.targetPosition = null;
+            this.hullback.setTarget(null);
+            this.hullback.getNavigation().stop();
+            this.hullback.mouthTarget = 0.0f;
+        }
+
+        @Override
+        public void tick() {
+            this.hullback.mouthTarget = 0.6f;
+            if (this.targetPlayer == null) return;
+
+            Vec3 playerLook = this.targetPlayer.getLookAngle();
+            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
+            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
+            this.targetPosition = this.targetPlayer.position()
+                    .add(sideOffset)
+                    .add(playerLook.scale(-APPROACH_DISTANCE));
+
+            // HYBRID SYSTEM: Tries to navigate, if fails, pushes.
+            boolean pathFound = this.hullback.getNavigation().moveTo(targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
+
+            if (!pathFound || this.hullback.getNavigation().isDone()) {
+                // Manual vector calculation to ensure movement even on the surface
+                Vec3 moveDir = targetPosition.subtract(this.hullback.position()).normalize();
+                
+                // Forces movement (This overcomes Pathfinding limitation on the surface)
+                double speed = this.speedModifier * 0.15;
+                this.hullback.setDeltaMovement(this.hullback.getDeltaMovement().add(moveDir.scale(speed)));
+
+                // Forces visual rotation
+                double d0 = targetPosition.x - this.hullback.getX();
+                double d2 = targetPosition.z - this.hullback.getZ();
+                float targetYaw = (float)(Mth.atan2(d2, d0) * (double)(180F / (float)Math.PI)) - 90.0F;
+                
+                this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
+                this.hullback.yBodyRot = this.hullback.getYRot();
+            }
+        }
+    }
+
+    public class HullbackTryFindWaterGoal extends Goal {
+        private final PathfinderMob mob;
+        private final boolean isBeached;
+
+        public HullbackTryFindWaterGoal(PathfinderMob mob, boolean isBeached) {
+            this.mob = mob;
+            this.isBeached = isBeached;
+        }
+
+        public boolean canUse() {
+            if (isBeached)
+                return mob.tickCount > 20 && (!this.mob.isEyeInFluidType(Fluids.WATER.getFluidType()) || !this.mob.level().getFluidState(mob.blockPosition().above(3)).is(FluidTags.WATER));
+            return mob.tickCount > 20 && !mob.level().getFluidState(mob.blockPosition().below()).is(FluidTags.WATER);
+        }
+
+        public void start() {
+            BlockPos blockpos = null;
+
+            Iterator var2 = BlockPos.betweenClosed(Mth.floor(this.mob.getX() - (isBeached ? 20.0 : 5)), Mth.floor(this.mob.getY() - 2.0), Mth.floor(this.mob.getZ() - (isBeached ? 20.0 : 5)), Mth.floor(this.mob.getX() + (isBeached ? 20.0 : 5)), this.mob.getBlockY(), Mth.floor(this.mob.getZ() + (isBeached ? 20.0 : 5))).iterator();
+
+            while (var2.hasNext()) {
+                BlockPos blockpos1 = (BlockPos) var2.next();
+                if (this.mob.level().getFluidState(blockpos1).is(FluidTags.WATER)) {
+                    blockpos = blockpos1;
+                    break;
+                }
+            }
+
+            if (blockpos != null) {
+                this.mob.getMoveControl().setWantedPosition((double) blockpos.getX(), (double) blockpos.getY(), (double) blockpos.getZ(), 1.0);
+                this.mob.getLookControl().setLookAt(mob.getMoveControl().getWantedX(), mob.getMoveControl().getWantedY(), mob.getMoveControl().getWantedZ());
+            }
+        }
+
+        @Override
+        public void tick() {
+            super.tick();
+
+            Vec3 target = new Vec3(mob.getMoveControl().getWantedX(),
+                    mob.getMoveControl().getWantedY(),
+                    mob.getMoveControl().getWantedZ());
+            float targetYRot = (float) Math.toDegrees(Math.atan2(target.z - mob.getZ(), target.x - mob.getX())) - 90;
+
+            mob.setYRot(Mth.rotLerp(0.01f, mob.getYRot(), targetYRot));
+
+
+            if (mob.tickCount % 10 == 0)
+                mob.playSound(WBSoundRegistry.HULLBACK_MAD.get());
+
+            if (mob.tickCount % 100 == 0 && !mob.level().getBlockState(mob.blockPosition().below()).isAir()) {
+
+                ((HullbackEntity) mob).mouthTarget = 0;
+
+                mob.getLookControl().setLookAt(target);
+                mob.setYRot(Mth.rotLerp(0.1f, mob.getYRot(), targetYRot));
+                mob.yBodyRot = mob.getYRot();
+                Vec3 direction = target.subtract(mob.position()).normalize();
+
+                double lungePower = 1.5; // Increased from 1.0 for better mobility
+                Vec3 velocity = direction.scale(lungePower).add(0, 1.0, 0); // Increased Y from 0.5 to 0.7
+                if (isBeached) {
+                    mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 2f);
+                    mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 1f);
+                    mob.playSound(WBSoundRegistry.HULLBACK_HURT.get(), Config.SOUND_DISTANCE.get().floatValue(), 0.2f);
+                    mob.playSound(WBSoundRegistry.HULLBACK_SWIM.get(), 2, 0.5f);
+                    pushEntities();
+                }
+                mob.setDeltaMovement(velocity);
+
+                mob.setYRot(Mth.rotLerp(0.2f, mob.getYRot(), targetYRot));
+                mob.yBodyRot = mob.getYRot();
+            }
+        }
+
+        public void pushEntities() {
+            AABB pushArea = mob.getBoundingBox().inflate(20);
+            List<Entity> pushableEntities = this.mob.level().getEntities(mob, pushArea);
+            pushableEntities.removeIf(entity -> !entity.isPushable() && entity.isPassenger());
+
+            Vec3 center = mob.position();
+            double pushStrength = 3;
+
+            for (Entity entity : pushableEntities) {
+
+                Vec3 pushDir = entity.position().subtract(center).normalize();
+                entity.push(
+                        pushDir.x * pushStrength,
+                        0.3,
+                        pushDir.z * pushStrength
+                );
+
+                if (this.mob.level() instanceof ServerLevel serverLevel) {
+                    serverLevel.sendParticles(
+                            WBParticleRegistry.SMOKE.get(),
+                            entity.getX(),
+                            entity.getY(),
+                            entity.getZ(),
+                            10,
+                            0.5,
+                            0.5,
+                            0.5,
+                            0.02
+                    );
+                }
+
+                if (entity instanceof LivingEntity living) {
+                    living.knockback(0.5f, pushDir.x, pushDir.z);
+                    living.hurtMarked = true;
+                }
+            }
+        }
+
+        @Override
+        public void stop() {
+            super.stop();
+            if (isBeached) {
+                this.mob.setAirSupply(this.mob.getMaxAirSupply());
+
+                if (this.mob.level().isClientSide) {
+                    for (int i = 0; i < 20; i++) {
+                        this.mob.level().addParticle(ParticleTypes.BUBBLE,
+                                ((HullbackEntity) mob).partPosition[2].x,
+                                ((HullbackEntity) mob).partPosition[2].y,
+                                ((HullbackEntity) mob).partPosition[2].z,
+                                (this.mob.getRandom().nextFloat() - 0.5f) * 0.5f,
+                                this.mob.getRandom().nextFloat() * 0.5f,
+                                (this.mob.getRandom().nextFloat() - 0.5f) * 0.5f);
+                    }
+                    ((HullbackEntity) mob).mouthTarget = 0.0f;
+                }
+
+                Vec3 particlePos = partPosition[1].add(new Vec3(0, 7, 0));
+                double x = particlePos.x;
+                double y = particlePos.y;
+                double z = particlePos.z;
+
+                if (this.mob.level() instanceof ServerLevel serverLevel) {
+                    serverLevel.sendParticles(
+                            WBParticleRegistry.SMOKE.get(),
+                            x,
+                            y,
+                            z,
+                            50,
+                            0.2,
+                            0.2,
+                            0.2,
+                            0.02
+                    );
+                }
+
+                this.mob.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), Config.SOUND_DISTANCE.get().floatValue() * 1.5f, 1);
+            }
+        }
+    }
+
+    // --- Ported Logic from 1.21.1 for 1.20.1 (Definitive Fix) ---
+
+    private boolean isVectorControlActive() {
+        if (this.level().isClientSide) {
+            return isVectorControlActiveClient();
+        }
+        return this.entityData.get(DATA_VECTOR_CONTROL);
+    }
+
+    @OnlyIn(Dist.CLIENT)
+    private boolean isVectorControlActiveClient() {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc.player == null || this.getControllingPassenger() != mc.player) {
+            return this.entityData.get(DATA_VECTOR_CONTROL);
+        }
+
+        if (IS_THIRD_PERSON_MOD_LOADED == null) {
+            IS_THIRD_PERSON_MOD_LOADED = net.minecraftforge.fml.ModList.get().isLoaded("leawind_third_person");
+        }
+
+        boolean isFirstPerson = mc.options.getCameraType().isFirstPerson();
+        return IS_THIRD_PERSON_MOD_LOADED && !isFirstPerson;
+    }
+
+    public boolean isHullbackInWater() {
+        return this.getFluidTypeHeight(net.minecraftforge.common.ForgeMod.WATER_TYPE.get()) > 0.4;
+    }
+
+    @Override
+    public void travel(Vec3 pTravelVector) {
+        if (this.isAlive()) {
+            boolean isHullbackInWater = this.isInWater() || this.getFluidTypeHeight(net.minecraftforge.common.ForgeMod.WATER_TYPE.get()) > 0.1;
+
+            // Stop horizontal movement if anchor is down or stationary (UNLESS BREACHING)
+            if ((this.hasAnchorDown() || (this.getStationaryTicks() > 0)) && isHullbackInWater && !this.isBreaching()) {
+                pTravelVector = Vec3.ZERO;
+            }
+
+            // --- BUOYANCY LOGIC (Ported from 1.21.1) ---
+            boolean isBreachingAction = false;
+            // Seek the goal if present
+            for (net.minecraft.world.entity.ai.goal.WrappedGoal goal : this.goalSelector.getAvailableGoals()) {
+                if (goal.getGoal() instanceof HullbackBreathAirGoal breachGoal) {
+                    if (breachGoal.isBreaching()) isBreachingAction = true;
+                    if (breachGoal.isBreaching()) this.setBreaching(true); // Update breaching state
+                }
+            }
+
+            boolean noseSubmerged = this.nose != null && this.nose.isEyeInFluidType(net.minecraftforge.common.ForgeMod.WATER_TYPE.get());
+
+            if (isHullbackInWater && !this.isBreaching()) {
+                this.setNoGravity(false);
+                boolean isAtHelm = this.getControllingPassenger() != null && this.getControllingPassenger().getVehicle() instanceof HelmEntity;
+
+                if (isAtHelm || (this.getStationaryTicks() > 0) || this.isTamed() || this.hasAnchorDown()) {
+                    // HELM, STATIONARY, TAMED, ANCHORED: Maintain target depth
+                    double targetY = this.level().getSeaLevel() + (isAtHelm ? Config.hullbackDepthSailing : Config.hullbackDepthBoarding);
+                    double diff = targetY - this.getY();
+
+                    // Aggressive Deadzone (Snap)
+                    if (Math.abs(diff) < BUOYANCY_DEADZONE) {
+                        this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
+                        this.setPos(this.getX(), targetY, this.getZ());
+                    } else {
+                        double verticalSpeed = Mth.clamp(diff * BUOYANCY_FORCE_FACTOR, -BUOYANCY_FORCE_MAX, BUOYANCY_FORCE_MAX);
+                        this.setDeltaMovement(this.getDeltaMovement().x, verticalSpeed, this.getDeltaMovement().z);
+                    }
+                } else {
+                    // WILD: Only push down if surfacing
+                    if (!noseSubmerged) {
+                        this.setDeltaMovement(this.getDeltaMovement().add(0, WILD_SINK_FORCE, 0));
+                    }
+                }
+            }
+
+            // PITCH STABILIZATION: Reset XRot to 0 if not controlled or ANCHORED/STATIONARY
+            // Apply on both client and server for smooth stabilization
+            // PITCH STABILIZATION: Reset XRot to 0 if not controlled or ANCHORED/STATIONARY
+            // Apply on both client and server for smooth stabilization
+            if (!isBreachingAction && (this.getControllingPassenger() == null || this.hasAnchorDown() || this.getStationaryTicks() > 0)) {
+                if (this.hasAnchorDown() || this.getStationaryTicks() > 0) {
+                    this.pitchLocked = true;
+                    this.setXRot(0f); // Calls override which forces super.setXRot(0)
+                    this.xRotO = 0f;
+                } else {
+                    float lerpSpeed = 0.08f;
+                    this.setXRot(Mth.rotLerp(lerpSpeed, this.getXRot(), 0f));
+                }
+            } else {
+                // If breaching or moving freely, ensure lock is released (though tick() also manages this)
+                if (isBreachingAction) this.pitchLocked = false;
+            }
+
+            if (this.isVehicle() && this.getControllingPassenger() instanceof Player player) {
+                Vec3 input = this.getRiddenInput(player, pTravelVector);
+                super.travel(input);
+            } else {
+                super.travel(pTravelVector);
+            }
+
+            // WIPE VERTICAL DRIFT IF AT HELM OR TAMED/STATIONARY IN DEADZONE
+            if ((this.getControllingPassenger() != null || this.isTamed() || this.hasAnchorDown() || this.getStationaryTicks() > 0) && this.isInWater()) {
+                double targetY = this.level().getSeaLevel() + (this.getControllingPassenger() != null ? Config.hullbackDepthSailing : Config.hullbackDepthBoarding);
+                if (Math.abs(targetY - this.getY()) < BUOYANCY_DEADZONE + 0.001) {
+                    this.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
+                    this.setPos(this.getX(), targetY, this.getZ());
+                }
+            }
+
+            // EXTRA FRICTION ON LAND
+            if (!isHullbackInWater && this.onGround()) {
+                BlockState surface = this.getBlockStateOn();
+                double friction = 0.3; // Standard land: Heavy
+
+                if (surface.is(Blocks.ICE) || surface.is(Blocks.PACKED_ICE) || surface.is(Blocks.BLUE_ICE)) {
+                    friction = 0.05; // Ice: Extremely locked down
+                }
+
+                this.setDeltaMovement(this.getDeltaMovement().multiply(friction, 1.0, friction));
+            }
+
+            // Final anchor lock
+            if (this.hasAnchorDown() && isHullbackInWater) {
+                this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
+            }
+        }
+    }
+
+    @Override
+    protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
+        boolean hasInput = Mth.abs(player.xxa) > 0 || Mth.abs(player.zza) > 0;
+
+        if (hasInput) {
+            if (hasAnchorDown()) {
+                if (tickCount % 10 == 0) this.playSound(SoundEvents.WOOD_HIT, 1, 1);
+                return Vec3.ZERO;
+            }
+
+            if (tickCount % 2 == 0) this.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
+
+            if (getControllingPassenger() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity) {
+                helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / 10);
+            }
+        } else {
+            if (getControllingPassenger() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity) {
+                helmEntity.setPrevWheelRotation(helmEntity.getWheelRotation());
+            }
+        }
+
+        boolean vectorControl = isVectorControlActive();
+
+        float xxa = player.xxa;
+        float zza = player.zza;
+
+        if (this.isInWater()) {
+            float currentPitch = this.getXRot();
+            float maxPitch = 25f; // Maximum tilt angle in degrees
+
+            if (Math.abs(currentPitch) > maxPitch) {
+                this.setXRot(Mth.clamp(currentPitch, -maxPitch, maxPitch));
+                this.xRotO = this.getXRot();
+            }
+        }
+
+        if (vectorControl) {
+            // --- VECTOR MODE (3rd Person) ---
+            if (hasInput) {
+                float targetYaw = player.getYRot() - (float) (Mth.atan2(player.xxa, player.zza) * (180D / Math.PI));
+
+                this.setYRot(Mth.rotLerp(0.05f, this.getYRot(), targetYaw));
+                this.yBodyRot = this.getYRot();
+                this.yHeadRot = this.getYRot();
+
+                zza = Mth.sqrt(xxa * xxa + zza * zza);
+                xxa = 0;
+            } else {
+                zza = 0;
+            }
+        } else {
+            // --- TANK MODE (1st Person) ---
+            if (zza <= 0.0F) {
+                zza *= 0.25F;
+            }
+
+            // Lateral input becomes ROTATION
+            if (player.xxa != 0) {
+                this.setYRot(Mth.rotLerp(0.8F, this.getYRot(), this.getYRot() - player.xxa));
+                this.yBodyRot = this.getYRot();
+            }
+
+            xxa = 0; // Prevent drift
+        }
+
+        // Buoyancy is handled EXCLUSIVELY in travel() to prevent "up and down" quivering (1.21.1 Parity)
+        // Ensure we don't return vertical force here
+        return new Vec3(0, 0, zza);
+    }
 
     private void randomTickDirt(BlockState[][] array, boolean bottom, String partName) {
         if (bottom) {
@@ -1564,7 +3183,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     private void updateMouthOpening() {
         mouthOpenProgress = (float) Mth.lerp(0.3, mouthOpenProgress, mouthTarget);
-        if(!this.level().isClientSide){
+        if (!this.level().isClientSide) {
             this.entityData.set(DATA_MOUTH_PROGRESS, mouthOpenProgress);
         }
     }
@@ -1572,34 +3191,39 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public float getMouthOpenProgress() {
         return this.entityData.get(DATA_MOUTH_PROGRESS);
     }
-    public Vec3 getPartPos(int i){
+
+    public Vec3 getPartPos(int i) {
         return partPosition[i];
     }
 
-    public float getPartYRot(int i){
+    public float getPartYRot(int i) {
         return partYRot[i];
     }
-    public float getPartXRot(int i){
+
+    public float getPartXRot(int i) {
         return partXRot[i];
     }
 
-    public Vec3 getOldPartPos(int i){
+    public Vec3 getOldPartPos(int i) {
         return oldPartPosition[i];
     }
-    public float getOldPartYRot(int i){
+
+    public float getOldPartYRot(int i) {
         return oldPartYRot[i];
     }
-    public float getOldPartXRot(int i){
+
+    public float getOldPartXRot(int i) {
         return oldPartXRot[i];
     }
 
-    public void setOldPosAndRots(){
+    public void setOldPosAndRots() {
         for (int i = 0; i < 5; i++) {
             this.oldPartPosition[i] = subEntities[i].position();
             this.oldPartYRot[i] = subEntities[i].getYRot();
             this.oldPartXRot[i] = subEntities[i].getXRot();
         }
     }
+
     private void updatePartPositions() {
 
         float[] partDragFactors = new float[]{1f, 0.9f, 0.2f, 0.1f, 0.09f};
@@ -1615,10 +3239,31 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (prevPartPositions[0] == null) {
             for (int i = 0; i < prevPartPositions.length; i++) {
                 prevPartPositions[i] = position();
+                oldPartPosition[i] = position();
+                partPosition[i] = position();
             }
         }
 
-        float swimCycle = (float) (Mth.sin(this.tickCount * 0.1f) * this.getDeltaMovement().length());
+        // CRITICAL MODIFICATION: swimCycle = 0 when platforms are stable
+        float swimCycle;
+        if (this.pitchLocked || this.hasAnchorDown() || this.getStationaryTicks() > 0 || this.platformsStable) {
+            swimCycle = 0f;
+        } else {
+             // BREATHING COMPATIBILITY: Force swimCycle to 0 if breaching to prevent visual glitches
+             boolean isBreachingAction = false;
+             for (net.minecraft.world.entity.ai.goal.WrappedGoal goal : this.goalSelector.getAvailableGoals()) {
+                 if (goal.getGoal() instanceof HullbackBreathAirGoal breachGoal) {
+                     if (breachGoal.isBreaching()) isBreachingAction = true;
+                 }
+             }
+             if (scanPlayerAbove()) {
+                 swimCycle = (float) (Mth.sin(this.tickCount * 0.05f) * this.getDeltaMovement().horizontalDistance() * 0.3);
+             } else if(isBreachingAction) {
+                 swimCycle = 0f;
+             } else {
+                 swimCycle = (float) (Mth.sin(this.tickCount * 0.1f) * this.getDeltaMovement().horizontalDistance());
+             }
+        }
         float yawRad = -this.getYRot() * Mth.DEG_TO_RAD;
         float pitchRad = this.getXRot() * Mth.DEG_TO_RAD;
 
@@ -1639,9 +3284,30 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                         Mth.lerp(partDragFactors[i], prevPartPositions[i].y, baseOffsets[i].y),
                         Mth.lerp(partDragFactors[i], prevPartPositions[i].z, baseOffsets[i].z)
                 );
+
+                // Chain Constraint: Prevent parts from disconnecting
+                double maxDist = switch (i) {
+                    case 1 -> 3.55;
+                    case 2 -> 4.8;
+                    case 3 -> 4.8;
+                    case 4 -> 4.1;
+                    default -> 10.0;
+                };
+
+                Vec3 parentPos = prevPartPositions[i - 1];
+                double dist = baseOffsets[i].distanceTo(parentPos);
+                if (dist > maxDist) {
+                    baseOffsets[i] = parentPos.add(baseOffsets[i].subtract(parentPos).normalize().scale(maxDist));
+                }
             }
             prevPartPositions[i] = baseOffsets[i];
         }
+
+        // CRITICAL: Does not apply swimCycle if platforms are stable
+        float swimOffset1 = this.platformsStable ? 0f : swimCycle * 2;
+        float swimOffset2 = this.platformsStable ? 0f : swimCycle * 2;
+        float swimOffset3 = this.platformsStable ? 0f : swimCycle * 8;
+        float swimOffset4 = this.platformsStable ? 0f : swimCycle * 5.5f;
 
         this.partPosition[0] = prevPartPositions[0];
         this.partYRot[0] = calculateYaw(prevPartPositions[0], prevPartPositions[1]);
@@ -1650,27 +3316,27 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 partYRot[0],
                 partXRot[0]);
 
-        this.partPosition[1] = new Vec3(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z);
+        this.partPosition[1] = new Vec3(prevPartPositions[1].x, prevPartPositions[1].y + swimOffset1, prevPartPositions[1].z);
         this.partYRot[1] = calculateYaw(prevPartPositions[0], prevPartPositions[1]);
         this.partXRot[1] = calculatePitch(prevPartPositions[0], prevPartPositions[1]);
-        this.head.moveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z,
+        this.head.moveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimOffset1, prevPartPositions[1].z,
                 partYRot[1],
                 partXRot[1]);
 
-        this.partPosition[2] = new Vec3(prevPartPositions[2].x, prevPartPositions[2].y + swimCycle * 2, prevPartPositions[2].z);
+        this.partPosition[2] = new Vec3(prevPartPositions[2].x, prevPartPositions[2].y + swimOffset2, prevPartPositions[2].z);
         this.partYRot[2] = calculateYaw(prevPartPositions[1], prevPartPositions[2]);
         this.partXRot[2] = calculatePitch(prevPartPositions[1], prevPartPositions[2]);
         this.body.moveTo(prevPartPositions[2].x,
-                prevPartPositions[2].y + swimCycle * 2,
+                prevPartPositions[2].y + swimOffset2,
                 prevPartPositions[2].z,
                 partYRot[2],
                 partXRot[2]);
 
-        this.partPosition[3] = new Vec3(prevPartPositions[3].x, prevPartPositions[3].y + swimCycle * 8, prevPartPositions[3].z);
+        this.partPosition[3] = new Vec3(prevPartPositions[3].x, prevPartPositions[3].y + swimOffset3, prevPartPositions[3].z);
         this.partYRot[3] = calculateYaw(prevPartPositions[2], prevPartPositions[3]);
-        this.partXRot[3] = calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 1.5f - swimCycle * 20f;
+        this.partXRot[3] = calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 1.5f - (this.platformsStable ? 0 : swimCycle * 20f);
         this.tail.moveTo(prevPartPositions[3].x,
-                prevPartPositions[3].y + swimCycle * 8,
+                prevPartPositions[3].y + swimOffset3,
                 prevPartPositions[3].z,
                 partYRot[3],
                 partXRot[3]);
@@ -1682,7 +3348,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         Vec3 flukeTarget = new Vec3(
                 tail.getX() + flukeOffset.x,
-                tail.getY() + flukeOffset.y + swimCycle * 10,
+                tail.getY() + flukeOffset.y + swimOffset4,
                 tail.getZ() + flukeOffset.z
         );
 
@@ -1693,19 +3359,33 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         this.partPosition[4] = flukeTarget;
         this.partYRot[4] = flukeYaw;
-        this.partXRot[4] = flukePitch * 1.5f + swimCycle * 30f;
+        this.partXRot[4] = flukePitch * 1.5f + (this.platformsStable ? 0 : swimCycle * 30f);
         this.fluke.moveTo(
                 flukeTarget.x,
                 flukeTarget.y,
                 flukeTarget.z,
                 flukeYaw,
-                (flukePitch * 1.5f + swimCycle * 30f)
+                (flukePitch * 1.5f + (this.platformsStable ? 0 : swimCycle * 30f))
         );
+
+        // Particles only when NOT stable
+        if (this.level().isClientSide && this.isInWater() && !this.platformsStable && this.getDeltaMovement().lengthSqr() > PARTICLE_SPEED_THRESHOLD_SQR) {
+            for (int i : new int[]{2, 4}) { // Body and Fluke trail
+                float offset = (i == 2) ? 4 : 0;
+                for (int side : SIDES) {
+                    Vec3 particlePos = partPosition[i].add(new Vec3((offset + subEntities[i].getBbWidth() / 2) * side, 0, subEntities[i].getBbWidth() / 2).yRot(-partYRot[i] * Mth.DEG_TO_RAD));
+                    for (int j = 0; j < 2; ++j) {
+                        this.level().addParticle(ParticleTypes.BUBBLE, particlePos.x, particlePos.y, particlePos.z, 0.0, 0.1, 0.0);
+                    }
+                }
+            }
+        }
     }
+
     private float calculateYaw(Vec3 from, Vec3 to) {
         double dx = to.x - from.x;
         double dz = to.z - from.z;
-        return (float)(Mth.atan2(dz, dx) * (180F / Math.PI)) + 90F;
+        return (float) (Mth.atan2(dz, dx) * (180F / Math.PI)) + 90F;
     }
 
     private float calculatePitch(Vec3 from, Vec3 to) {
@@ -1713,1013 +3393,151 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         double dy = to.y - from.y;
         double dz = to.z - from.z;
         double horizontalDistance = Math.sqrt(dx * dx + dz * dz);
-        return -(float)(Mth.atan2(dy, horizontalDistance) * (180F / Math.PI));
-    }
-    protected BodyRotationControl createBodyControl() {
-        return new HullbackBodyRotationControl(this);
+        return -(float) (Mth.atan2(dy, horizontalDistance) * (180F / Math.PI));
     }
 
-    @Override
-    public void onPlayerJump(int i) {
-
-    }
-
-    @Override
-    public boolean canJump() {
-        return true;
-    }
-
-    @Override
-    public void handleStartJump(int i) {
-
-    }
-
-    @Override
-    public void handleStopJump() {
-
-    }
-
-    // PASSENGERS
-    @Override
-    public boolean canAddPassenger(Entity passenger) {
-        return (getPassengers().size() < 7);
-    }
-    @Override
-    protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
-        if (!this.hasPassenger(passenger)) return;
-
-        int seatIndex = getSeatByEntity(passenger);
-        if (seatIndex == -1) {
-            return;
-            //getEntityByUUID(this.entityData.get(getSeatAccessor(-1)).get()).unRide();
-//            seatIndex = findFreeSeat();
-//            if (seatIndex != -1) {
-//                this.entityData.set(getSeatAccessor(seatIndex), Optional.of(passenger.getUUID()));
-//            } else {
-//                passenger.unRide();
-//                return;
-//            }
-        }
-
-        float yOffset = 0;
-        if(this.getArmorProgress() == 0)
-            yOffset = 0.5F;
-
-        if (seatIndex < seats.length) {
-            if(seats[seatIndex] != null)
-                callback.accept(passenger,
-                        seats[seatIndex].x,
-                        seats[seatIndex].y - yOffset + passenger.getMyRidingOffset(),
-                        seats[seatIndex].z);
-        }
-    }
-
-    private void updateModifiers() {
-        double speedModifier = 0.0;
-
+    public boolean hasAnchorDown() {
         for (Entity passenger : getPassengers()) {
-            if (passenger instanceof SailEntity sail) {
-                speedModifier += sail.getSpeedModifier();
-            }
-        }
-
-        AttributeInstance inst = this.getAttribute(getSwimSpeed());
-        if (inst != null) {
-            AttributeModifier old = inst.getModifier(SAIL_SPEED_MODIFIER_UUID);
-            if (old != null) {
-                inst.removeModifier(old);
-            }
-            if (speedModifier != 0.0) {
-                inst.addPermanentModifier(new AttributeModifier(
-                        SAIL_SPEED_MODIFIER_UUID,
-                        Whaleborne.MODID + ":sail_speed_modifier",
-                        speedModifier,
-                        AttributeModifier.Operation.ADDITION
-                ));
-            }
-        }
-    }
-
-    public static Attribute getSwimSpeed() {
-        return ForgeMod.SWIM_SPEED.isPresent() ? ForgeMod.SWIM_SPEED.get() : Attributes.MOVEMENT_SPEED;
-    }
-
-    public int getSeatByEntity(Entity entity){
-        if (entity != null) {
-            for (int seatIndex = 0; seatIndex < 7; seatIndex++) {
-                Optional<UUID> seatOccupant = this.entityData.get(getSeatAccessor(seatIndex));
-                if (seatOccupant.isPresent() && seatOccupant.get().equals(entity.getUUID())) {
-                    return seatIndex;
-                }
-            }
-        }
-        return -1;
-    }
-
-    private void validateAssignments() {
-        Set<UUID> currentPassengerUUIDs = this.getPassengers().stream()
-                .map(Entity::getUUID)
-                .collect(Collectors.toSet());
-
-        updateModifiers();
-        for (int seatIndex = 0; seatIndex < 7; seatIndex++) {
-            EntityDataAccessor<Optional<UUID>> seatAccessor = getSeatAccessor(seatIndex);
-            Optional<UUID> assignedUUID = this.entityData.get(seatAccessor);
-
-            if (assignedUUID.isPresent()) {
-                UUID uuid = assignedUUID.get();
-
-                if (!currentPassengerUUIDs.contains(uuid)) {
-                    //Whaleborne.LOGGER.debug("Clearing seat assignment: seat {} for {}", seatIndex, uuid);
-                    this.entityData.set(seatAccessor, Optional.empty());
-                }
-
-                else {
-                    Entity passenger = getEntityByUUID(uuid);
-                    if (passenger != null && getSeatByEntity(passenger) != seatIndex) {
-                        //Whaleborne.LOGGER.debug("Correcting mismatched seat assignment: {} was in seat {} but belongs in {}",
-                                //passenger, seatIndex, getSeatByEntity(passenger));
-                        this.entityData.set(seatAccessor, Optional.empty());
-                    }
-                }
-            }
-        }
-    }
-    public void assignSeat(int seatIndex, @Nullable Entity passenger) {
-        this.entityData.set(getSeatAccessor(seatIndex), Optional.of(passenger.getUUID()));
-        if (this.level() instanceof ServerLevel) {
-            PacketDistributor.TRACKING_ENTITY.with(() -> this)
-                    .send(new ClientboundSetPassengersPacket(this));
-        }
-    }
-
-    public Optional<Entity> getPassengerForSeat(int seatIndex) {
-        if (seatIndex < 0 || seatIndex >= 7) return Optional.empty();
-
-        return this.entityData.get(getSeatAccessor(seatIndex))
-                .flatMap(uuid -> this.getPassengers().stream()
-                        .filter(p -> p.getUUID().equals(uuid))
-                        .findFirst());
-    }
-    private boolean isPassengerAssigned(Entity passenger) {
-        for (int i = 0; i < 7; i++) {
-            Optional<UUID> seatUUID = this.entityData.get(getSeatAccessor(i));
-            if (seatUUID.isPresent() && seatUUID.get().equals(passenger.getUUID())) {
-                return true;
+            if (passenger instanceof AnchorEntity anchor) {
+                if (anchor.isDown()) return true;
+                break;
             }
         }
         return false;
     }
-    private int findFreeSeat() {
-        for (int i = 0; i < 7; i++) {
-            if (this.entityData.get(getSeatAccessor(i)).isEmpty()) {
-                return i;
-            }
-        }
-        return -1;
-    }
 
-    @Override
-    protected void addPassenger(Entity passenger) {
-        super.addPassenger(passenger);
-        //if (!this.level().isClientSide) {
-        //    // Update seat assignment
-        //    int seat = findFreeSeat();
-        //    if (seat != -1) {
-        //        assignSeat(seat, passenger);
-        //    }
-            // Sync immediately
-            if (this.level() instanceof ServerLevel) {
-                 PacketDistributor.TRACKING_ENTITY.with(() -> this)
-                        .send(new ClientboundSetPassengersPacket(this));
-            }
-        }
-//        if (!seatAssignments.containsValue(passenger.getUUID())) {
-//
-//            int availableSeat = IntStream.range(0, seats.length)
-//                    .filter(i -> !seatAssignments.containsKey(i))
-//                    .findFirst()
-//                    .orElse(0);
-//
-//            seatAssignments.put(availableSeat, passenger.getUUID());
-//            syncSeatAssignments();
-//        }
-//  }
-
-    @Override
-    protected void removePassenger(Entity passenger) {
-        if(passenger instanceof Player)
-            stationaryTicks = 100;
-        if(passenger.isRemoved())
-            for (int i = 0; i < 7; i++) {
-                Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
-                if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
-                    this.entityData.set(getSeatAccessor(i), Optional.empty());
-                }
-            }
-        super.removePassenger(passenger);
-    }
-
-    @Override
-    public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
-        int seatIndex = getSeatByEntity(passenger);
-        if (seatIndex != -1) {
-            for (int i = 0; i < 7; i++) {
-                Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
-                if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
-                    this.entityData.set(getSeatAccessor(i), Optional.empty());
-                }
-            }
-
-            if (seatIndex >= 0 && seatIndex < seats.length) {
-                Vec3 seatPos = seats[seatIndex];
-                return new Vec3(seatPos.x, seatPos.y, seatPos.z);
-            }
-        }
-        return super.getDismountLocationForPassenger(passenger);
-    }
-
-    public void rotatePassengers(){
-        for (Entity passenger : getPassengers()) {
-            int seat = getSeatByEntity(passenger);
-            int partIndex;
-            float offset = 0;
-            if (seat == 0 || seat == 1) {
-                partIndex = 0;
-            } else if (seat == 2 || seat == 4) {
-                partIndex = 2;
-                offset = -1;
-            } else if (seat == 3 || seat == 5) {
-                partIndex = 2;
-                offset = 1;
-            } else if (seat == 6) {
-                partIndex = 4;
-            } else {
-                continue;
-            }
-
-            if (!(passenger instanceof Player)) {
-                if(!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())){
-                    if(passenger instanceof SailEntity){
-                        passenger.yRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), oldPartYRot[partIndex]) + offset);
-                        passenger.xRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), oldPartXRot[partIndex]));
-                        passenger.setYRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]) + offset);
-                        passenger.setXRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
-                    }
-                    else {
-                        passenger.yRotO = oldPartYRot[partIndex];
-                        passenger.xRotO = oldPartXRot[partIndex];
-                        passenger.setYRot((partYRot[partIndex]) + offset);
-                        passenger.setXRot(partXRot[partIndex]);
-                    }
-                }
-            }
-        }
-    }
-
-    @Nullable
-    @Override
-    public LivingEntity getControllingPassenger() {
-        for (int i = 0; i < 7; i++) {
-            Optional<UUID> seatOccupant = this.entityData.get(getSeatAccessor(i));
-            if (seatOccupant.isPresent()) {
-                Entity entity = getEntityByUUID(seatOccupant.get());
-
-                if (entity instanceof HelmEntity helm) {
-                    LivingEntity controller = helm.getControllingPassenger();
-                    if (controller != null) {
-                        return controller;
-                    }
-                }
+    public HullbackWalkableEntity spawnPlatform(int index) {
+        if (!this.isDeadOrDying()) {
+            HullbackWalkableEntity part = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), this.level());
+            part.setPos(this.getSubEntities()[index].getX(), this.position().y + currentPlatformHeight, this.getSubEntities()[index].getZ());
+            if (this.level().addFreshEntity(part)) {
+                return part;
             }
         }
         return null;
     }
 
-    public Entity getEntityByUUID(UUID uuid) {
-        for (Entity entity : getPassengers()) {
+    public void stopMoving() {
+        this.getNavigation().stop();
 
-            if(entity.getUUID().equals(uuid))
-                return entity;
-        }
-        return null;
-    }
-
-    private void syncMovement() {
-        if (!this.level().isClientSide) {
-            PacketDistributor.TRACKING_ENTITY.with(() -> this)
-                    .send(new ClientboundSetEntityMotionPacket(this.getId(), this.getDeltaMovement()));
-        }
-    }
-
-    protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
-        if(Mth.abs(player.xxa) > 0){
-            if (hasAnchorDown()){
-                if (tickCount % 10 == 0)
-                    this.playSound(SoundEvents.WOOD_HIT);
-                return Vec3.ZERO;
-            }
-            if (tickCount % 2 == 0)
-                this.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON);
-            //newRotY = this.getYRot() - player.xxa;
-
-            if(getControllingPassenger().getVehicle() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
-                helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / 10);
-            }
-        } else{
-            if(getControllingPassenger().getVehicle() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
-                helmEntity.setPrevWheelRotation(helmEntity.getWheelRotation());
-            }
+        // Ported from 1.21.1: Preserve vertical only when anchored (buoyancy active); otherwise full stop
+        // Note: hasAnchorDown() check removed as it doesn't exist in 1.20.1 yet or isn't ported.
+        // For now, enforcing full stop to match user request for stability.
+        if (this.isInWater()) {
+            // SMOOTH DESCENT FIX: Preserve vertical velocity (Y) so 'travel' can handle buoyancy smoothly.
+            // Only zero X and Z.
+            this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
+        } else {
+            this.setDeltaMovement(Vec3.ZERO);
         }
 
-        float f = player.xxa * 0.5F;
-        float f1 = player.zza;
-        if (f1 <= 0.0F) {
-            f1 *= 0.25F;
-        }
-        float f3 = 0;
-        if(this.nose.isEyeInFluidType(Fluids.WATER.getFluidType()))
-            f3 = 1;
-
-        return new Vec3(0, f3, f1);
-    }
-
-    @Override
-    protected float getRiddenSpeed(Player player) {
-        return (float) this.getAttributeValue(Attributes.MOVEMENT_SPEED);
-    }
-
-    @Override
-    public boolean canBeRiddenUnderFluidType(FluidType type, Entity rider) {
-        return true;
-    }
-
-    @Override
-    public void openCustomInventoryScreen(Player player) {
-        openHullbackMenu(player);
-    }
-    private void openHullbackMenu(Player player) {
-        if (!level().isClientSide && player instanceof ServerPlayer serverPlayer && serverPlayer.getRootVehicle() instanceof HullbackEntity) {
-            NetworkHooks.openScreen(serverPlayer, new MenuProvider() {
-                @Override
-                public Component getDisplayName() {
-                    return HullbackEntity.this.getDisplayName();
-                }
-
-                @Override
-                public AbstractContainerMenu createMenu(int windowId, Inventory playerInventory, Player player) {
-                    return new HullbackMenu(windowId, playerInventory, HullbackEntity.this);
-                }
-            }, buf -> buf.writeInt(this.getId()));
+        // Also stabilize pitch when stopping
+        if (this.hasAnchorDown()) {
+            this.setXRot(Mth.rotLerp(0.5f, this.getXRot(), 0f));
+            this.xRotO = this.getXRot();
         }
     }
 
-    class HullbackBodyRotationControl extends BodyRotationControl {
-        public HullbackBodyRotationControl(HullbackEntity hullBack) {
-            super(hullBack);
-        }
-
-        public void clientTick() {
-            HullbackEntity.this.setYBodyRot(HullbackEntity.this.getYRot());
-        }
-    }
-    class HullbackRandomSwimGoal extends RandomSwimmingGoal {
-        private static final int HORIZONTAL_RANGE = 10;
-        private static final int VERTICAL_RANGE = 10;
-        private static final float FRONT_ANGLE = 45.0f;
-        private static final int STUCK_TIMEOUT = 100;
-        private static final double MIN_DISTANCE = 2.0;
-
-        private final HullbackEntity mob;
-        private int stuckTimer = 0;
-        private Vec3 lastPosition = Vec3.ZERO;
-        private Vec3 currentTarget = null;
-
-        public HullbackRandomSwimGoal(HullbackEntity mob, double speed, int interval) {
-            super(mob, speed, interval);
-            this.mob = mob;
-        }
-
-        @Override
-        public boolean canUse() {
-
-            if (mob.hasAnchorDown()) {
-                return false;
-            }
-
-            if (!this.forceTrigger) {
-                if (this.mob.getNoActionTime() >= 100) {
-                    return false;
-                }
-
-                if (this.mob.getRandom().nextInt(reducedTickDelay(this.interval)) != 0) {
-                    return false;
-                }
-            }
-
-            Vec3 vec3 = this.getPosition();
-            if (vec3 == null) {
-                return false;
+    private void updateWalkablePlatforms() {
+        // Uses fixed and stable height
+        double platformY = this.getY() + currentPlatformHeight;
+        
+        if (this.moving_nose == null) {
+            this.moving_nose = spawnPlatform(0);
+        } else {
+            this.moving_nose.moveTo(this.nose.getX(), platformY, this.nose.getZ());
+            this.moving_nose.setYRot(this.nose.getYRot());
+            
+            // CRITICAL: Delta movement ZERO when stable
+            if (this.platformsStable) {
+                this.moving_nose.setDeltaMovement(Vec3.ZERO);
             } else {
-                this.wantedX = vec3.x;
-                this.wantedY = vec3.y;
-                this.wantedZ = vec3.z;
-                this.forceTrigger = false;
-                this.currentTarget = getPosition();
-                this.stuckTimer = 0;
-                this.lastPosition = mob.position();
-                return true;
+                this.moving_nose.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
             }
         }
 
-        @Override
-        public boolean canContinueToUse() {
-            if (currentTarget == null) {
-                return false;
-            }
-
-            Vec3 currentPos = mob.position();
-            if (currentPos.distanceTo(lastPosition) < 0.5) {
-                stuckTimer++;
+        if (this.moving_head == null) {
+            this.moving_head = spawnPlatform(1);
+        } else {
+            this.moving_head.moveTo(this.head.getX(), platformY, this.head.getZ());
+            this.moving_head.setYRot(this.head.getYRot());
+            
+            if (this.platformsStable) {
+                this.moving_head.setDeltaMovement(Vec3.ZERO);
             } else {
-                stuckTimer = 0;
-            }
-            lastPosition = currentPos;
-
-            return stuckTimer < STUCK_TIMEOUT &&
-                    currentPos.distanceTo(currentTarget) > MIN_DISTANCE &&
-                    !mob.getNavigation().isDone();
-        }
-
-        @Override
-        public void start() {
-            if (currentTarget != null) {
-                mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, mob.isSaddled() ? 0.2f : speedModifier);
+                this.moving_head.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
             }
         }
 
-        @Override
-        public void stop() {
-            super.stop();
-            currentTarget = null;
-        }
-
-        @Override
-        public void tick() {
-            super.tick();
-
-            if(!mob.getSubEntities()[0].isEyeInFluidType(Fluids.WATER.getFluidType()))
-                mob.setDeltaMovement(0, -0.1, 0);
-
-            if (currentTarget != null && mob.getNavigation().isDone() && mob.position().distanceTo(currentTarget) > MIN_DISTANCE) {
-                mob.getNavigation().moveTo(currentTarget.x, currentTarget.y, currentTarget.z, speedModifier);
-            }
-            if(this.mob.getDeltaMovement().length() > 0.5) mouthTarget = 1;
-        }
-
-        protected Vec3 getPosition() {
-            Vec3 target = Vec3.ZERO;
-            target = mob.getRandom().nextFloat() < 0.7f ?
-                    findPositionInFront() :
-                    BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
-            return target == null ? mob.position() : target;
-        }
-
-        private Vec3 findPositionInFront() {
-            Vec3 lookAngle = mob.getLookAngle();
-            Vec3 mobPos = mob.position();
-
-            for (int i = 0; i < 10; i++) {
-                float angle = mob.getRandom().nextFloat() * FRONT_ANGLE * 2 - FRONT_ANGLE;
-                Vec3 direction = lookAngle.yRot((float)Math.toRadians(angle));
-
-                float distance = HORIZONTAL_RANGE;
-                Vec3 targetPos = mobPos.add(direction.scale(distance));
-
-                targetPos = targetPos.add(0, mob.getRandom().nextFloat() * VERTICAL_RANGE * 2 - VERTICAL_RANGE, 0);
-
-                if (isSwimmablePos(mob, targetPos)) {
-                    return targetPos;
-                }
-            }
-            return BehaviorUtils.getRandomSwimmablePos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
-        }
-
-        private boolean isSwimmablePos(PathfinderMob entity, Vec3 targetPos) {
-            return entity.level().getBlockState(BlockPos.containing(targetPos))
-                    .isPathfindable(entity.level(), BlockPos.containing(targetPos), PathComputationType.WATER);
-        }
-    }
-    public class HullbackBreathAirGoal extends Goal {
-        private static final int BREACH_HEIGHT = 5; // Blocks above surface to breach
-        private static final float BREACH_SPEED = 1.2f;
-        private static final float ROTATION_SPEED = 10f;
-
-        private final HullbackEntity hullback;
-        private int breachCooldown = 0;
-        private boolean isBreaching = false;
-        private Vec3 initialPos;
-
-        public HullbackBreathAirGoal(HullbackEntity hullback) {
-            this.hullback = hullback;
-            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
-        }
-
-        @Override
-        public boolean canUse() {
-
-            if (breachCooldown > 0) {
-                breachCooldown--;
-                return false;
-            }
-            return this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() * 0.2;
-        }
-
-        @Override
-        public boolean canContinueToUse() {
-            return (this.hullback.getAirSupply() < this.hullback.getMaxAirSupply() ||
-                    !this.hullback.isInWater());
-        }
-
-        @Override
-        public void start() {
-            this.isBreaching = true;
-            this.initialPos = this.hullback.position();
-            this.hullback.getNavigation().stop();
-
-            int surfaceY = this.hullback.level().getSeaLevel();
-            Vec3 breachTarget = new Vec3(
-                    this.hullback.getX(),
-                    surfaceY + BREACH_HEIGHT,
-                    this.hullback.getZ()
-            );
-
-            this.hullback.getMoveControl().setWantedPosition(
-                    breachTarget.x,
-                    breachTarget.y,
-                    breachTarget.z,
-                    BREACH_SPEED
-            );
-
-            //if (this.hullback.level().isClientSide) {
-            //    this.hullback.mouthTarget = 0.7f;
-            //    this.hullback.playSound(SoundEvents.ALLAY_HURT, 1.0f, 0.3f);
-            //}
-        }
-
-        @Override
-        public void tick() {
-            super.tick();
-
-            float targetXRot = -60f;
-            this.hullback.setXRot(Mth.rotLerp(ROTATION_SPEED * 0.1f, this.hullback.getXRot(), targetXRot));
-
-            if (this.hullback.isInWater()) {
-                this.hullback.setDeltaMovement(new Vec3(0.3, 0.8, 0).yRot(this.hullback.getYRot())
-                );
-            }
-
-            if (this.hullback.getY() >= this.hullback.level().getSeaLevel() &&
-                    this.hullback.level().isClientSide) {
-                for (int i = 0; i < 5; i++) {
-                    this.hullback.level().addParticle(ParticleTypes.SPLASH,
-                            this.hullback.getX() + (this.hullback.getRandom().nextFloat() - 0.5f) * 3f,
-                            this.hullback.level().getSeaLevel(),
-                            this.hullback.getZ() + (this.hullback.getRandom().nextFloat() - 0.5f) * 3f,
-                            0, 0.5, 0);
-                }
-            }
-        }
-
-        @Override
-        public void stop() {
-            this.isBreaching = false;
-            this.breachCooldown = 200;
-
-            this.hullback.setAirSupply(this.hullback.getMaxAirSupply());
-
-            if (this.hullback.level().isClientSide) {
-                for (int i = 0; i < 20; i++) {
-                    this.hullback.level().addParticle(ParticleTypes.BUBBLE,
-                            this.hullback.partPosition[2].x,
-                            this.hullback.partPosition[2].y,
-                            this.hullback.partPosition[2].z,
-                            (this.hullback.getRandom().nextFloat() - 0.5f) * 0.5f,
-                            this.hullback.getRandom().nextFloat() * 0.5f,
-                            (this.hullback.getRandom().nextFloat() - 0.5f) * 0.5f);
-                }
-                this.hullback.mouthTarget = 0.0f;
-            }
-
-            Vec3 particlePos = partPosition[1].add(new Vec3(0, 7, 0));
-            double x = particlePos.x;
-            double y = particlePos.y;
-            double z = particlePos.z;
-
-            if (this.hullback.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(
-                        WBParticleRegistry.SMOKE.get(),
-                        x,
-                        y,
-                        z,
-                        50,
-                        0.2,
-                        0.2,
-                        0.2,
-                        0.02
-                );
-            }
-
-            this.hullback.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), Config.SOUND_DISTANCE.get().floatValue(), 1);
-            this.hullback.setXRot(Mth.rotLerp(0.1f, this.hullback.getXRot(), 0));
-        }
-
-        public boolean isBreaching() {
-            return this.isBreaching;
-        }
-    }
-
-    public class HullbackArmorPlayerGoal extends Goal {
-        private static final float APPROACH_DISTANCE = 8.0f;
-        private static final float SIDE_OFFSET = 5.0f;
-        private static final float ROTATION_SPEED = 0.8f;
-        private static Ingredient TEMPT_PLANKS = Ingredient.of(WBTagRegistry.HULLBACK_EQUIPPABLE);
-        private static Ingredient TEMPT_WIDGETS = Ingredient.of(WBItemRegistry.SAIL.get(), WBItemRegistry.ANCHOR.get(), WBItemRegistry.MAST.get(), WBItemRegistry.HELM.get(), WBItemRegistry.CANNON.get());
-        private final HullbackEntity hullback;
-        private final float speedModifier;
-        private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(10.0).ignoreLineOfSight();
-        private final TargetingConditions targetingConditions;
-        private Player targetPlayer;
-        private int repositionCooldown;
-        private boolean approachFromRight;
-        private Vec3 targetPosition;
-
-        public HullbackArmorPlayerGoal(HullbackEntity hullback, float speedModifier) {
-            this.hullback = hullback;
-            this.speedModifier = speedModifier;
-            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
-            this.repositionCooldown = 200 + hullback.getRandom().nextInt(200);
-            this.targetingConditions = TEMP_TARGETING.copy().selector(this::shouldFollow);
-        }
-
-        private boolean shouldFollow(LivingEntity entity) {
-            if (isSaddled()) {
-                if (getArmorProgress() >= 0.5 && getArmorProgress() < 1)
-                    return TEMPT_PLANKS.test(entity.getMainHandItem()) || TEMPT_PLANKS.test(entity.getOffhandItem()) || TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
-                if (getArmorProgress() == 1)
-                    return TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
-                return TEMPT_PLANKS.test(entity.getMainHandItem()) || TEMPT_PLANKS.test(entity.getOffhandItem());
-            }
-            return false;
-        }
-
-        @Override
-        public boolean canUse() {
-
-            if (!isTamed())
-                return false;
-
-            if (hullback.hasAnchorDown())
-                return false;
-
-            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 50, 30);
-            if (this.targetPlayer == null) return false;
-            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
-
-            return true;
-        }
-
-        @Override
-        public boolean canContinueToUse() {
-            return canUse();
-        }
-
-        @Override
-        public void start() {
-            super.start();
-
-            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-            Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
-            this.approachFromRight = toPlayer.dot(whaleRight) > 0;
-
-
-            this.hullback.setTarget(this.targetPlayer);
-            Vec3 playerLook = this.targetPlayer.getLookAngle();
-
-            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-
-            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            this.targetPosition = this.targetPlayer.position()
-                    .add(sideOffset)
-                    .add(playerLook.scale(-APPROACH_DISTANCE));
-
-            playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
-            this.hullback.mouthTarget = 0.1f;
-        }
-
-        @Override
-        public void stop() {
-            this.targetPlayer = null;
-            this.targetPosition = null;
-            this.hullback.setTarget(null);
-            this.repositionCooldown = 100 + hullback.getRandom().nextInt(200);
-            this.hullback.getNavigation().stop();
-            this.hullback.mouthTarget = 0.0f;
-        }
-
-        @Override
-        public void tick() {
-            if (this.targetPlayer == null) return;
-
-            this.hullback.mouthTarget = 0.6f;
-            if(hullback.tickCount % 200 == 0){
-                Vec3 playerLook = this.targetPlayer.getLookAngle();
-                Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-                Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-                this.targetPosition = this.targetPlayer.position()
-                        .add(sideOffset)
-                        .add(playerLook.scale(-APPROACH_DISTANCE));
-                this.hullback.getNavigation().moveTo(
-                        targetPosition.x,
-                        targetPosition.y,
-                        targetPosition.z,
-                        this.speedModifier
-                );
-
-                Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-                float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
-                float sideYawOffset = approachFromRight ? -90f : 90f;
-                float targetYaw = desiredYaw + sideYawOffset;
-//            if (this.hullback.tickCount % 200 == 0){
-                this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
-                this.hullback.yBodyRot = this.hullback.getYRot();
-//            }
-            }
-        }
-    }
-    public class HullbackApproachPlayerGoal extends Goal {
-        private static final float APPROACH_DISTANCE = 8.0f;
-        private static final float SIDE_OFFSET = 5.0f;
-        private static final float ROTATION_SPEED = 0.8f;
-
-        private static Ingredient TEMPT_SADDLE = Ingredient.of(Items.SADDLE);
-        private static Ingredient TEMPT_ITEMS = Ingredient.of(Items.SHEARS);
-        private static Ingredient TEMPT_AXES = Ingredient.of(ItemTags.AXES);
-        private final HullbackEntity hullback;
-        private final float speedModifier;
-        private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(10.0).ignoreLineOfSight();
-        private final TargetingConditions targetingConditions;
-        private Player targetPlayer;
-        private int repositionCooldown;
-        private boolean approachFromRight;
-        private Vec3 targetPosition;
-
-        public HullbackApproachPlayerGoal(HullbackEntity hullback, float speedModifier) {
-            this.hullback = hullback;
-            this.speedModifier = speedModifier;
-            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
-            this.repositionCooldown = 200 + hullback.getRandom().nextInt(200);
-            this.targetingConditions = TEMP_TARGETING.copy().selector(this::shouldFollow);
-        }
-
-        private boolean shouldFollow(LivingEntity entity) {
-            if( isTamed() && !isSaddled())
-                return TEMPT_SADDLE.test(entity.getMainHandItem()) || TEMPT_SADDLE.test(entity.getOffhandItem()) || TEMPT_ITEMS.test(entity.getMainHandItem()) || TEMPT_ITEMS.test(entity.getOffhandItem()) || TEMPT_AXES.test(entity.getMainHandItem()) || TEMPT_AXES.test(entity.getOffhandItem());
-            return TEMPT_ITEMS.test(entity.getMainHandItem()) || TEMPT_ITEMS.test(entity.getOffhandItem()) || TEMPT_AXES.test(entity.getMainHandItem()) || TEMPT_AXES.test(entity.getOffhandItem());
-        }
-
-        @Override
-        public boolean canUse() {
-
-            if (hullback.hasAnchorDown())
-                return false;
-
-            this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 30, 50, 30);
-            if (this.targetPlayer == null) return false;
-            if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
-
-            return true;
-        }
-
-        @Override
-        public boolean canContinueToUse() {
-            return canUse();
-        }
-
-        @Override
-        public void start() {
-            super.start();
-
-            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-            Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
-            this.approachFromRight = toPlayer.dot(whaleRight) > 0;
-
-
-            this.hullback.setTarget(this.targetPlayer);
-            Vec3 playerLook = this.targetPlayer.getLookAngle();
-
-            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-            //TODO FIX
-            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            this.targetPosition = this.targetPlayer.position()
-                    .add(sideOffset)
-                    .add(playerLook.scale(-APPROACH_DISTANCE));
-
-            playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
-            this.hullback.mouthTarget = 0.2f;
-        }
-
-        @Override
-        public void stop() {
-            this.targetPlayer = null;
-            this.targetPosition = null;
-            this.hullback.setTarget(null);
-            this.repositionCooldown = 100 + hullback.getRandom().nextInt(200);
-            this.hullback.getNavigation().stop();
-            this.hullback.mouthTarget = 0.0f;
-        }
-
-        @Override
-        public void tick() {
-            this.hullback.mouthTarget = 0.6f;
-            if (this.targetPlayer == null) return;
-            if(hullback.tickCount % 200 == 0) {
-                Vec3 playerLook = this.targetPlayer.getLookAngle();
-                Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-                Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-                this.targetPosition = this.targetPlayer.position()
-                        .add(sideOffset)
-                        .add(playerLook.scale(-APPROACH_DISTANCE));
-                this.hullback.getNavigation().moveTo(
-                        targetPosition.x,
-                        targetPosition.y,
-                        targetPosition.z,
-                        this.speedModifier
-                );
-
-                Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-                float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
-                float sideYawOffset = approachFromRight ? -90f : 90f;
-                float targetYaw = desiredYaw + sideYawOffset;
-
-                this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
-                this.hullback.yBodyRot = this.hullback.getYRot();
+        if (this.moving_body == null) {
+            this.moving_body = spawnPlatform(2);
+        } else {
+            this.moving_body.moveTo(this.body.getX(), platformY, this.body.getZ());
+            this.moving_body.setYRot(this.body.getYRot());
+            
+            if (this.platformsStable) {
+                this.moving_body.setDeltaMovement(Vec3.ZERO);
+            } else {
+                this.moving_body.setDeltaMovement(this.getDeltaMovement().x, 0, this.getDeltaMovement().z);
             }
         }
     }
 
-    public class HullbackTryFindWaterGoal extends Goal {
-        private final PathfinderMob mob;
-        private final boolean isBeached;
 
-        public HullbackTryFindWaterGoal(PathfinderMob mob, boolean isBeached) {
-            this.mob = mob;
-            this.isBeached = isBeached;
+    private void updatePlatformHeight() {
+        boolean isMounted = this.getControllingPassenger() != null;
+        float target = isMounted ? 4.0f : 4.55f;
+
+        // Detects state change
+        if (wasMounted != isMounted) {
+            platformHeightCooldown = 40; // 2 seconds
         }
+        wasMounted = isMounted;
 
-        public boolean canUse() {
-            if(isBeached)
-                return mob.tickCount > 20 && !this.mob.isEyeInFluidType(Fluids.WATER.getFluidType());
-            return mob.tickCount > 20 && !mob.level().getFluidState(mob.blockPosition().below()).is(FluidTags.WATER);
+        this.targetPlatformHeight = target;
+        
+        // Waits for cooldown to finish before adjusting
+        if (platformHeightCooldown > 0) {
+            platformHeightCooldown--;
+            if (platformHeightCooldown > 20) return; // Waits 1 full second before starting
         }
-
-        public void start() {
-            BlockPos blockpos = null;
-
-                Iterator var2 = BlockPos.betweenClosed(Mth.floor(this.mob.getX() - (isBeached ? 20.0 : 5)), Mth.floor(this.mob.getY() - 2.0), Mth.floor(this.mob.getZ() - (isBeached ? 20.0 : 5)), Mth.floor(this.mob.getX() + (isBeached ? 20.0 : 5)), this.mob.getBlockY(), Mth.floor(this.mob.getZ() + (isBeached ? 20.0 : 5))).iterator();
-
-            while(var2.hasNext()) {
-                BlockPos blockpos1 = (BlockPos)var2.next();
-                if (this.mob.level().getFluidState(blockpos1).is(FluidTags.WATER)) {
-                    blockpos = blockpos1;
-                    break;
-                }
-            }
-
-            if (blockpos != null) {
-                this.mob.getMoveControl().setWantedPosition((double)blockpos.getX(), (double)blockpos.getY(), (double)blockpos.getZ(), 1.0);
-                this.mob.getLookControl().setLookAt(mob.getMoveControl().getWantedX(), mob.getMoveControl().getWantedY(), mob.getMoveControl().getWantedZ());
-            }
-        }
-
-        @Override
-        public void tick() {
-            super.tick();
-
-            Vec3 target = new Vec3(mob.getMoveControl().getWantedX(),
-                    mob.getMoveControl().getWantedY(),
-                    mob.getMoveControl().getWantedZ());
-            float targetYRot = (float)Math.toDegrees(Math.atan2(target.z - mob.getZ(), target.x - mob.getX())) - 90;
-
-            mob.setYRot(Mth.rotLerp(0.01f, mob.getYRot(), targetYRot));
-
-
-            if(mob.tickCount % 10 == 0)
-                mob.playSound(WBSoundRegistry.HULLBACK_MAD.get());
-
-            if(mob.tickCount % 100 == 0 && !mob.level().getBlockState(mob.blockPosition().below()).isAir()){
-
-                ((HullbackEntity) mob).mouthTarget = 0;
-
-                mob.getLookControl().setLookAt(target);
-                mob.setYRot(Mth.rotLerp(0.1f, mob.getYRot(), targetYRot));
-                mob.yBodyRot = mob.getYRot();
-                Vec3 direction = target.subtract(mob.position()).normalize();
-
-                double lungePower = 1;
-                Vec3 velocity = direction.scale(lungePower).add(0, 0.5, 0);
-                if(isBeached) {
-                    mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 2f);
-                    mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 1f);
-                    mob.playSound(WBSoundRegistry.HULLBACK_HURT.get(), Config.SOUND_DISTANCE.get().floatValue(), 0.2f);
-                    mob.playSound(WBSoundRegistry.HULLBACK_SWIM.get(), 2, 0.5f);
-                    pushEntities();
-                }
-                mob.setDeltaMovement(velocity);
-
-                mob.setYRot(Mth.rotLerp(0.2f, mob.getYRot(), targetYRot));
-                mob.yBodyRot = mob.getYRot();
-            }
-        }
-
-        public void pushEntities(){
-            AABB pushArea = mob.getBoundingBox().inflate(20);
-            List<Entity> pushableEntities = this.mob.level().getEntities(mob, pushArea);
-            pushableEntities.removeIf(entity -> !entity.isPushable() && entity.isPassenger());
-
-            Vec3 center = mob.position();
-            double pushStrength = 3;
-
-            for (Entity entity : pushableEntities) {
-
-                Vec3 pushDir = entity.position().subtract(center).normalize();
-                entity.push(
-                        pushDir.x * pushStrength,
-                        0.3,
-                        pushDir.z * pushStrength
-                );
-
-                if (this.mob.level() instanceof ServerLevel serverLevel) {
-                    serverLevel.sendParticles(
-                            WBParticleRegistry.SMOKE.get(),
-                            entity.getX(),
-                            entity.getY(),
-                            entity.getZ(),
-                            10,
-                            0.5,
-                            0.5,
-                            0.5,
-                            0.02
-                    );
-                }
-
-                if (entity instanceof LivingEntity living) {
-                    living.knockback(0.5f, pushDir.x, pushDir.z);
-                    living.hurtMarked = true;
-                }
-            }
-        }
-
-        @Override
-        public void stop() {
-            super.stop();
-            if(isBeached) {
-                this.mob.setAirSupply(this.mob.getMaxAirSupply());
-
-                if (this.mob.level().isClientSide) {
-                    for (int i = 0; i < 20; i++) {
-                        this.mob.level().addParticle(ParticleTypes.BUBBLE,
-                                ((HullbackEntity) mob).partPosition[2].x,
-                                ((HullbackEntity) mob).partPosition[2].y,
-                                ((HullbackEntity) mob).partPosition[2].z,
-                                (this.mob.getRandom().nextFloat() - 0.5f) * 0.5f,
-                                this.mob.getRandom().nextFloat() * 0.5f,
-                                (this.mob.getRandom().nextFloat() - 0.5f) * 0.5f);
-                    }
-                    ((HullbackEntity) mob).mouthTarget = 0.0f;
-                }
-
-                Vec3 particlePos = partPosition[1].add(new Vec3(0, 7, 0));
-                double x = particlePos.x;
-                double y = particlePos.y;
-                double z = particlePos.z;
-
-                if (this.mob.level() instanceof ServerLevel serverLevel) {
-                    serverLevel.sendParticles(
-                            WBParticleRegistry.SMOKE.get(),
-                            x,
-                            y,
-                            z,
-                            50,
-                            0.2,
-                            0.2,
-                            0.2,
-                            0.02
-                    );
-                }
-
-                this.mob.playSound(WBSoundRegistry.HULLBACK_BREATHE.get(), Config.SOUND_DISTANCE.get().floatValue() * 1.5f, 1);
-            }
+        
+        // More aggressive Lerp to avoid infinite drift
+        float lerpSpeed = 0.1f;
+        float newHeight = (float) Mth.lerp(lerpSpeed, this.currentPlatformHeight, targetPlatformHeight);
+        
+        // Final snap to avoid infinite oscillation (Threshold increased to 0.01)
+        if (Math.abs(newHeight - targetPlatformHeight) < 0.01f) {
+            this.currentPlatformHeight = targetPlatformHeight;
+        } else {
+            this.currentPlatformHeight = newHeight;
         }
     }
+
+
+
+    private void updatePlayerStability() {
+        Player nearestPlayer = this.level().getNearestPlayer(this, 10);
+        
+        if (nearestPlayer != null && isPlayerOnPlatform(nearestPlayer)) {
+            double distMoved = nearestPlayer.position().distanceTo(lastPlayerPosition);
+            
+            if (distMoved < STABLE_THRESHOLD) {
+                playerStableTimer++;
+            } else {
+                playerStableTimer = 0;
+            }
+            
+            lastPlayerPosition = nearestPlayer.position();
+        } else {
+            playerStableTimer = 0;
+        }
+    }
+
+    private boolean isPlayerOnPlatform(Player player) {
+        // Fix: Use a bounding box that actually encompasses the deck height
+        AABB deckBox = this.getBoundingBox().inflate(5.0, 0.5, 12.0).move(0, currentPlatformHeight, 0);
+        return deckBox.contains(player.position());
+    }
+
 }

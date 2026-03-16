@@ -80,6 +80,8 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
 
     @Override
     public void tick() {
+        this.prevWidgetYRot = this.getYRot();
+        this.prevWidgetXRot = this.getXRot();
         super.tick();
         if(this.isVehicle()){
             //this.setCannonXRot(this.getFirstPassenger().getXRot());

@@ -33,9 +33,11 @@ public class RideableWhaleWidgetEntity extends WhaleWidgetEntity{
     }
     @Override
     public InteractionResult interact(Player player, InteractionHand hand) {
-        if (!this.level().isClientSide && this.getPassengers().isEmpty()) {
-            player.startRiding(this);
-            return InteractionResult.SUCCESS;
+        if (this.getPassengers().isEmpty()) {
+            if (!this.level().isClientSide) {
+                player.startRiding(this);
+            }
+            return InteractionResult.sidedSuccess(this.level().isClientSide);
         }
         return super.interact(player, hand);
     }

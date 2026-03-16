@@ -32,7 +32,7 @@ public class WhaleWidgetRenderer<T extends WhaleWidgetEntity> extends EntityRend
         poseStack.pushPose();
         poseStack.translate(0.0F, 1.5F, 0.0F);
         poseStack.mulPose(Axis.XP.rotationDegrees(180));
-        poseStack.mulPose(Axis.YP.rotationDegrees(Mth.rotLerp(partialTick, entity.yRotO, entity.getYRot())));
+        poseStack.mulPose(Axis.YP.rotationDegrees(Mth.rotLerp(partialTick, entity.prevWidgetYRot, entity.getYRot())));
         float f = (float)entity.getHurtTime() - partialTick;
         float f1 = entity.getDamage() - partialTick;
         if (f1 < 0.0F) {
@@ -43,7 +43,7 @@ public class WhaleWidgetRenderer<T extends WhaleWidgetEntity> extends EntityRend
             poseStack.mulPose(Axis.XP.rotationDegrees(Mth.sin(f) * f * f1 / 10.0F * (float)entity.getHurtDir()));
         }
 
-        poseStack.mulPose(Axis.XN.rotationDegrees(Mth.rotLerp(partialTick, entity.xRotO, entity.getXRot())));
+        poseStack.mulPose(Axis.XN.rotationDegrees(Mth.rotLerp(partialTick, entity.prevWidgetXRot, entity.getXRot())));
         model.setupAnim(entity, partialTick, 0.0F, -0.1F, 0.0F, 0.0F);
         VertexConsumer vertexconsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(getTextureLocation(entity)));
         getModel().renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F);

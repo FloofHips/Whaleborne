@@ -1,0 +1,48 @@
+package com.fruityspikes.whaleborne.server.world;
+
+import com.fruityspikes.whaleborne.Config;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderSet;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.MobSpawnSettings;
+import net.minecraftforge.common.world.BiomeModifier;
+import net.minecraftforge.common.world.ModifiableBiomeInfo;
+
+import com.fruityspikes.whaleborne.server.registries.WBBiomeModifierRegistry;
+import java.util.List;
+
+public record ConfigurableSpawnModifier(HolderSet<Biome> biomes, List<MobSpawnSettings.SpawnerData> spawners) implements BiomeModifier {
+
+    public static final Codec<ConfigurableSpawnModifier> CODEC = RecordCodecBuilder.create(builder ->
+            builder.group(
+                    Biome.LIST_CODEC.fieldOf("biomes").forGetter(ConfigurableSpawnModifier::biomes),
+                    MobSpawnSettings.SpawnerData.CODEC.listOf().fieldOf("spawners").forGetter(ConfigurableSpawnModifier::spawners)
+            ).apply(builder, ConfigurableSpawnModifier::new)
+    );
+
+    @Override
+    public void modify(Holder<Biome> biome, Phase phase, ModifiableBiomeInfo.BiomeInfo.Builder builder) {
+        if (phase == Phase.ADD && this.biomes.contains(biome)) {
+            double spawnChance;
+            try {
+                spawnChance = Config.HULLBACK_SPAWN_CHANCE.get();
+            } catch (Exception e) {
+                spawnChance = 0.001;
+            }
+
+            if (spawnChance > 0.0) {
+                for (MobSpawnSettings.SpawnerData spawner : this.spawners) {
+                    builder.getMobSpawnSettings().addSpawn(spawner.type.getCategory(),
+                            new MobSpawnSettings.SpawnerData(spawner.type, 1, spawner.minCount, spawner.maxCount));
+                }
+            }
+        }
+    }
+
+    @Override
+    public Codec<? extends BiomeModifier> codec() {
+        return WBBiomeModifierRegistry.CONFIGURABLE_SPAWNS.get();
+    }
+}

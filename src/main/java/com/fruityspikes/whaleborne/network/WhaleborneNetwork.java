@@ -34,6 +34,12 @@ public class WhaleborneNetwork {
                 HullbackHurtPacket::encode,
                 HullbackHurtPacket::decode,
                 HullbackHurtPacket::handle);
+
+        INSTANCE.registerMessage(getPacketID(),
+                ToggleControlPayload.class,
+                ToggleControlPayload::encode,
+                ToggleControlPayload::decode,
+                ToggleControlPayload::handle);
     }
 
     public static int getPacketID() {

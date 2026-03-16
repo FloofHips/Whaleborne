@@ -19,6 +19,12 @@ group = mod_group_id
 
 repositories {
     mavenLocal()
+    maven {
+        url "https://cursemaven.com"
+        content {
+            includeGroup "curse.maven"
+        }
+    }
 }
 
 base {
@@ -146,10 +152,12 @@ dependencies {
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
+
+    modImplementation "curse.maven:neat-238372:5838485"
 }
 
 // Uncomment the lines below if you wish to configure mixin. The mixin file should be named modid.mixins.json.
-/*
+
 mixin {
     add sourceSets.main, "${mod_id}.refmap.json"
     config "${mod_id}.mixins.json"
@@ -164,7 +172,18 @@ jar {
             "MixinConfigs": "${mod_id}.mixins.json"
     ])
 }
-*/
+
+sourceSets {
+    main {
+        java {
+            exclude 'vazkii/neat/mixin/**'
+        }
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    exclude 'vazkii/**'
+}
 
 // This block of code expands all declared replace properties in the specified resource targets.
 // A missing property will result in an error. Properties are expanded using ${} Groovy notation.

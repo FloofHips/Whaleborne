@@ -58,6 +58,7 @@ public class Whaleborne
         WBLootModifierRegistry.LOOT_MODIFIER_SERIALIZERS.register(modEventBus);
         WBParticleRegistry.PARTICLE_TYPES.register(modEventBus);
         WBCreativeTabsRegistry.CREATIVE_MODE_TABS.register(modEventBus);
+        WBBiomeModifierRegistry.BIOME_MODIFIER_SERIALIZERS.register(modEventBus);
         WhaleborneNetwork.init();
 
         MinecraftForge.EVENT_BUS.register(this);
@@ -65,6 +66,7 @@ public class Whaleborne
         PROXY.init();
         modEventBus.addListener(this::addCreative);
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
     }
     private void commonSetup(final FMLCommonSetupEvent event)
     {
@@ -107,6 +109,8 @@ public class Whaleborne
         public static void registerOverlays(RegisterGuiOverlaysEvent event) {
             event.registerAboveAll("whaleborne_anchor_overlay", (gui, poseStack, partialTick, width, height) -> {
                 Player player = Minecraft.getInstance().player;
+
+                if (player == null) return;
 
                 if (player.getVehicle() instanceof HelmEntity) {
                     if (player.getRootVehicle() instanceof HullbackEntity hullback) {
