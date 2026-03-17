@@ -97,6 +97,8 @@ dependencies {
     implementation "curse.maven:neat-238372:5635938"
     // Health Bars dependency
     implementation "curse.maven:health-bars-1367734:7122333"
+    // Puzzles Lib dependency
+    implementation "curse.maven:puzzles-lib-495476:5838627"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

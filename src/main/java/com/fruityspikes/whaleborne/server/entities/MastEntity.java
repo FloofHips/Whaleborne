@@ -4,6 +4,7 @@ import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
@@ -24,6 +25,17 @@ public class MastEntity extends RideableWhaleWidgetEntity{
     @Override
     protected Vec3 getPassengerAttachmentPoint(Entity passenger, EntityDimensions dimensions, float scale) {
         return super.getPassengerAttachmentPoint(passenger, dimensions, scale).add(0, this.getBbHeight() - 16.0f, 0);
+    }
+
+    @Override
+    protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
+        if (!this.hasPassenger(passenger)) return;
+        Vec3 offset = getPassengerAttachmentPoint(passenger, this.getDimensions(this.getPose()), 1.0F)
+                .add(0, -1.0, 0);
+        // Rotate the vertical offset by the mast's pitch/yaw (cannon-style)
+        // so the rider follows the arc of the tail's rotation, amplified by the mast's height
+        offset = offset.xRot(this.getXRot() * Mth.DEG_TO_RAD).yRot(-this.getYRot() * Mth.DEG_TO_RAD);
+        callback.accept(passenger, this.getX() + offset.x, this.getY() + offset.y, this.getZ() + offset.z);
     }
 
     @Override

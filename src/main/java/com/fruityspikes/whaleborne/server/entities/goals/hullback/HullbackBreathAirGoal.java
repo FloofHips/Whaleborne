@@ -51,6 +51,7 @@ public class HullbackBreathAirGoal extends Goal {
     public void start() {
         this.isBreaching = true;
         this.hullback.setBreaching(true);
+        this.hullback.stationaryTicks = 0; // Clear stationary state so it doesn't interfere with breach
         this.initialPos = this.hullback.position();
         this.hullback.getNavigation().stop();
 
@@ -78,8 +79,11 @@ public class HullbackBreathAirGoal extends Goal {
 
         if (this.hullback.isInWater()) {
             float yRotRad = this.hullback.getYRot() * (float) (Math.PI / 180.0);
-            
+
             this.hullback.setDeltaMovement(new Vec3(0, 1.2, 0.8).yRot(-yRotRad));
+        } else {
+            // Above water: extra downward pull so the whale arcs back faster
+            this.hullback.setDeltaMovement(this.hullback.getDeltaMovement().add(0, -0.15, 0));
         }
 
         if (this.hullback.getY() >= this.hullback.level().getSeaLevel() &&
@@ -98,6 +102,7 @@ public class HullbackBreathAirGoal extends Goal {
     public void stop() {
         this.isBreaching = false;
         this.hullback.setBreaching(false);
+        this.hullback.stationaryTicks = 0; // Ensure no leftover stationary state after breach
         this.breachCooldown = 200;
 
         this.hullback.setAirSupply(this.hullback.getMaxAirSupply());

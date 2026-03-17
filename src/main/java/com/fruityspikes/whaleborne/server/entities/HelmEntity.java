@@ -2,6 +2,9 @@ package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.*;
@@ -17,24 +20,43 @@ import java.util.Map;
 
 public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRideableJumping, HasCustomInventoryScreen {
 
+    private static final EntityDataAccessor<Float> DATA_WHEEL_ROTATION =
+            SynchedEntityData.defineId(HelmEntity.class, EntityDataSerializers.FLOAT);
+
+    /** Client-only previous value kept for render interpolation. */
+    public float prevWheelRotation;
+
     public HelmEntity(EntityType<?> entityType, Level level) {
         super(entityType, level, WBItemRegistry.HELM.get());
     }
-    public float wheelRotation;
-    public float prevWheelRotation;
+
+    @Override
+    protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        super.defineSynchedData(builder);
+        builder.define(DATA_WHEEL_ROTATION, 0.0F);
+    }
+
+    @Override
+    public void tick() {
+        // Capture previous value before entityData sync overwrites it
+        this.prevWheelRotation = this.getWheelRotation();
+        super.tick();
+    }
+
     @Override
     protected Vec3 getPassengerAttachmentPoint(Entity passenger, EntityDimensions dimensions, float scale) {
         return super.getPassengerAttachmentPoint(passenger, dimensions, scale).add(0, this.getBbHeight() - 1.25f, 0);
     }
 
     public float getWheelRotation() {
-        return wheelRotation;
+        return this.entityData.get(DATA_WHEEL_ROTATION);
     }
 
     public void setWheelRotation(float wheelRotation) {
-        this.setPrevWheelRotation(this.wheelRotation);
-        this.wheelRotation = wheelRotation;
+        this.prevWheelRotation = this.getWheelRotation();
+        this.entityData.set(DATA_WHEEL_ROTATION, wheelRotation);
     }
+
     public float getPrevWheelRotation() {
         return prevWheelRotation;
     }

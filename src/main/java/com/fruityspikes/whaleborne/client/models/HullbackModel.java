@@ -95,8 +95,7 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
         float rightEyeYaw = entity.getRightEyeYaw();
         float eyePitch = entity.getEyePitch();
 
-        // Clamping the speed prevents the "whip" effect during high-velocity lunges while keeping natural movement in water.
-        float speed = (float) Math.min(entity.getDeltaMovement().length(), 0.35F);
+        float speed = Math.min(entity.getAnimationSwimSpeed(), 0.35F);
         float swimCycle = (float) ((float)Math.sin(ageInTicks * 0.08f) * speed);
 
         this.body.resetPose();

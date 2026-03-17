@@ -92,8 +92,7 @@ public class HullbackPartManager {
             }
         }
 
-        Vec3 delta = hullback.getDeltaMovement();
-        float horizontalSpeed = (float) Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        float horizontalSpeed = hullback.getAnimationSwimSpeed();
         // Disable swimCycle when anchored or stationary (pitch locked) to prevent tilting/wiggling
         // CRITICAL FIX: Disables swimCycle when platforms are stable
         float swimCycle;

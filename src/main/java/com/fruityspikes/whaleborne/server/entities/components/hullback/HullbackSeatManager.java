@@ -214,32 +214,34 @@ public class HullbackSeatManager {
                 continue;
             }
 
-            if (!(passenger instanceof Player)) {
-                if (!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())) {
-                    float newYRot;
-                    float newXRot;
+            if (passenger instanceof Player playerPassenger) {
+                // For player passengers: only align body rotation with the whale part.
+                // Don't touch yRot/xRot (camera look direction) or yHeadRot.
+                playerPassenger.setYBodyRot(partManager.partYRot[partIndex] + offset);
+            } else if (!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())) {
+                float newYRot;
+                float newXRot;
 
-                    if (passenger instanceof SailEntity) {
-                        float lerpFactor = (float) (0.05 + 0.1 * partIndex);
-                        newYRot = Mth.rotLerp(lerpFactor, passenger.getYRot(), partManager.partYRot[partIndex]) + offset;
-                        newXRot = Mth.rotLerp(lerpFactor, passenger.getXRot(), partManager.partXRot[partIndex]);
-                    } else {
-                        newYRot = partManager.partYRot[partIndex] + offset;
-                        newXRot = partManager.partXRot[partIndex];
-                    }
+                if (passenger instanceof SailEntity) {
+                    float lerpFactor = (float) (0.05 + 0.1 * partIndex);
+                    newYRot = Mth.rotLerp(lerpFactor, passenger.getYRot(), partManager.partYRot[partIndex]) + offset;
+                    newXRot = Mth.rotLerp(lerpFactor, passenger.getXRot(), partManager.partXRot[partIndex]);
+                } else {
+                    newYRot = partManager.partYRot[partIndex] + offset;
+                    newXRot = partManager.partXRot[partIndex];
+                }
 
-                    if (passenger instanceof WhaleWidgetEntity widget) {
-                        widget.prevWidgetYRot = widget.getYRot();
-                        widget.prevWidgetXRot = widget.getXRot();
-                    }
+                if (passenger instanceof WhaleWidgetEntity widget) {
+                    widget.prevWidgetYRot = widget.getYRot();
+                    widget.prevWidgetXRot = widget.getXRot();
+                }
 
-                    passenger.setYRot(newYRot);
-                    passenger.setXRot(newXRot);
-                    passenger.setYBodyRot(newYRot);
-                    if (passenger instanceof LivingEntity livingWidget) {
-                        livingWidget.yHeadRot = newYRot;
-                        livingWidget.yBodyRot = newYRot;
-                    }
+                passenger.setYRot(newYRot);
+                passenger.setXRot(newXRot);
+                passenger.setYBodyRot(newYRot);
+                if (passenger instanceof LivingEntity livingWidget) {
+                    livingWidget.yHeadRot = newYRot;
+                    livingWidget.yBodyRot = newYRot;
                 }
             }
         }

@@ -160,6 +160,9 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private float mouthOpenProgress;
     private float mouthTarget;
     private boolean isBreaching;
+    // Smoothed animation speed to avoid per-tick jitter from entity tracking position lerps
+    private float smoothedAnimSpeed = 0f;
+    private int lastAnimSpeedTick = -1;
     private boolean pitchLocked = false;
     private boolean wasPilotControlled = false;
     private int playerAboveCooldown = 0;  // Cooldown to prevent rapid detection
@@ -822,7 +825,8 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         }
 
         if (this.level().isClientSide && this.getStationaryTicks() > 0) {
-             this.setDeltaMovement(Vec3.ZERO);
+             // Preserve Y velocity so gravity still works (whale won't float mid-air after breach)
+             this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
         }
 
         if (!this.level().isClientSide && this.tickCount == 20) {
@@ -992,6 +996,9 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
     /** Manages walkable platform spawning/removal and player-above detection. */
     private void handleStationaryState() {
+        // Maximum priority: If breaching to breathe, skip all stationary logic
+        if (this.isBreaching()) return;
+
         LivingEntity currentPilot = getControllingPassenger();
         
         // Manage pilot -> dismounted transition
@@ -1026,7 +1033,9 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         }
 
         // Player above detection - with cooldown and hysteresis
-        if (playerAboveCooldown == 0) {
+        // Skip detection while breaching or out of water to prevent stationaryTicks
+        // from freezing the whale mid-air after a breach jump
+        if (playerAboveCooldown == 0 && !this.isBreaching && this.isInWater()) {
             if (scanPlayerAbove()) {
                 // MODIFICATION: Only stabilizes if horizontal speed is negligible
                 double speed = this.getDeltaMovement().horizontalDistance();
@@ -1190,7 +1199,8 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         if (this.isInWater() || this.hasAnchorDown()) {
             this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
         } else {
-            this.setDeltaMovement(Vec3.ZERO);
+            // Preserve Y velocity so gravity still pulls the whale down when above water
+            this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
         }
 
         // Also stabilize pitch when stopping
@@ -1210,6 +1220,24 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     public float getMouthOpenProgress() {
         return this.entityData.get(DATA_MOUTH_PROGRESS);
     }
+
+    /**
+     * Returns the smoothed horizontal swim speed for animation purposes.
+     * Uses position delta (getX()-xo) which works on ALL clients, including non-pilot observers,
+     * because vanilla entity tracking syncs positions to every client each tick.
+     * Smoothed via exponential moving average to prevent jitter from entity tracking lerps.
+     */
+    public float getAnimationSwimSpeed() {
+        if (this.tickCount != lastAnimSpeedTick) {
+            lastAnimSpeedTick = this.tickCount;
+            double dx = this.getX() - this.xo;
+            double dz = this.getZ() - this.zo;
+            float raw = (float) Math.sqrt(dx * dx + dz * dz);
+            smoothedAnimSpeed = Mth.lerp(0.3f, smoothedAnimSpeed, raw);
+        }
+        return smoothedAnimSpeed;
+    }
+
     public Vec3 getPartPos(int i){
         return partManager.partPosition[i];
     }
@@ -1356,7 +1384,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
     @Override
     protected void removePassenger(Entity passenger) {
-        if(passenger instanceof Player)
+        if(passenger instanceof Player && !this.isBreaching())
             stationaryTicks = STATIONARY_TICKS_DISMOUNT;
         if(passenger.isRemoved())
             for (int i = 0; i < 7; i++) {
@@ -1420,7 +1448,8 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
             ((ServerLevel) this.level()).getChunkSource().broadcast(this, new ClientboundSetEntityMotionPacket(this.getId(), this.getDeltaMovement()));
         }
     }
-    
+
+
     @Override
     public void travel(Vec3 travelVector) {
         // Stop horizontal movement if anchor is down or stationary (unless approaching a player)
@@ -1560,6 +1589,13 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
     @Override
     protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
+        // FIX: On other players' clients the pilot's xxa/zza are always zero,
+        // causing false braking that makes the tail/seats jitter.  Only the
+        // server and the pilot's own client should compute ridden input.
+        if (this.level().isClientSide && !player.isLocalPlayer()) {
+            return Vec3.ZERO;
+        }
+
         // Limit pitch during swimming to prevent excessive tilting
         if (this.isInWater()) {
             float currentPitch = this.getXRot();
