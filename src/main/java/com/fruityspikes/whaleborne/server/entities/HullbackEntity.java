@@ -154,6 +154,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private float mouthOpenProgress;
     private float mouthTarget;
     private boolean wasPilotControlled = false;
+    // Smoothed animation speed to avoid per-tick jitter from entity tracking position lerps
+    private float smoothedAnimSpeed = 0f;
+    private int lastAnimSpeedTick = -1;
     private boolean pitchLocked = false;
     private boolean platformsStable = false; // Added for Integrated Fix
     private boolean isApproachingPlayer = false; // Flag to apply movement during approach
@@ -1568,6 +1571,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         updatePartPositions();
         rotatePassengers();
 
+
         if (this.getSubEntities()[1].isEyeInFluidType(Fluids.WATER.getFluidType()) && this.tickCount % 80 == 0)
             this.heal(0.25f);
 
@@ -1705,8 +1709,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         wasPilotControlled = currentPilot != null;
 
         // CONFLICT LOGIC FIXED:
-        boolean playerDetectedOnTop = scanPlayerAbove();
-        
+        // Skip detection while breaching or out of water to prevent stationaryTicks
+        // from freezing the whale mid-air after a breach jump
+        boolean playerDetectedOnTop = !this.isBreaching() && this.isInWater() && scanPlayerAbove();
+
         if (currentPilot == null && playerDetectedOnTop) {
             if (this.isApproachingPlayer) {
                 // If the approach AI (scissor) is active:
@@ -2002,7 +2008,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     @Override
     protected void removePassenger(Entity passenger) {
-        if (passenger instanceof Player)
+        if (passenger instanceof Player && !this.isBreaching())
             stationaryTicks = 100;
         if (passenger.isRemoved())
             for (int i = 0; i < 7; i++) {
@@ -2052,19 +2058,21 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 continue;
             }
 
-            if (!(passenger instanceof Player)) {
-                if (!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())) {
-                    if (passenger instanceof SailEntity) {
-                        passenger.yRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), oldPartYRot[partIndex]) + offset);
-                        passenger.xRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), oldPartXRot[partIndex]));
-                        passenger.setYRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]) + offset);
-                        passenger.setXRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
-                    } else {
-                        passenger.yRotO = oldPartYRot[partIndex];
-                        passenger.xRotO = oldPartXRot[partIndex];
-                        passenger.setYRot((partYRot[partIndex]) + offset);
-                        passenger.setXRot(partXRot[partIndex]);
-                    }
+            if (passenger instanceof Player playerPassenger) {
+                // For player passengers: only align body rotation with the whale part.
+                // Don't touch yRot/xRot (camera look direction) or yHeadRot.
+                playerPassenger.setYBodyRot(partYRot[partIndex] + offset);
+            } else if (!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())) {
+                if (passenger instanceof SailEntity) {
+                    passenger.yRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), oldPartYRot[partIndex]) + offset);
+                    passenger.xRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), oldPartXRot[partIndex]));
+                    passenger.setYRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]) + offset);
+                    passenger.setXRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
+                } else {
+                    passenger.yRotO = oldPartYRot[partIndex];
+                    passenger.xRotO = oldPartXRot[partIndex];
+                    passenger.setYRot((partYRot[partIndex]) + offset);
+                    passenger.setXRot(partXRot[partIndex]);
                 }
             }
         }
@@ -2104,7 +2112,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     .send(new ClientboundSetEntityMotionPacket(this.getId(), this.getDeltaMovement()));
         }
     }
-
 
     public void setVectorControl(boolean active) {
         this.entityData.set(DATA_VECTOR_CONTROL, active);
@@ -2428,6 +2435,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         public void start() {
             this.isBreachingGoal = true;
             this.hullback.setBreaching(true);
+            this.hullback.stationaryTicks = 0; // Clear stationary state so it doesn't interfere with breach
             this.initialPos = this.hullback.position();
             this.hullback.getNavigation().stop();
 
@@ -2455,8 +2463,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             if (this.hullback.isInWater()) {
                 float yRotRad = this.hullback.getYRot() * (float) (Math.PI / 180.0);
-                
+
                 this.hullback.setDeltaMovement(new Vec3(0, 1.2, 0.8).yRot(-yRotRad));
+            } else {
+                // Above water: extra downward pull so the whale arcs back faster
+                this.hullback.setDeltaMovement(this.hullback.getDeltaMovement().add(0, -0.15, 0));
             }
 
             if (this.hullback.getY() >= this.hullback.level().getSeaLevel() &&
@@ -2475,6 +2486,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         public void stop() {
             this.isBreachingGoal = false;
             this.hullback.setBreaching(false);
+            this.hullback.stationaryTicks = 0; // Ensure no leftover stationary state after breach
             this.breachCooldown = 200;
 
             this.hullback.setAirSupply(this.hullback.getMaxAirSupply());
@@ -2981,8 +2993,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
 
             if (this.isVehicle() && this.getControllingPassenger() instanceof Player player) {
-                Vec3 input = this.getRiddenInput(player, pTravelVector);
-                super.travel(input);
+                if (this.level().isClientSide && !player.isLocalPlayer()) {
+                    // Non-pilot clients don't have the pilot's input data (xxa/zza are zero),
+                    // so we skip getRiddenInput and just run vanilla travel with the raw vector.
+                    super.travel(pTravelVector);
+                } else {
+                    Vec3 input = this.getRiddenInput(player, pTravelVector);
+                    super.travel(input);
+                }
             } else {
                 super.travel(pTravelVector);
             }
@@ -3203,6 +3221,23 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return this.entityData.get(DATA_MOUTH_PROGRESS);
     }
 
+    /**
+     * Returns the smoothed horizontal swim speed for animation purposes.
+     * Uses position delta (getX()-xo) which works on ALL clients, including non-pilot observers,
+     * because vanilla entity tracking syncs positions to every client each tick.
+     * Smoothed via exponential moving average to prevent jitter from entity tracking lerps.
+     */
+    public float getAnimationSwimSpeed() {
+        if (this.tickCount != lastAnimSpeedTick) {
+            lastAnimSpeedTick = this.tickCount;
+            double dx = this.getX() - this.xo;
+            double dz = this.getZ() - this.zo;
+            float raw = (float) Math.sqrt(dx * dx + dz * dz);
+            smoothedAnimSpeed = Mth.lerp(0.3f, smoothedAnimSpeed, raw);
+        }
+        return smoothedAnimSpeed;
+    }
+
     public Vec3 getPartPos(int i) {
         return partPosition[i];
     }
@@ -3267,12 +3302,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                      if (breachGoal.isBreaching()) isBreachingAction = true;
                  }
              }
+             float hSpeed = this.getAnimationSwimSpeed();
              if (scanPlayerAbove()) {
-                 swimCycle = (float) (Mth.sin(this.tickCount * 0.05f) * this.getDeltaMovement().horizontalDistance() * 0.3);
+                 swimCycle = (float) (Mth.sin(this.tickCount * 0.05f) * hSpeed * 0.3);
              } else if(isBreachingAction) {
                  swimCycle = 0f;
              } else {
-                 swimCycle = (float) (Mth.sin(this.tickCount * 0.1f) * this.getDeltaMovement().horizontalDistance());
+                 swimCycle = (float) (Mth.sin(this.tickCount * 0.1f) * hSpeed);
              }
         }
         float yawRad = -this.getYRot() * Mth.DEG_TO_RAD;
@@ -3431,15 +3467,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public void stopMoving() {
         this.getNavigation().stop();
 
-        // Ported from 1.21.1: Preserve vertical only when anchored (buoyancy active); otherwise full stop
-        // Note: hasAnchorDown() check removed as it doesn't exist in 1.20.1 yet or isn't ported.
-        // For now, enforcing full stop to match user request for stability.
         if (this.isInWater()) {
             // SMOOTH DESCENT FIX: Preserve vertical velocity (Y) so 'travel' can handle buoyancy smoothly.
             // Only zero X and Z.
             this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
         } else {
-            this.setDeltaMovement(Vec3.ZERO);
+            // Preserve Y velocity so gravity still pulls the whale down when above water
+            this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
         }
 
         // Also stabilize pitch when stopping
