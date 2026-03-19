@@ -96,7 +96,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private boolean immobile;
     private boolean tamedCoolDown;
     private Vec3 currentTarget;
-    public int stationaryTicks;
+    public int stationaryTicks = 60;
     private boolean isBreaching;
 
     public void setBreaching(boolean breaching) {
@@ -139,19 +139,19 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public final HullbackPartEntity tail;
     public final HullbackPartEntity fluke;
 
-    public HullbackWalkableEntity moving_head;
-    public HullbackWalkableEntity moving_nose;
-    public HullbackWalkableEntity moving_body;
+    public HullbackWalkableEntity moving_head = null;
+    public HullbackWalkableEntity moving_nose = null;
+    public HullbackWalkableEntity moving_body = null;
     private final HullbackPartEntity[] subEntities;
-    private Vec3[] prevPartPositions;
-    private Vec3[] partPosition;
-    private float[] partYRot;
-    private float[] partXRot;
-    private Vec3[] oldPartPosition;
-    private float[] oldPartYRot;
-    private float[] oldPartXRot;
+    private Vec3[] prevPartPositions = new Vec3[5];
+    private Vec3[] partPosition = new Vec3[5];
+    private float[] partYRot = new float[5];
+    private float[] partXRot = new float[5];
+    private Vec3[] oldPartPosition = new Vec3[5];
+    private float[] oldPartYRot = new float[5];
+    private float[] oldPartXRot = new float[5];
     public float newRotY = this.getYRot();
-    private float mouthOpenProgress;
+    private float mouthOpenProgress = 0.0f;
     private float mouthTarget;
     private boolean wasPilotControlled = false;
     // Smoothed animation speed to avoid per-tick jitter from entity tracking position lerps
@@ -219,6 +219,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     public Vec3[] seats = new Vec3[7];
     public Vec3[] oldSeats = new Vec3[7];
+    private Vec3 smoothedSeat6 = null;
+    private Vec3 rawSeat6Pos = null;
+    private static final float SEAT6_SMOOTH_FACTOR = 0.35f;
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
@@ -280,27 +283,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F);
         this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F);
 
-        this.moving_nose = null;
-        this.moving_head = null;
-        this.moving_body = null;
-
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
-        
-        this.prevPartPositions = new Vec3[5];
-        this.partPosition = new Vec3[5];
-        this.partYRot = new float[5];
-        this.partXRot = new float[5];
-        this.oldPartPosition = new Vec3[5];
-        this.oldPartYRot = new float[5];
-        this.oldPartXRot = new float[5];
+
         Arrays.fill(partPosition, Vec3.ZERO);
-        this.mouthOpenProgress = 0.0f;
         this.currentTarget = this.position();
-        
+
         if(!level.isClientSide) initDirt();
         else initClientDirt();
-
-        this.stationaryTicks = 60;
     }
 
 
@@ -688,6 +677,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.entityData.define(DATA_VECTOR_CONTROL, false);
         this.entityData.define(DATA_STATIONARY_TICKS, 0);
     }
+
     public void addAdditionalSaveData(CompoundTag compound) {
         super.addAdditionalSaveData(compound);
         ListTag listtag = new ListTag();
@@ -1571,7 +1561,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         updatePartPositions();
         rotatePassengers();
 
-
         if (this.getSubEntities()[1].isEyeInFluidType(Fluids.WATER.getFluidType()) && this.tickCount % 80 == 0)
             this.heal(0.25f);
 
@@ -1617,7 +1606,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             seats[3] = partPosition[2].add((seatOffsets[3]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
             seats[4] = partPosition[2].add((seatOffsets[4]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
             seats[5] = partPosition[2].add((seatOffsets[5]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
-            seats[6] = partPosition[4].add((seatOffsets[6]).xRot(partXRot[4] * Mth.DEG_TO_RAD).yRot(-partYRot[4] * Mth.DEG_TO_RAD));
+            Vec3 rawSeat6 = partPosition[4].add((seatOffsets[6]).xRot(partXRot[4] * Mth.DEG_TO_RAD).yRot(-partYRot[4] * Mth.DEG_TO_RAD));
+            rawSeat6Pos = rawSeat6;
+            if (smoothedSeat6 == null) {
+                smoothedSeat6 = rawSeat6;
+            } else {
+                smoothedSeat6 = new Vec3(
+                        Mth.lerp(SEAT6_SMOOTH_FACTOR, smoothedSeat6.x, rawSeat6.x),
+                        Mth.lerp(SEAT6_SMOOTH_FACTOR, smoothedSeat6.y, rawSeat6.y),
+                        Mth.lerp(SEAT6_SMOOTH_FACTOR, smoothedSeat6.z, rawSeat6.z)
+                );
+            }
+            seats[6] = smoothedSeat6;
 
 
             oldSeats[0] = oldPartPosition[0].add((seatOffsets[0]).xRot(oldPartXRot[1] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[1] * Mth.DEG_TO_RAD));
@@ -1826,7 +1826,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return 2; // Default to body if unknown
     }
 
-    @Override
     protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
         if (!this.hasPassenger(passenger)) return;
 
@@ -1839,12 +1838,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (this.getArmorProgress() == 0)
             yOffset = 0.5F;
 
-        if (seatIndex < seats.length) {
-            if (seats[seatIndex] != null)
-                callback.accept(passenger,
-                        seats[seatIndex].x,
-                        seats[seatIndex].y - yOffset + passenger.getMyRidingOffset(),
-                        seats[seatIndex].z);
+        if (seatIndex < seats.length && seats[seatIndex] != null) {
+            // Use raw (unsmoothed) position for widgets on the fluke so they stay visually attached
+            Vec3 seatPos;
+            if (seatIndex == 6 && passenger instanceof WhaleWidgetEntity && rawSeat6Pos != null) {
+                seatPos = rawSeat6Pos;
+            } else {
+                seatPos = seats[seatIndex];
+            }
+            callback.accept(passenger,
+                    seatPos.x,
+                    seatPos.y - yOffset + passenger.getMyRidingOffset(),
+                    seatPos.z);
         }
     }
 
@@ -3304,11 +3309,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
              }
              float hSpeed = this.getAnimationSwimSpeed();
              if (scanPlayerAbove()) {
-                 swimCycle = (float) (Mth.sin(this.tickCount * 0.05f) * hSpeed * 0.3);
+                 swimCycle = (float) (Mth.sin((float) this.level().getGameTime() * 0.05f) * hSpeed * 0.3);
              } else if(isBreachingAction) {
                  swimCycle = 0f;
              } else {
-                 swimCycle = (float) (Mth.sin(this.tickCount * 0.1f) * hSpeed);
+                 swimCycle = (float) (Mth.sin((float) this.level().getGameTime() * 0.1f) * hSpeed);
              }
         }
         float yawRad = -this.getYRot() * Mth.DEG_TO_RAD;
@@ -3412,7 +3417,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 flukeTarget.y,
                 flukeTarget.z,
                 flukeYaw,
-                (flukePitch * 1.5f + (this.platformsStable ? 0 : swimCycle * 30f))
+                this.partXRot[4]
         );
 
         // Particles only when NOT stable

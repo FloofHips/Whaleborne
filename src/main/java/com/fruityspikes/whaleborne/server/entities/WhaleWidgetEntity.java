@@ -159,22 +159,38 @@ public abstract class WhaleWidgetEntity extends Entity {
             this.gameEvent(GameEvent.ENTITY_DAMAGE, source.getEntity());
             boolean flag = source.getEntity() instanceof Player && ((Player)source.getEntity()).getAbilities().instabuild;
             if (flag || this.getDamage() > 40.0F) {
+                if (!flag && this.level().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
+                    this.destroy(source);
+                }
+
                 this.level().playSound((Player)null, this.getX(), this.getY(), this.getZ(), getDeathSound(), SoundSource.BLOCKS, 0.75F, this.random.nextFloat() * 0.5f + 0.4F);
                 this.discard();
                 if (this.level() instanceof ServerLevel) {
                     ((ServerLevel)this.level()).sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, getDeathBlock()), this.getX(), this.getY(0.6666666666666666), this.getZ(), 10, (double)(this.getBbWidth() / 4.0F), (double)(this.getBbHeight() / 4.0F), (double)(this.getBbWidth() / 4.0F), 0.05);
                 }
-                if (!flag && this.level().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
-                    this.destroy(source);
-                }
-
-                this.discard();
             }
 
             return true;
         } else {
             return true;
         }
+    }
+
+    /**
+     * When riding a HullbackEntity, ignore entity tracking's lerpTo() entirely.
+     * Entity.lerpTo() does an immediate snap of position AND rotation.
+     * This corrupts prevWidgetYRot/prevWidgetXRot before rotatePassengers()
+     * can capture the correct local values, causing render interpolation
+     * to jitter between the server-snapped rotation and the locally
+     * calculated rotation. Position is handled by positionRider(), and
+     * rotation is handled by rotatePassengers() — both run every tick.
+     */
+    @Override
+    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps, boolean teleport) {
+        if (this.getVehicle() instanceof HullbackEntity) {
+            return;
+        }
+        super.lerpTo(x, y, z, yRot, xRot, steps, teleport);
     }
 
     @Override
