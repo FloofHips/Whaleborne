@@ -41,6 +41,8 @@ public abstract class WhaleWidgetEntity extends Entity {
     private static final EntityDataAccessor<Boolean> DATA_MANUAL = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.BOOLEAN);
     public float prevWidgetYRot;
     public float prevWidgetXRot;
+    private float endOfTickWidgetYRot;
+    private float endOfTickWidgetXRot;
     private final Item item;
 
     public WhaleWidgetEntity(EntityType<?> entityType, Level level, Item dropItem) {
@@ -103,8 +105,11 @@ public abstract class WhaleWidgetEntity extends Entity {
 
     @Override
     public void tick() {
-        this.prevWidgetYRot = this.getYRot();
-        this.prevWidgetXRot = this.getXRot();
+        // Use end-of-previous-tick snapshot so that rotatePassengers() (which runs
+        // BEFORE passenger ticks) can't clobber the prev value.  Same delayed-
+        // capture pattern used for HelmEntity.prevWheelRotation.
+        this.prevWidgetYRot = this.endOfTickWidgetYRot;
+        this.prevWidgetXRot = this.endOfTickWidgetXRot;
         super.tick();
         if (this.getHurtTime() > 0) {
             this.setHurtTime(this.getHurtTime() - 1);
@@ -116,6 +121,10 @@ public abstract class WhaleWidgetEntity extends Entity {
         if(!this.getPersistent() && this.tickCount > 100 && !this.isPassenger()){
             destroy(null);
         }
+
+        // Snapshot current rotation at end of tick for next tick's prev values.
+        this.endOfTickWidgetYRot = this.getYRot();
+        this.endOfTickWidgetXRot = this.getXRot();
     }
     @Override
     public boolean isPickable() {

@@ -26,6 +26,14 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     /** Client-only previous value kept for render interpolation. */
     public float prevWheelRotation;
 
+    /**
+     * Client-side predicted wheel rotation.  On the LOCAL client we replicate
+     * the server's {@code wheel += xxa / 10} logic so the wheel responds
+     * instantly to input without waiting for the entityData round-trip.
+     * A slow blend towards the server-synced value (entityData) prevents drift.
+     */
+    private float clientWheelRotation;
+
     public HelmEntity(EntityType<?> entityType, Level level) {
         super(entityType, level, WBItemRegistry.HELM.get());
     }
@@ -38,8 +46,28 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
 
     @Override
     public void tick() {
-        // Capture previous value before entityData sync overwrites it
-        this.prevWheelRotation = this.getWheelRotation();
+        if (this.level().isClientSide) {
+            // ---- client-side wheel prediction ----
+            this.prevWheelRotation = this.clientWheelRotation;
+
+            // Mirror server logic: apply local input immediately
+            if (this.getVehicle() instanceof HullbackEntity hullback) {
+                LivingEntity ctrl = hullback.getControllingPassenger();
+                if (ctrl instanceof Player player && player == net.minecraft.client.Minecraft.getInstance().player) {
+                    if (Mth.abs(player.xxa) > 0 && !hullback.hasAnchorDown()) {
+                        this.clientWheelRotation += player.xxa / 10;
+                    }
+                }
+            }
+
+            // Slowly reconcile with the server-authoritative value to prevent drift
+            float serverValue = this.getWheelRotation();
+            this.clientWheelRotation = Mth.lerp(0.25f, this.clientWheelRotation, serverValue);
+        } else {
+            // Server: simple prev tracking (not used for rendering)
+            this.prevWheelRotation = this.getWheelRotation();
+        }
+
         super.tick();
     }
 
@@ -48,12 +76,21 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
         return this.getBbHeight();
     }
 
+    /** Raw synced value from the server (entityData). */
     public float getWheelRotation() {
         return this.entityData.get(DATA_WHEEL_ROTATION);
     }
 
+    /**
+     * Returns the wheel rotation the renderer should display.
+     * On the client this is the locally-predicted value;
+     * elsewhere it falls back to the synced entityData value.
+     */
+    public float getRenderWheelRotation() {
+        return this.level().isClientSide ? this.clientWheelRotation : this.getWheelRotation();
+    }
+
     public void setWheelRotation(float wheelRotation) {
-        this.prevWheelRotation = this.getWheelRotation();
         this.entityData.set(DATA_WHEEL_ROTATION, wheelRotation);
     }
 

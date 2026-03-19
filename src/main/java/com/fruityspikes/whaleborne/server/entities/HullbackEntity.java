@@ -2068,17 +2068,27 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 // Don't touch yRot/xRot (camera look direction) or yHeadRot.
                 playerPassenger.setYBodyRot(partYRot[partIndex] + offset);
             } else if (!(passenger instanceof CannonEntity cannonEntity && cannonEntity.isVehicle())) {
+                float newYRot;
+                float newXRot;
+
                 if (passenger instanceof SailEntity) {
-                    passenger.yRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), oldPartYRot[partIndex]) + offset);
-                    passenger.xRotO = (Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), oldPartXRot[partIndex]));
-                    passenger.setYRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getYRot(), partYRot[partIndex]) + offset);
-                    passenger.setXRot(Mth.rotLerp((float) (0.05 + 0.1 * partIndex), passenger.getXRot(), partXRot[partIndex]));
+                    float lerpFactor = (float) (0.05 + 0.1 * partIndex);
+                    newYRot = Mth.rotLerp(lerpFactor, passenger.getYRot(), partYRot[partIndex]) + offset;
+                    newXRot = Mth.rotLerp(lerpFactor, passenger.getXRot(), partXRot[partIndex]);
                 } else {
-                    passenger.yRotO = oldPartYRot[partIndex];
-                    passenger.xRotO = oldPartXRot[partIndex];
-                    passenger.setYRot((partYRot[partIndex]) + offset);
-                    passenger.setXRot(partXRot[partIndex]);
+                    newYRot = partYRot[partIndex] + offset;
+                    newXRot = partXRot[partIndex];
                 }
+
+                // Capture prev BEFORE applying the new rotation so the renderer
+                // can interpolate between old and new (matches 1.21.1 behaviour).
+                if (passenger instanceof WhaleWidgetEntity widget) {
+                    widget.prevWidgetYRot = widget.getYRot();
+                    widget.prevWidgetXRot = widget.getXRot();
+                }
+
+                passenger.setYRot(newYRot);
+                passenger.setXRot(newXRot);
             }
         }
     }
@@ -3050,11 +3060,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             if (tickCount % 2 == 0) this.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
 
-            if (getControllingPassenger() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity) {
+            if (!this.level().isClientSide && getControllingPassenger() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity) {
                 helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / 10);
             }
         } else {
-            if (getControllingPassenger() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity) {
+            if (!this.level().isClientSide && getControllingPassenger() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity) {
                 helmEntity.setPrevWheelRotation(helmEntity.getWheelRotation());
             }
         }

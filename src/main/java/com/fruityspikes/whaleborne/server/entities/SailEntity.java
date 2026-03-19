@@ -75,6 +75,16 @@ public class SailEntity extends WhaleWidgetEntity{
             }
             return InteractionResult.sidedSuccess(this.level().isClientSide);
         }
+        // Orientation change when placed on the ground (not a passenger)
+        if (!this.isPassenger()) {
+            if (player.isShiftKeyDown()) {
+                this.setYRot(getYRot() - 11.25f);
+            } else {
+                this.setYRot(getYRot() + 11.25f);
+            }
+            this.playSound(SoundEvents.WOOD_HIT);
+            return InteractionResult.SUCCESS;
+        }
         return super.interact(player, hand);
 
     }
@@ -98,6 +108,11 @@ public class SailEntity extends WhaleWidgetEntity{
             ItemStack banner = ItemStack.of(tag);
             this.entityData.set(DATA_BANNER, banner);
         }
+    }
+
+    @Override
+    public boolean canBeCollidedWith() {
+        return !this.isPassenger();
     }
 
     @Override
