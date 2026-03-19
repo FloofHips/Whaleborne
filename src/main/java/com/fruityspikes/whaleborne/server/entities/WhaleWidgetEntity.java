@@ -62,7 +62,11 @@ public abstract class WhaleWidgetEntity extends Entity {
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
-        setPersistent(tag.getBoolean("Persistent"));
+        if (tag.contains("Persistent"))
+            setPersistent(tag.getBoolean("Persistent"));
+        else {
+            setPersistent(false);
+        }
     }
 
     public void setPersistent(boolean persistent) {

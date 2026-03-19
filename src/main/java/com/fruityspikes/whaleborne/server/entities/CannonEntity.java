@@ -79,7 +79,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
     public float getCannonXRot() {
         return cannonXRot;
     }
-    
+
     public SoundEvent getDeathSound() { return SoundEvents.ANVIL_PLACE;}
     public BlockState getDeathBlock() { return Blocks.ANVIL.defaultBlockState();}
 
