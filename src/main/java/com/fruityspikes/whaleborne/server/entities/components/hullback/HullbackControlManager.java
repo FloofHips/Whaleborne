@@ -130,11 +130,11 @@ public class HullbackControlManager {
             
             if (whale.tickCount % STEERING_SOUND_INTERVAL == 0) whale.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
              
-            if(whale.getControllingPassenger() != null && whale.getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
+            if(!whale.level().isClientSide && whale.getControllingPassenger() != null && whale.getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
                  helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / WHEEL_ROTATION_DIVISOR);
             }
         } else {
-             if(whale.getControllingPassenger() != null && whale.getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
+             if(!whale.level().isClientSide && whale.getControllingPassenger() != null && whale.getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
                 helmEntity.setPrevWheelRotation(helmEntity.getWheelRotation());
             }
         }

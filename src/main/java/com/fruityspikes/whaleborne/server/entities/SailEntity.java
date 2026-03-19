@@ -8,15 +8,10 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.tags.ItemTags;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
 import net.minecraft.world.phys.Vec3;
@@ -39,48 +34,18 @@ public class SailEntity extends WhaleWidgetEntity{
     }
 
     @Override
-    public InteractionResult interact(Player player, InteractionHand hand) {
-        if (player.getItemInHand(hand).is(Items.WATER_BUCKET) && !this.getBanner().isEmpty()) {
-            if (!this.level().isClientSide) {
-                this.spawnAtLocation(this.entityData.get(DATA_BANNER));
-                this.entityData.set(DATA_BANNER, ItemStack.EMPTY);
-
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.AMBIENT_UNDERWATER_EXIT,
-                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.ARMOR_EQUIP_LEATHER,
-                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
-            }
-            return InteractionResult.sidedSuccess(this.level().isClientSide);
-        }
-        if (player.getItemInHand(hand).is(ItemTags.BANNERS)) {
-            if (!this.level().isClientSide) {
-                if (!this.getBanner().isEmpty()) {
-                    this.spawnAtLocation(this.entityData.get(DATA_BANNER));
-                }
-                ItemStack bannerStack = player.getItemInHand(hand).copy();
-                bannerStack.setCount(1);
-
-                this.entityData.set(DATA_BANNER, bannerStack);
-
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.ARMOR_EQUIP_LEATHER,
-                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
-                if (!player.getAbilities().instabuild) {
-                    player.getItemInHand(hand).shrink(1);
-                }
-            }
-            return InteractionResult.sidedSuccess(this.level().isClientSide);
-        }
-        return super.interact(player, hand);
-
+    public boolean isPickable() {
+        return true;
     }
+
+    // Ground interaction is handled by SailInteractionHandler event.
+    // This method only handles interaction when the sail is a passenger (on the Hullback).
 
     public ItemStack getBanner() {
         return this.entityData.get(DATA_BANNER);
     }
     public void addAdditionalSaveData(CompoundTag compound) {
+        super.addAdditionalSaveData(compound);
         ItemStack banner = getBanner();
 
         if (!banner.isEmpty()) {
@@ -89,6 +54,7 @@ public class SailEntity extends WhaleWidgetEntity{
     }
 
     public void readAdditionalSaveData(CompoundTag compound) {
+        super.readAdditionalSaveData(compound);
         if (compound.contains("Banner")) {
             CompoundTag tag = compound.getCompound("Banner");
             ItemStack banner = ItemStack.parse(this.registryAccess(), tag).orElse(ItemStack.EMPTY);
@@ -99,6 +65,11 @@ public class SailEntity extends WhaleWidgetEntity{
     @Override
     protected Vec3 getPassengerAttachmentPoint(Entity passenger, net.minecraft.world.entity.EntityDimensions dimensions, float scale) {
         return super.getPassengerAttachmentPoint(passenger, dimensions, scale).add(0, this.getBbHeight() - 1.0f, 0);
+    }
+
+    @Override
+    public boolean canBeCollidedWith() {
+        return !this.isPassenger();
     }
 
     @Override

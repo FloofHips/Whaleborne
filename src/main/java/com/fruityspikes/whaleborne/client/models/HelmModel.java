@@ -42,7 +42,7 @@ public class HelmModel<T extends HelmEntity> extends EntityModel<T> {
     @Override
     public void setupAnim(T t, float v, float v1, float v2, float v3, float v4) {
         wheel.resetPose();
-        wheel.zRot = Mth.lerp(v, t.getPrevWheelRotation(), t.getWheelRotation());
+        wheel.zRot = Mth.lerp(v, t.getPrevWheelRotation(), t.getRenderWheelRotation());
     }
 
     @Override
