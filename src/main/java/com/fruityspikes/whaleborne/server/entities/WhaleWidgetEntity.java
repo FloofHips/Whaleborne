@@ -1,10 +1,15 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -24,6 +29,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.HitResult;
 
@@ -31,6 +38,7 @@ public abstract class WhaleWidgetEntity extends Entity {
     private static final EntityDataAccessor<Integer> DATA_ID_HURT = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> DATA_ID_HURTDIR = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> DATA_ID_DAMAGE = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Boolean> DATA_MANUAL = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.BOOLEAN);
     public float prevWidgetYRot;
     public float prevWidgetXRot;
     private final Item item;
@@ -44,6 +52,25 @@ public abstract class WhaleWidgetEntity extends Entity {
         this.entityData.define(DATA_ID_HURT, 0);
         this.entityData.define(DATA_ID_HURTDIR, 1);
         this.entityData.define(DATA_ID_DAMAGE, 0.0F);
+        this.entityData.define(DATA_MANUAL, false);
+    }
+
+    @Override
+    public void addAdditionalSaveData(CompoundTag tag) {
+        tag.putBoolean("Persistent", getPersistent());
+    }
+
+    @Override
+    public void readAdditionalSaveData(CompoundTag tag) {
+        setPersistent(tag.getBoolean("Persistent"));
+    }
+
+    public void setPersistent(boolean persistent) {
+        this.entityData.set(DATA_MANUAL, persistent);
+    }
+
+    public boolean getPersistent() {
+        return this.entityData.get(DATA_MANUAL);
     }
 
     public void setDamage(float damageTaken) {
@@ -82,7 +109,7 @@ public abstract class WhaleWidgetEntity extends Entity {
         if (this.getDamage() > 0.0F) {
             this.setDamage(this.getDamage() - 1.0F);
         }
-        if(this.tickCount > 100 && !this.isPassenger()){
+        if(!this.getPersistent() && this.tickCount > 100 && !this.isPassenger()){
             destroy(null);
         }
     }
@@ -110,6 +137,9 @@ public abstract class WhaleWidgetEntity extends Entity {
         this.kill();
     }
 
+    public SoundEvent getDeathSound() { return SoundEvents.WOOD_BREAK;}
+    public BlockState getDeathBlock() { return Blocks.SPRUCE_PLANKS.defaultBlockState();}
+
     public Item getDropItem() {
         return this.item;
     }
@@ -125,6 +155,11 @@ public abstract class WhaleWidgetEntity extends Entity {
             this.gameEvent(GameEvent.ENTITY_DAMAGE, source.getEntity());
             boolean flag = source.getEntity() instanceof Player && ((Player)source.getEntity()).getAbilities().instabuild;
             if (flag || this.getDamage() > 40.0F) {
+                this.level().playSound((Player)null, this.getX(), this.getY(), this.getZ(), getDeathSound(), SoundSource.BLOCKS, 0.75F, this.random.nextFloat() * 0.5f + 0.4F);
+                this.discard();
+                if (this.level() instanceof ServerLevel) {
+                    ((ServerLevel)this.level()).sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, getDeathBlock()), this.getX(), this.getY(0.6666666666666666), this.getZ(), 10, (double)(this.getBbWidth() / 4.0F), (double)(this.getBbHeight() / 4.0F), (double)(this.getBbWidth() / 4.0F), 0.05);
+                }
                 if (!flag && this.level().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
                     this.destroy(source);
                 }

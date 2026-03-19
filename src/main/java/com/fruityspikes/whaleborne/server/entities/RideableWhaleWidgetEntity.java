@@ -60,14 +60,4 @@ public class RideableWhaleWidgetEntity extends WhaleWidgetEntity{
     protected void defineSynchedData() {
         super.defineSynchedData();
     }
-
-    @Override
-    protected void readAdditionalSaveData(CompoundTag compoundTag) {
-
-    }
-
-    @Override
-    protected void addAdditionalSaveData(CompoundTag compoundTag) {
-
-    }
 }

@@ -226,7 +226,7 @@ public class AnchorEntity extends WhaleWidgetEntity {
     }
 
     @Override
-    protected void readAdditionalSaveData(CompoundTag tag) {
+    public void readAdditionalSaveData(CompoundTag tag) {
         this.entityData.set(DATA_IS_CLOSED, tag.getBoolean("isClosed"));
         this.entityData.set(DATA_IS_DOWN, tag.getBoolean("isDown"));
         this.hasHitTheBottom = tag.getBoolean("hasHitTheBottom");
@@ -236,7 +236,7 @@ public class AnchorEntity extends WhaleWidgetEntity {
     }
 
     @Override
-    protected void addAdditionalSaveData(CompoundTag tag) {
+    public void addAdditionalSaveData(CompoundTag tag) {
         tag.putBoolean("isClosed", isClosed());
         tag.putBoolean("isDown", isDown());
         tag.putBoolean("hasHitTheBottom", this.hasHitTheBottom);
