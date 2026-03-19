@@ -30,7 +30,7 @@ public class HullbackRandomSwimGoal extends RandomSwimmingGoal {
 
     @Override
     public boolean canUse() {
-        if (mob.stationaryTicks > 0 || mob.hasAnchorDown() || mob.getControllingPassenger() != null) {
+        if (mob.getStationaryTicks() > 0 || mob.hasAnchorDown() || mob.getControllingPassenger() != null) {
             return false;
         }
 
@@ -60,7 +60,7 @@ public class HullbackRandomSwimGoal extends RandomSwimmingGoal {
 
     @Override
     public boolean canContinueToUse() {
-        if (mob.stationaryTicks > 0 || mob.hasAnchorDown() || mob.getControllingPassenger() != null) {
+        if (mob.getStationaryTicks() > 0 || mob.hasAnchorDown() || mob.getControllingPassenger() != null) {
             return false;
         }
 

@@ -48,9 +48,6 @@ public class HullbackInteractionManager {
      * @return The interaction result
      */
     public InteractionResult mobInteract(Player player, InteractionHand hand) {
-        if (hullback.isVehicle()) {
-            return InteractionResult.PASS;
-        }
         return InteractionResult.PASS;
     }
 

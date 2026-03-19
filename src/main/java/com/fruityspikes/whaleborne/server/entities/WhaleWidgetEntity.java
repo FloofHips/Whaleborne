@@ -1,10 +1,14 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -24,6 +28,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.HitResult;
 
@@ -31,6 +37,7 @@ public abstract class WhaleWidgetEntity extends Entity {
     private static final EntityDataAccessor<Integer> DATA_ID_HURT = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> DATA_ID_HURTDIR = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> DATA_ID_DAMAGE = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Boolean> DATA_MANUAL = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.BOOLEAN);
     protected Item item;
     public float prevWidgetYRot;
     public float prevWidgetXRot;
@@ -43,6 +50,29 @@ public abstract class WhaleWidgetEntity extends Entity {
         builder.define(DATA_ID_HURT, 0);
         builder.define(DATA_ID_HURTDIR, 1);
         builder.define(DATA_ID_DAMAGE, 0.0F);
+        builder.define(DATA_MANUAL, false);
+    }
+
+    @Override
+    public void addAdditionalSaveData(CompoundTag tag) {
+        tag.putBoolean("Persistent", getPersistent());
+    }
+
+    @Override
+    public void readAdditionalSaveData(CompoundTag tag) {
+        if (tag.contains("Persistent"))
+            setPersistent(tag.getBoolean("Persistent"));
+        else {
+            setPersistent(false);
+        }
+    }
+
+    public void setPersistent(boolean persistent) {
+        this.entityData.set(DATA_MANUAL, persistent);
+    }
+
+    public boolean getPersistent() {
+        return this.entityData.get(DATA_MANUAL);
     }
 
     public void setDamage(float damageTaken) {
@@ -71,6 +101,8 @@ public abstract class WhaleWidgetEntity extends Entity {
 
     @Override
     public void tick() {
+        this.prevWidgetYRot = this.getYRot();
+        this.prevWidgetXRot = this.getXRot();
         super.tick();
         if (this.getHurtTime() > 0) {
             this.setHurtTime(this.getHurtTime() - 1);
@@ -79,7 +111,7 @@ public abstract class WhaleWidgetEntity extends Entity {
         if (this.getDamage() > 0.0F) {
             this.setDamage(this.getDamage() - 1.0F);
         }
-        if(this.tickCount > 100 && !this.isPassenger()){
+        if(!this.getPersistent() && this.tickCount > 100 && !this.isPassenger()){
             destroy(null);
         }
     }
@@ -111,6 +143,9 @@ public abstract class WhaleWidgetEntity extends Entity {
         return this.item;
     }
 
+    public SoundEvent getDeathSound() { return SoundEvents.WOOD_BREAK;}
+    public BlockState getDeathBlock() { return Blocks.SPRUCE_PLANKS.defaultBlockState();}
+
     public boolean hurt(DamageSource source, float amount) {
         if (this.isInvulnerableTo(source)) {
             return false;
@@ -126,13 +161,34 @@ public abstract class WhaleWidgetEntity extends Entity {
                     this.destroy(source);
                 }
 
+                this.level().playSound((Player)null, this.getX(), this.getY(), this.getZ(), getDeathSound(), SoundSource.BLOCKS, 0.75F, this.random.nextFloat() * 0.5f + 0.4F);
                 this.discard();
+                if (this.level() instanceof ServerLevel) {
+                    ((ServerLevel)this.level()).sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, getDeathBlock()), this.getX(), this.getY(0.6666666666666666), this.getZ(), 10, (double)(this.getBbWidth() / 4.0F), (double)(this.getBbHeight() / 4.0F), (double)(this.getBbWidth() / 4.0F), 0.05);
+                }
             }
 
             return true;
         } else {
             return true;
         }
+    }
+
+    /**
+     * When riding a HullbackEntity, ignore entity tracking's lerpTo() entirely.
+     * Entity.lerpTo() does an immediate snap of position AND rotation.
+     * This corrupts prevWidgetYRot/prevWidgetXRot before rotatePassengers()
+     * can capture the correct local values, causing render interpolation
+     * to jitter between the server-snapped rotation and the locally
+     * calculated rotation. Position is handled by positionRider(), and
+     * rotation is handled by rotatePassengers() — both run every tick.
+     */
+    @Override
+    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps) {
+        if (this.getVehicle() instanceof HullbackEntity) {
+            return;
+        }
+        super.lerpTo(x, y, z, yRot, xRot, steps);
     }
 
     @Override

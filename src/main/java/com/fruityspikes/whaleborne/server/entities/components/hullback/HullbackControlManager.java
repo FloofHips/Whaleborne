@@ -29,7 +29,17 @@ import net.neoforged.api.distmarker.OnlyIn;
  */
 public class HullbackControlManager {
     private final HullbackEntity whale;
-    
+
+    // ─── Constants ────────────────────────────────────────────────
+    private static final int ANCHOR_SOUND_INTERVAL = 10;
+    private static final int STEERING_SOUND_INTERVAL = 2;
+    private static final float WHEEL_ROTATION_DIVISOR = 10f;
+    private static final float MAX_RIDING_PITCH = 25f;
+    private static final float VECTOR_YAW_LERP_SPEED = 0.05f;
+    private static final float REVERSE_SPEED_MODIFIER = 0.25F;
+    private static final float TANK_YAW_LERP_SPEED = 0.8f;
+    private static final float AI_MAX_PITCH = 20f;
+
     // Cache for third person mod check
     private static Boolean IS_THIRD_PERSON_MOD_LOADED = null;
 
@@ -49,7 +59,9 @@ public class HullbackControlManager {
                  if (local != null && local.getRootVehicle() == whale) {
                      controller = local;
                  }
-             } catch (Exception e) {}
+             } catch (Exception e) {
+                 // Expected on dedicated server where client classes are absent
+             }
         }
 
         if (controller instanceof Player player && player == net.minecraft.client.Minecraft.getInstance().player) {
@@ -112,14 +124,14 @@ public class HullbackControlManager {
 
         if (hasInput) {
             if (whale.hasAnchorDown()) {
-                if (whale.tickCount % 10 == 0) whale.playSound(SoundEvents.WOOD_HIT, 1, 1);
+                if (whale.tickCount % ANCHOR_SOUND_INTERVAL == 0) whale.playSound(SoundEvents.WOOD_HIT, 1, 1);
                 return Vec3.ZERO; 
             }
             
-            if (whale.tickCount % 2 == 0) whale.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
+            if (whale.tickCount % STEERING_SOUND_INTERVAL == 0) whale.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
              
             if(whale.getControllingPassenger() != null && whale.getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
-                 helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / 10);
+                 helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / WHEEL_ROTATION_DIVISOR);
             }
         } else {
              if(whale.getControllingPassenger() != null && whale.getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
@@ -129,7 +141,7 @@ public class HullbackControlManager {
 
         if (this.whale.isInWater()) {
             float currentPitch = this.whale.getXRot();
-            float maxPitch = 25f; // Maximum tilt angle in degrees
+            float maxPitch = MAX_RIDING_PITCH;
 
             if (Math.abs(currentPitch) > maxPitch) {
                 this.whale.setXRot(Mth.clamp(currentPitch, -maxPitch, maxPitch));
@@ -148,7 +160,7 @@ public class HullbackControlManager {
                 // Calculates rotation based on relative camera input
                 float targetYaw = player.getYRot() - (float)(Mth.atan2(player.xxa, player.zza) * (180D / Math.PI));
                 
-                whale.setYRot(Mth.rotLerp(0.05f, whale.getYRot(), targetYaw));
+                whale.setYRot(Mth.rotLerp(VECTOR_YAW_LERP_SPEED, whale.getYRot(), targetYaw));
                 whale.yBodyRot = whale.getYRot();
                 whale.yHeadRot = whale.getYRot();
                 
@@ -161,12 +173,12 @@ public class HullbackControlManager {
         } else {
             // --- TANK MODE (1st Person / Vanilla) ---
             if (zza <= 0.0F) {
-                zza *= 0.25F; // Slower reverse
+                zza *= REVERSE_SPEED_MODIFIER;
             }
             
             // The lateral input (A/D) turns into ROTATION, not lateral movement
             if (player.xxa != 0) {
-                whale.setYRot(Mth.rotLerp(0.8f, whale.getYRot(), whale.getYRot() - player.xxa)); 
+                whale.setYRot(Mth.rotLerp(TANK_YAW_LERP_SPEED, whale.getYRot(), whale.getYRot() - player.xxa)); 
                 whale.yBodyRot = whale.getYRot();
             }
             
@@ -228,7 +240,7 @@ public class HullbackControlManager {
 
             // Limit pitch angle during AI movement to prevent excessive tilting
             if (this.mob.isInWater()) {
-                this.mob.setXRot(Mth.clamp(this.mob.getXRot(), -20f, 20f));
+                this.mob.setXRot(Mth.clamp(this.mob.getXRot(), -AI_MAX_PITCH, AI_MAX_PITCH));
             }
         }
     }

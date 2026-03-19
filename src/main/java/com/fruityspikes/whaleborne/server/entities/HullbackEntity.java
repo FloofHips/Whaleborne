@@ -78,8 +78,6 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private static final float PLATFORM_HEIGHT_HELM = 4.5F; 
     private static final float PLATFORM_HEIGHT_STATIONARY = 4.5F;
     private static final float PLATFORM_HEIGHT_LERP_SPEED = 0.1F;
-    // DIRT_TICK_CHANCE / DIRT_TICK_DENOMINATOR removed — random gate now lives
-    // inside HullbackDirt.randomTick(), matching the original 1.20.1 structure.
     private static final int POST_LOAD_VALIDATION_DELAY_TICKS = 5;
     private static final int STATIONARY_TICKS_PLAYER_ABOVE = 60;
     private static final int STATIONARY_TICKS_DISMOUNT = 200;
@@ -127,45 +125,48 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     public static final int INV_SLOT_ARMOR = 2;
 
     // ─── Sub-Entity Parts ───────────────────────────────────────
-    public final HullbackPartEntity head;
-    public final HullbackPartEntity nose;
-    public final HullbackPartEntity body;
-    public final HullbackPartEntity tail;
-    public final HullbackPartEntity fluke;
-    private final HullbackPartEntity[] subEntities;
-
-
+    public HullbackPartEntity head;
+    public HullbackPartEntity nose;
+    public HullbackPartEntity body;
+    public HullbackPartEntity tail;
+    public HullbackPartEntity fluke;
+    private HullbackPartEntity[] subEntities;
 
     // ─── Component Managers ──────────────────────────────────────
-    public final HullbackPartManager partManager;
-    public final HullbackDirt hullbackDirt;
-    public final HullbackSeatManager hullbackSeatManager;
-    public final HullbackAIManager aiManager;
-    public final HullbackEquipmentManager equipmentManager;
-    public final HullbackInteractionManager interactionManager;
-    public final HullbackControlManager controlManager;
-    public final HullbackControlManager.HullbackBodyRotationControl bodyControl;
+    public HullbackPartManager partManager;
+    public HullbackDirt hullbackDirt;
+    public HullbackSeatManager hullbackSeatManager;
+    public HullbackAIManager aiManager;
+    public HullbackEquipmentManager equipmentManager;
+    public HullbackInteractionManager interactionManager;
+    public HullbackControlManager controlManager;
+    public HullbackControlManager.HullbackBodyRotationControl bodyControl;
 
-    // ─── State Fields ───────────────────────────────────────────
+    // ─── State: General ──────────────────────────────────────────
     private boolean isFreshSpawn = true;
     private boolean validatedAfterLoad = false;
-    private float leftEyeYaw, rightEyeYaw, eyePitch;
     private IItemHandler itemHandler;
     private Vec3 currentTarget;
-    public int stationaryTicks;
-    public boolean HAS_MOBIUS_SPAWNED = false;
+    public int stationaryTicks = STATIONARY_TICKS_INITIAL;
+    public boolean hasMobiusSpawned = false;
     public int ticksSinceSpawn = 0;
-    public float AttributeSpeedModifier = 1;
-    public float newRotY = this.getYRot();
-    private float mouthOpenProgress;
+    public float attributeSpeedModifier = 1;
+    public float newRotY;
+
+    // ─── State: Animation & Visual ───────────────────────────────
+    private float leftEyeYaw, rightEyeYaw, eyePitch;
+    private float mouthOpenProgress = 0.0f;
     private float mouthTarget;
-    private boolean isBreaching;
-    // Smoothed animation speed to avoid per-tick jitter from entity tracking position lerps
     private float smoothedAnimSpeed = 0f;
     private int lastAnimSpeedTick = -1;
+
+    // ─── State: Movement & Breaching ─────────────────────────────
+    private boolean isBreaching;
     private boolean pitchLocked = false;
     private boolean wasPilotControlled = false;
-    private int playerAboveCooldown = 0;  // Cooldown to prevent rapid detection
+
+    // ─── State: Platform & Player Detection ──────────────────────
+    private int playerAboveCooldown = 0;
     private boolean platformsStable = false;
     private boolean isApproachingPlayer = false;
     private float targetPlatformHeight;
@@ -211,35 +212,49 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     public HullbackEntity(EntityType<? extends WaterAnimal> entityType, Level level) {
         super(entityType, level);
 
+        initInventory();
+        initControls();
+        initParts();
+        initManagers();
 
+        this.currentTarget = this.position();
+        this.newRotY = this.getYRot();
+
+        // Manual inventory update since the one in super() was skipped due to null manager
+        this.updateContainerEquipment();
+    }
+
+    // ─── Constructor Init Helpers ─────────────────────────────────
+
+    private void initInventory() {
         this.inventory.addListener(this);
         this.itemHandler = new InvWrapper(this.inventory);
+    }
 
+    private void initControls() {
         this.moveControl = new HullbackControlManager.StationaryAwareMoveControl(this, 1, 2, 0.1F, 0.1F, true);
         this.lookControl = new HullbackControlManager.StationaryAwareLookControl(this, 1);
         this.bodyControl = (HullbackControlManager.HullbackBodyRotationControl) createBodyControl();
+    }
 
-
+    private void initParts() {
         this.nose = new HullbackPartEntity(this, "nose", 5.0F, 5.0F);
         this.head = new HullbackPartEntity(this, "head", 5.0F, 5.0F);
         this.body = new HullbackPartEntity(this, "body", 5.0F, 5.0F);
         this.tail = new HullbackPartEntity(this, "tail", 2.5F, 2.5F);
         this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F);
-
-
-
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
-
         this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
+    }
 
+    private void initManagers() {
         this.partManager = new HullbackPartManager(this, this.subEntities);
-        this.partManager.init();
 
         this.hullbackDirt = new HullbackDirt(this);
         this.hullbackDirt.init();
 
-        this.hullbackSeatManager = new HullbackSeatManager(this, 
-            DATA_SEAT_0, DATA_SEAT_1, DATA_SEAT_2, DATA_SEAT_3, 
+        this.hullbackSeatManager = new HullbackSeatManager(this,
+            DATA_SEAT_0, DATA_SEAT_1, DATA_SEAT_2, DATA_SEAT_3,
             DATA_SEAT_4, DATA_SEAT_5, DATA_SEAT_6);
 
         this.aiManager = new HullbackAIManager(this);
@@ -247,17 +262,9 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         this.interactionManager = new HullbackInteractionManager(this);
         this.controlManager = new HullbackControlManager(this);
         this.moveControl = new HullbackControlManager.HullbackMoveControl(this);
-        
+
         // Manual registration since registerGoals() is called by super() before aiManager is init
         this.aiManager.registerGoals();
-
-        this.mouthOpenProgress = 0.0f;
-        this.currentTarget = this.position();
-        
-        // Manual inventory update since the one in super() was skipped due to null manager
-        this.updateContainerEquipment();
-
-        this.stationaryTicks = STATIONARY_TICKS_INITIAL;
     }
 
     @Override
@@ -449,6 +456,11 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     public int getStationaryTicks() {
         return this.entityData.get(DATA_STATIONARY_TICKS);
     }
+
+    public void setStationaryTicks(int ticks) {
+        this.stationaryTicks = ticks;
+    }
+
     public void addAdditionalSaveData(CompoundTag compound) {
         super.addAdditionalSaveData(compound);
         ListTag listtag = new ListTag();
@@ -466,7 +478,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         compound.put("Items", listtag);
 
 
-        compound.putBoolean("HasMobiusSpawned", HAS_MOBIUS_SPAWNED);
+        compound.putBoolean("HasMobiusSpawned", hasMobiusSpawned);
         compound.putInt("TicksSinceSpawn", ticksSinceSpawn);
 
         for (int i = 0; i < 7; i++) {
@@ -493,7 +505,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
             }
         }
 
-        HAS_MOBIUS_SPAWNED = compound.getBoolean("HasMobiusSpawned");
+        hasMobiusSpawned = compound.getBoolean("HasMobiusSpawned");
         ticksSinceSpawn = compound.getInt("TicksSinceSpawn");
 
         for (int i = 0; i < 7; i++) {
@@ -520,9 +532,19 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     public float getLeftEyeYaw() { return leftEyeYaw; }
     public float getRightEyeYaw() { return rightEyeYaw; }
     public float getEyePitch() { return eyePitch; }
+
     // Override to suppress default air supply tick — prevents the entity from
     // trying to surface for air, which would fight the custom buoyancy in travel().
-    protected void handleAirSupply(int airSupply) { }
+    // Also replaces canBreatheUnderwater(isVehicle()) from 1.20.1 — method is final in 1.21.1.
+    @Override
+    protected void handleAirSupply(int airSupply) {
+        for (net.minecraft.world.entity.Entity passenger : this.getPassengers()) {
+            if (passenger instanceof net.minecraft.world.entity.player.Player) {
+                this.setAirSupply(this.getMaxAirSupply());
+                return;
+            }
+        }
+    }
 
     public int getMaxAirSupply() {
         return 10000;
@@ -1301,10 +1323,17 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
         // Verify if seats were calculated
         if (seatIndex < partManager.seats.length && partManager.seats[seatIndex] != null) {
+            // Use raw (unsmoothed) position for widgets on the fluke so they stay visually attached
+            Vec3 seatPos;
+            if (seatIndex == 6 && passenger instanceof WhaleWidgetEntity && partManager.getRawSeat6() != null) {
+                seatPos = partManager.getRawSeat6();
+            } else {
+                seatPos = partManager.seats[seatIndex];
+            }
             callback.accept(passenger,
-                    partManager.seats[seatIndex].x,
-                    partManager.seats[seatIndex].y - yOffset,
-                    partManager.seats[seatIndex].z);
+                    seatPos.x,
+                    seatPos.y - yOffset,
+                    seatPos.z);
         } else {
             // Fallback: Use entity's main position if seats were not calculated
             callback.accept(passenger,

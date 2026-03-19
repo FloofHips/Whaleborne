@@ -26,6 +26,8 @@ import net.minecraft.world.entity.vehicle.ChestBoat;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.wrapper.InvWrapper;
@@ -65,6 +67,9 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
         return cannonXRot;
     }
 
+    public SoundEvent getDeathSound() { return SoundEvents.ANVIL_PLACE;}
+    public BlockState getDeathBlock() { return Blocks.ANVIL.defaultBlockState();}
+
     @Override
     public void tick() {
         super.tick();
@@ -83,14 +88,18 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
     public InteractionResult interact(Player player, InteractionHand hand) {
         ItemStack heldItem = player.getItemInHand(hand);
 
-        if (!heldItem.isEmpty()) {
-            if (isGunpowder(heldItem)) {
-                return tryInsertItem(player, hand, heldItem, 1); // Gunpowder slot
-            } else {
-                return tryInsertItem(player, hand, heldItem, 0); // Ammo slot
-            }
+        //if (!heldItem.isEmpty()) {
+        //    if (isGunpowder(heldItem)) {
+        //        return tryInsertItem(player, hand, heldItem, 1); // Gunpowder slot
+        //    } else {
+        //        return tryInsertItem(player, hand, heldItem, 0); // Ammo slot
+        //    }
+        //}
+        if (player.isShiftKeyDown()) {
+            openCannonMenu(player);
+            return InteractionResult.SUCCESS;
         }
-        return super.interact(player, hand);
+        else return super.interact(player, hand);
     }
 
     private boolean isGunpowder(ItemStack stack) {
@@ -256,7 +265,8 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                     lookAngle.z * ((double) power / 50)
             );
 
-            this.getVehicle().push(-lookAngle.x * ((double) power / 200), 0, -lookAngle.z * ((double) power / 200));
+            if (this.getVehicle() != null)
+                this.getVehicle().push(-lookAngle.x * ((double) power / 200), 0, -lookAngle.z * ((double) power / 200));
 
             //tnt.setPickUpDelay(20);
             this.level().addFreshEntity(projectile);

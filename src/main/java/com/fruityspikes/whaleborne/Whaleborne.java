@@ -10,14 +10,12 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
-import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.fml.ModContainer;
 import org.slf4j.Logger;
 
@@ -34,8 +32,6 @@ public class Whaleborne
     public Whaleborne(IEventBus modEventBus, ModContainer modContainer)
     {
 
-        modEventBus.addListener(this::commonSetup);
-
         WBEntityRegistry.ENTITY_TYPES.register(modEventBus);
         WBBlockRegistry.BLOCKS.register(modEventBus);
         WBItemRegistry.ITEMS.register(modEventBus);
@@ -49,17 +45,10 @@ public class Whaleborne
         NeoForge.EVENT_BUS.register(this);
 
         PROXY.init();
-        modEventBus.addListener(this::addCreative);
         modEventBus.addListener(this::registerSpawnPlacements);
         modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
         modContainer.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
     }
-    private void commonSetup(final FMLCommonSetupEvent event) {
-    }
-
-    private void addCreative(BuildCreativeModeTabContentsEvent event) {
-    }
-
     public void registerSpawnPlacements(RegisterSpawnPlacementsEvent event) {
         event.register(
             WBEntityRegistry.HULLBACK.get(),

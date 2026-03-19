@@ -127,7 +127,7 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     @Override
     protected void removePassenger(Entity passenger) {
         if(this.isVehicle() && getVehicle() instanceof HullbackEntity hullback)
-            hullback.stationaryTicks = 100;
+            hullback.setStationaryTicks(100);
         super.removePassenger(passenger);
     }
 }

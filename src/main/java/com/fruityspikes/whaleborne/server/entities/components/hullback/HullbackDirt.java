@@ -37,7 +37,11 @@ import java.util.Optional;
  */
 public class HullbackDirt {
     private final HullbackEntity whale;
-    
+
+    // ─── Constants ────────────────────────────────────────────────
+    private static final int RANDOM_TICK_DENOMINATOR = 30000;
+    private static final int RANDOM_TICK_THRESHOLD = 5;
+
     public BlockState[][] headDirt; // 8 x 5
     public BlockState[][] headTopDirt; // 8 x 5
     public BlockState[][] bodyDirt; // 5 x 5
@@ -158,7 +162,7 @@ public class HullbackDirt {
      */
     public void randomTick(String partName, boolean bottom) {
         if (whale.level().isClientSide) return;
-        if (random.nextInt(30000) > 5) return;
+        if (random.nextInt(RANDOM_TICK_DENOMINATOR) > RANDOM_TICK_THRESHOLD) return;
 
         BlockState[][] array = getDirtArray(getArrayIndex(partName, bottom), bottom);
         if (array == null) return;

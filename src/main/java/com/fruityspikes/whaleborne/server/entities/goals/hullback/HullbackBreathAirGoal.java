@@ -27,7 +27,8 @@ public class HullbackBreathAirGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if(hullback.stationaryTicks > 0) return false;
+        // Allow breaching even when stationary if air is critically low
+        if(hullback.getStationaryTicks() > 0 && this.hullback.getAirSupply() > 100) return false;
 
         for (net.minecraft.world.entity.Entity passenger : hullback.getPassengers()) {
             if (passenger instanceof net.minecraft.world.entity.player.Player) {
@@ -51,7 +52,7 @@ public class HullbackBreathAirGoal extends Goal {
     public void start() {
         this.isBreaching = true;
         this.hullback.setBreaching(true);
-        this.hullback.stationaryTicks = 0; // Clear stationary state so it doesn't interfere with breach
+        this.hullback.setStationaryTicks(0); // Clear stationary state so it doesn't interfere with breach
         this.initialPos = this.hullback.position();
         this.hullback.getNavigation().stop();
 
@@ -102,7 +103,7 @@ public class HullbackBreathAirGoal extends Goal {
     public void stop() {
         this.isBreaching = false;
         this.hullback.setBreaching(false);
-        this.hullback.stationaryTicks = 0; // Ensure no leftover stationary state after breach
+        this.hullback.setStationaryTicks(0); // Ensure no leftover stationary state after breach
         this.breachCooldown = 200;
 
         this.hullback.setAirSupply(this.hullback.getMaxAirSupply());

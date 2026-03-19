@@ -24,19 +24,38 @@ import java.util.Arrays;
 public class HullbackPartManager {
     private final HullbackEntity hullback;
     public final HullbackPartEntity[] subEntities;
-    
+
+    // ─── Constants ────────────────────────────────────────────────
+    private static final int PART_COUNT = 5;
+    private static final int SEAT_COUNT = 7;
+    private static final float SWIM_CYCLE_TICK_MULTIPLIER = 0.1f;
+    private static final float HEAD_BODY_SWIM_AMPLITUDE = 2f;
+    private static final float TAIL_SWIM_AMPLITUDE = 8f;
+    private static final float TAIL_PITCH_SCALE = 1.5f;
+    private static final float TAIL_PITCH_SWIM_AMPLITUDE = 20f;
+    private static final float FLUKE_DISTANCE = 4.0f;
+    private static final float FLUKE_Y_SWIM_AMPLITUDE = 5.5f;
+    private static final float FLUKE_PITCH_SCALE = 1.5f;
+    private static final float FLUKE_PITCH_SWIM_AMPLITUDE = 30f;
+    private static final double MOVE_ENTITIES_THRESHOLD = 0.001;
+    private static final float UNSTABLE_PLATFORM_FACTOR = 0.5F;
+    private static final float PLAYER_SMOOTH_FACTOR = 0.8F;
+
     // Position/Rotation Arrays
-    public final Vec3[] prevPartPositions = new Vec3[5];
-    public final Vec3[] partPosition = new Vec3[5];
-    public final float[] partYRot = new float[5];
-    public final float[] partXRot = new float[5];
-    public final Vec3[] oldPartPosition = new Vec3[5];
-    public final float[] oldPartYRot = new float[5];
-    public final float[] oldPartXRot = new float[5];
-    
+    public final Vec3[] prevPartPositions = new Vec3[PART_COUNT];
+    public final Vec3[] partPosition = new Vec3[PART_COUNT];
+    public final float[] partYRot = new float[PART_COUNT];
+    public final float[] partXRot = new float[PART_COUNT];
+    public final Vec3[] oldPartPosition = new Vec3[PART_COUNT];
+    public final float[] oldPartYRot = new float[PART_COUNT];
+    public final float[] oldPartXRot = new float[PART_COUNT];
+
     // Seats
-    public final Vec3[] seats = new Vec3[7];
-    public final Vec3[] oldSeats = new Vec3[7];
+    public final Vec3[] seats = new Vec3[SEAT_COUNT];
+    public final Vec3[] oldSeats = new Vec3[SEAT_COUNT];
+    private Vec3 smoothedSeat6 = null;
+    private Vec3 rawSeat6 = null;
+    private static final float SEAT6_SMOOTH_FACTOR = 0.35f;
 
     private static final Vec3[] SEAT_OFFSETS = {
             new Vec3(0, 5.5f, 0.0), //sail
@@ -62,10 +81,6 @@ public class HullbackPartManager {
         this.hullback = hullback;
         this.subEntities = subEntities;
         Arrays.fill(partPosition, Vec3.ZERO);
-    }
-
-    public void init() {
-         // Initial allocation logic if needed, currently empty as arrays are final
     }
 
     public void setOldPosAndRots() {
@@ -100,7 +115,7 @@ public class HullbackPartManager {
              swimCycle = 0f;
         } else {
              // MODIFICATION: swimCycle based on horizontal speed only when free
-             swimCycle = Mth.sin(hullback.tickCount * 0.1f) * horizontalSpeed;
+             swimCycle = Mth.sin((float) hullback.level().getGameTime() * SWIM_CYCLE_TICK_MULTIPLIER) * horizontalSpeed;
         }
         float yawRad = -hullback.getYRot() * Mth.DEG_TO_RAD;
         float pitchRad = hullback.getXRot() * Mth.DEG_TO_RAD;
@@ -135,39 +150,38 @@ public class HullbackPartManager {
                 partYRot[0],
                 partXRot[0]);
 
-        this.partPosition[1] = new Vec3(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z);
+        this.partPosition[1] = new Vec3(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * HEAD_BODY_SWIM_AMPLITUDE, prevPartPositions[1].z);
         this.partYRot[1] = calculateYaw(prevPartPositions[0], prevPartPositions[1]);
         this.partXRot[1] = calculatePitch(prevPartPositions[0], prevPartPositions[1]);
-        subEntities[1].moveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * 2, prevPartPositions[1].z,
+        subEntities[1].moveTo(prevPartPositions[1].x, prevPartPositions[1].y + swimCycle * HEAD_BODY_SWIM_AMPLITUDE, prevPartPositions[1].z,
                 partYRot[1],
                 partXRot[1]);
 
-        this.partPosition[2] = new Vec3(prevPartPositions[2].x, prevPartPositions[2].y + swimCycle * 2, prevPartPositions[2].z);
+        this.partPosition[2] = new Vec3(prevPartPositions[2].x, prevPartPositions[2].y + swimCycle * HEAD_BODY_SWIM_AMPLITUDE, prevPartPositions[2].z);
         this.partYRot[2] = calculateYaw(prevPartPositions[1], prevPartPositions[2]);
         this.partXRot[2] = calculatePitch(prevPartPositions[1], prevPartPositions[2]);
         subEntities[2].moveTo(prevPartPositions[2].x,
-                prevPartPositions[2].y + swimCycle * 2,
+                prevPartPositions[2].y + swimCycle * HEAD_BODY_SWIM_AMPLITUDE,
                 prevPartPositions[2].z,
                 partYRot[2],
                 partXRot[2]);
 
-        this.partPosition[3] = new Vec3(prevPartPositions[3].x, prevPartPositions[3].y + swimCycle * 8, prevPartPositions[3].z);
+        this.partPosition[3] = new Vec3(prevPartPositions[3].x, prevPartPositions[3].y + swimCycle * TAIL_SWIM_AMPLITUDE, prevPartPositions[3].z);
         this.partYRot[3] = calculateYaw(prevPartPositions[2], prevPartPositions[3]);
-        this.partXRot[3] = calculatePitch(prevPartPositions[2], prevPartPositions[3]) * 1.5f - swimCycle * 20f;
+        this.partXRot[3] = calculatePitch(prevPartPositions[2], prevPartPositions[3]) * TAIL_PITCH_SCALE - swimCycle * TAIL_PITCH_SWIM_AMPLITUDE;
         subEntities[3].moveTo(prevPartPositions[3].x,
-                prevPartPositions[3].y + swimCycle * 8,
+                prevPartPositions[3].y + swimCycle * TAIL_SWIM_AMPLITUDE,
                 prevPartPositions[3].z,
                 partYRot[3],
                 partXRot[3]);
 
-        float flukeDistance = 4.0f;
-        Vec3 flukeOffset = new Vec3(0, 0, -flukeDistance)
+        Vec3 flukeOffset = new Vec3(0, 0, -FLUKE_DISTANCE)
                 .yRot(-subEntities[3].getYRot() * Mth.DEG_TO_RAD)
                 .xRot(subEntities[3].getXRot() * Mth.DEG_TO_RAD);
 
         Vec3 flukeTarget = new Vec3(
                 subEntities[3].getX() + flukeOffset.x,
-                subEntities[3].getY() + flukeOffset.y + swimCycle * 5.5,
+                subEntities[3].getY() + flukeOffset.y + swimCycle * FLUKE_Y_SWIM_AMPLITUDE,
                 subEntities[3].getZ() + flukeOffset.z
         );
 
@@ -175,7 +189,7 @@ public class HullbackPartManager {
         float flukePitch = calculatePitch(subEntities[3].position(), flukeTarget);
 
         flukeYaw = Mth.rotLerp(PART_DRAG_FACTORS[4], oldPartYRot[4], flukeYaw);
-        float flukeXRot = flukePitch * 1.5f + swimCycle * 30f;
+        float flukeXRot = flukePitch * FLUKE_PITCH_SCALE + swimCycle * FLUKE_PITCH_SWIM_AMPLITUDE;
 
         this.partPosition[4] = flukeTarget;
         this.partYRot[4] = flukeYaw;
@@ -192,24 +206,58 @@ public class HullbackPartManager {
         calculateSeats();
     }
     
+    // ─── Seat-to-part mapping ──────────────────────────────────
+    // Each entry: [partIndex for position, partIndex for rotation]
+    private static final int[][] SEAT_PART_MAP = {
+            {0, 1}, // seat 0 (sail) — position from nose[0], rotation from head[1]
+            {0, 1}, // seat 1 (captain)
+            {2, 2}, // seat 2 — body
+            {2, 2}, // seat 3 — body
+            {2, 2}, // seat 4 — body
+            {2, 2}, // seat 5 — body
+            {4, 4}, // seat 6 (fluke)
+    };
+
     public void calculateSeats() {
         if (partPosition == null || partYRot == null || partXRot == null || partPosition[0] == null) return;
-        
-        seats[0] = partPosition[0].add((SEAT_OFFSETS[0]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
-        seats[1] = partPosition[0].add((SEAT_OFFSETS[1]).xRot(partXRot[1] * Mth.DEG_TO_RAD).yRot(-partYRot[1] * Mth.DEG_TO_RAD));
-        seats[2] = partPosition[2].add((SEAT_OFFSETS[2]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
-        seats[3] = partPosition[2].add((SEAT_OFFSETS[3]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
-        seats[4] = partPosition[2].add((SEAT_OFFSETS[4]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
-        seats[5] = partPosition[2].add((SEAT_OFFSETS[5]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
-        seats[6] = partPosition[4].add((SEAT_OFFSETS[6]).xRot(partXRot[4] * Mth.DEG_TO_RAD).yRot(-partYRot[4] * Mth.DEG_TO_RAD));
 
-        oldSeats[0] = oldPartPosition[0].add((SEAT_OFFSETS[0]).xRot(oldPartXRot[1] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[1] * Mth.DEG_TO_RAD));
-        oldSeats[1] = oldPartPosition[0].add((SEAT_OFFSETS[1]).xRot(oldPartXRot[1] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[1] * Mth.DEG_TO_RAD));
-        oldSeats[2] = oldPartPosition[2].add((SEAT_OFFSETS[2]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
-        oldSeats[3] = oldPartPosition[2].add((SEAT_OFFSETS[3]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
-        oldSeats[4] = oldPartPosition[2].add((SEAT_OFFSETS[4]).xRot(oldPartXRot[2] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[2] * Mth.DEG_TO_RAD));
-        oldSeats[5] = oldPartPosition[2].add((SEAT_OFFSETS[5]).xRot(partXRot[2] * Mth.DEG_TO_RAD).yRot(-partYRot[2] * Mth.DEG_TO_RAD));
-        oldSeats[6] = oldPartPosition[4].add((SEAT_OFFSETS[6]).xRot(oldPartXRot[4] * Mth.DEG_TO_RAD).yRot(-oldPartYRot[4] * Mth.DEG_TO_RAD));
+        // Current seats
+        for (int i = 0; i < SEAT_COUNT - 1; i++) {
+            int posIdx = SEAT_PART_MAP[i][0];
+            int rotIdx = SEAT_PART_MAP[i][1];
+            seats[i] = computeSeat(partPosition[posIdx], partXRot[rotIdx], partYRot[rotIdx], i);
+        }
+
+        // Seat 6 (fluke) — raw position stored for widgets, smoothed for players/mobs
+        rawSeat6 = computeSeat(partPosition[4], partXRot[4], partYRot[4], 6);
+        if (smoothedSeat6 == null) {
+            smoothedSeat6 = rawSeat6;
+        } else {
+            smoothedSeat6 = new Vec3(
+                    Mth.lerp(SEAT6_SMOOTH_FACTOR, smoothedSeat6.x, rawSeat6.x),
+                    Mth.lerp(SEAT6_SMOOTH_FACTOR, smoothedSeat6.y, rawSeat6.y),
+                    Mth.lerp(SEAT6_SMOOTH_FACTOR, smoothedSeat6.z, rawSeat6.z)
+            );
+        }
+        seats[6] = smoothedSeat6;
+
+        // Old seats (for interpolation)
+        for (int i = 0; i < SEAT_COUNT - 1; i++) {
+            int posIdx = SEAT_PART_MAP[i][0];
+            int rotIdx = SEAT_PART_MAP[i][1];
+            oldSeats[i] = computeSeat(oldPartPosition[posIdx], oldPartXRot[rotIdx], oldPartYRot[rotIdx], i);
+        }
+        oldSeats[6] = computeSeat(oldPartPosition[4], oldPartXRot[4], oldPartYRot[4], 6);
+    }
+
+    /** Returns the raw (unsmoothed) seat 6 position for rigid widget attachment. */
+    public Vec3 getRawSeat6() {
+        return rawSeat6;
+    }
+
+    /** Computes a seat world position from a part position, rotation, and seat offset index. */
+    private Vec3 computeSeat(Vec3 pos, float xRot, float yRot, int seatIndex) {
+        return pos.add(SEAT_OFFSETS[seatIndex].xRot(xRot * Mth.DEG_TO_RAD).yRot(-yRot * Mth.DEG_TO_RAD));
     }
     
     private float calculateYaw(Vec3 from, Vec3 to) {
@@ -225,7 +273,7 @@ public class HullbackPartManager {
         double horizontalDistance = Math.sqrt(dx * dx + dz * dz);
         return -(float)(Mth.atan2(dy, horizontalDistance) * (180F / Math.PI));
     }
-    
+
     // ─── Walkable Platforms ──────────────────────────────────────
     public HullbackWalkableEntity moving_head;
     public HullbackWalkableEntity moving_nose;
@@ -268,17 +316,17 @@ public class HullbackPartManager {
         Vec3 offset = partPosition[index].subtract(oldPartPosition[index]);
 
         // Increased threshold to avoid micro-movements
-        if (offset.length() <= 0.001) return;
-        
+        if (offset.length() <= MOVE_ENTITIES_THRESHOLD) return;
+
         // If platforms are not stable, reduce movement
-        float movementFactor = platformsStable ? 1.0F : 0.5F;
+        float movementFactor = platformsStable ? 1.0F : UNSTABLE_PLATFORM_FACTOR;
 
         for (net.minecraft.world.entity.Entity entity : hullback.level().getEntities(part, part.getBoundingBox().inflate(0F, 0.01F, 0F), net.minecraft.world.entity.EntitySelector.NO_SPECTATORS.and((entity) -> (!entity.isPassenger())))) {
             if (!entity.noPhysics && !(entity instanceof HullbackPartEntity) && !(entity instanceof HullbackEntity) && !(entity instanceof HullbackWalkableEntity)) {
                 
                 // Smooth movement for players
                 if (entity instanceof net.minecraft.world.entity.player.Player) {
-                    movementFactor *= 0.8F; // 20% smoother movement for players
+                    movementFactor *= PLAYER_SMOOTH_FACTOR;
                 }
 
                 double gravity = entity.isNoGravity() ? 0 : 0.08D;
