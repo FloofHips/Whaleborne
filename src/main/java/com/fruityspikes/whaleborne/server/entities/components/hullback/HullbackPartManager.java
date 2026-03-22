@@ -332,7 +332,9 @@ public class HullbackPartManager {
                 double gravity = entity.isNoGravity() ? 0 : 0.08D;
                 if (entity instanceof net.minecraft.world.entity.LivingEntity living) {
                     net.minecraft.world.entity.ai.attributes.AttributeInstance attribute = living.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.GRAVITY);
-                    gravity = attribute.getValue();
+                    if (attribute != null) {
+                        gravity = attribute.getValue();
+                    }
                 }
                 
                 Vec3 smoothedOffset = offset.scale(movementFactor);

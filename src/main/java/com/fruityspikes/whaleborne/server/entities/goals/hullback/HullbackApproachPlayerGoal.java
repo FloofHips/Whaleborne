@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.entities.goals.hullback;
 
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.targeting.TargetingConditions;
@@ -50,7 +51,10 @@ public class HullbackApproachPlayerGoal extends Goal {
 
         this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback);
         if (this.targetPlayer == null) return false;
-        if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
+        if (this.targetPlayer.isPassenger()) {
+            Entity vehicle = this.targetPlayer.getVehicle();
+            if (vehicle != null && (vehicle.is(this.hullback) || (vehicle.isPassenger() && vehicle.getVehicle() != null && vehicle.getVehicle().is(this.hullback)))) return false;
+        }
 
         return true;
     }

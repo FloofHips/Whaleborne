@@ -4,6 +4,7 @@ import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBTagRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.targeting.TargetingConditions;
@@ -57,7 +58,10 @@ public class HullbackArmorPlayerGoal extends Goal {
         if (this.targetPlayer == null) return false;
         
         // Anti-mounting check (don't approach if player is already on me or on an entity relative to me)
-        if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback)))) return false;
+        if (this.targetPlayer.isPassenger()) {
+            Entity vehicle = this.targetPlayer.getVehicle();
+            if (vehicle != null && (vehicle.is(this.hullback) || (vehicle.isPassenger() && vehicle.getVehicle() != null && vehicle.getVehicle().is(this.hullback)))) return false;
+        }
 
         return true;
     }

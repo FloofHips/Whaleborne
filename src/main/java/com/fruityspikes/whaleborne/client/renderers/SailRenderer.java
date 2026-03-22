@@ -98,7 +98,7 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
         poseStack.translate(0.07, -2.44, -0.19);
 
         double deltaZ = entity.getDeltaMovement().length();
-        if(entity.isPassenger())
+        if(entity.isPassenger() && entity.getVehicle() != null)
             deltaZ = entity.getVehicle().getDeltaMovement().length();
 
         float windEffect = (float) Math.abs(deltaZ) * 10f;

@@ -1261,23 +1261,29 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     }
 
     public Vec3 getPartPos(int i){
+        if (i < 0 || i >= partManager.partPosition.length || partManager.partPosition[i] == null) return this.position();
         return partManager.partPosition[i];
     }
 
     public float getPartYRot(int i){
+        if (i < 0 || i >= partManager.partYRot.length) return this.getYRot();
         return partManager.partYRot[i];
     }
     public float getPartXRot(int i){
+        if (i < 0 || i >= partManager.partXRot.length) return this.getXRot();
         return partManager.partXRot[i];
     }
 
     public Vec3 getOldPartPos(int i){
+        if (i < 0 || i >= partManager.oldPartPosition.length || partManager.oldPartPosition[i] == null) return this.position();
         return partManager.oldPartPosition[i];
     }
     public float getOldPartYRot(int i){
+        if (i < 0 || i >= partManager.oldPartYRot.length) return this.getYRot();
         return partManager.oldPartYRot[i];
     }
     public float getOldPartXRot(int i){
+        if (i < 0 || i >= partManager.oldPartXRot.length) return this.getXRot();
         return partManager.oldPartXRot[i];
     }
 
