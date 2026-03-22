@@ -60,9 +60,9 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
         PartDefinition head = partdefinition.addOrReplaceChild("head", CubeListBuilder.create().texOffs(0, 0).addBox(-40.0F, -40.0F, 0.0F, 80.0F, 80.0F, 130.0F, new CubeDeformation(0.0F))
                 .texOffs(0, 210).addBox(-38.0F, -39.0F, 2.0F, 76.0F, 78.0F, 126.0F, new CubeDeformation(0.0F)), PartPose.offset(0.0F, 24.0F, 0.0F));
         PartDefinition lip = head.addOrReplaceChild("lip", CubeListBuilder.create().texOffs(420, 100).addBox(-40.0F, -10.0F, -25.0F, 80.0F, 20.0F, 50.0F, new CubeDeformation(0.0F)), PartPose.offset(0.0F, -10.0F, 25.0F));
-        PartDefinition jaw_2 = head.addOrReplaceChild("jaw_2", CubeListBuilder.create().texOffs(420, 0).addBox(-40.0F, -30.0F, -45.0F, 80.0F, 10.0F, 90.0F, new CubeDeformation(-0.001F)), PartPose.offset(0.0F, 30.0F, 45.0F));
-        PartDefinition jaw_1 = head.addOrReplaceChild("jaw_1", CubeListBuilder.create().texOffs(0, 414).addBox(-40.0F, -20.0F, -45.0F, 80.0F, 10.0F, 90.0F, new CubeDeformation(-0.001F)), PartPose.offset(0.0F, 30.0F, 45.0F));
-        PartDefinition jaw_0 = head.addOrReplaceChild("jaw_0", CubeListBuilder.create().texOffs(404, 390).addBox(-40.0F, -10.0F, -45.0F, 80.0F, 10.0F, 90.0F, new CubeDeformation(-0.001F)), PartPose.offset(0.0F, 30.0F, 45.0F));
+        PartDefinition jaw_2 = head.addOrReplaceChild("jaw_2", CubeListBuilder.create().texOffs(420, 0).addBox(-40.0F, -30.0F, -45.0F, 80.0F, 10.0F, 90.0F, new CubeDeformation(-0.005F)), PartPose.offset(0.0F, 30.0F, 45.0F));
+        PartDefinition jaw_1 = head.addOrReplaceChild("jaw_1", CubeListBuilder.create().texOffs(0, 414).addBox(-40.0F, -20.0F, -45.0F, 80.0F, 10.0F, 90.0F, new CubeDeformation(-0.005F)), PartPose.offset(0.0F, 30.0F, 45.0F));
+        PartDefinition jaw_0 = head.addOrReplaceChild("jaw_0", CubeListBuilder.create().texOffs(404, 390).addBox(-40.0F, -10.0F, -45.0F, 80.0F, 10.0F, 90.0F, new CubeDeformation(-0.005F)), PartPose.offset(0.0F, 30.0F, 45.0F));
         PartDefinition left_eye = head.addOrReplaceChild("left_eye", CubeListBuilder.create(), PartPose.offset(40.0F, 17.0F, 110.0F));
         PartDefinition left_upper_eyelid = left_eye.addOrReplaceChild("left_upper_eyelid", CubeListBuilder.create().texOffs(340, 424).addBox(-1.28F, -3.75F, -5.0F, 0.0F, 5.0F, 10.0F, new CubeDeformation(0.0F))
                 .texOffs(340, 414).mirror().addBox(-1.28F, 1.25F, -5.0F, 5.0F, 0.0F, 10.0F, new CubeDeformation(0.0F)).mirror(false), PartPose.offset(1.3F, -3.25F, 0.0F));
@@ -125,8 +125,8 @@ public class HullbackModel<T extends HullbackEntity> extends EntityModel<T> {
         // Normalize to 0-1 range where 0 = forward, 0.5 = perpendicular, 1 = backward
         float normalized = (perpendicularYaw % 180) / 180f;
 
-        this.left_pupil.z=Mth.lerp(Mth.clamp(normalized, 0, 1), this.left_pupil.getInitialPose().z-2, this.left_pupil.getInitialPose().z+2.25f);
-        this.right_pupil.z=Mth.lerp(Mth.clamp(normalized, 0, 1), this.right_pupil.getInitialPose().z-2, this.right_pupil.getInitialPose().z+2.25f);
+        this.left_pupil.z=((Mth.lerp(Mth.clamp(normalized, 0, 1), this.left_pupil.getInitialPose().z-2, this.left_pupil.getInitialPose().z+2.25f))/10)*10;
+        this.right_pupil.z=((Mth.lerp(Mth.clamp(normalized, 0, 1), this.right_pupil.getInitialPose().z-2, this.right_pupil.getInitialPose().z+2.25f))/10)*10;
 
         //this.body.xRot = entity.body.getXRot();
         //this.body.yRot = entity.body.getYRot();

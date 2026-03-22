@@ -18,5 +18,5 @@
     },
     "result": {"id": "whaleborne:helm"
   },
-  "show_notification": false
+  "show_notification": true
 }
