@@ -8,10 +8,15 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
 import net.minecraft.world.phys.Vec3;
@@ -60,6 +65,54 @@ public class SailEntity extends WhaleWidgetEntity{
             ItemStack banner = ItemStack.parse(this.registryAccess(), tag).orElse(ItemStack.EMPTY);
             this.entityData.set(DATA_BANNER, banner);
         }
+    }
+
+    @Override
+    public InteractionResult interact(Player player, InteractionHand hand) {
+        if (player.getItemInHand(hand).is(Items.WATER_BUCKET) && !this.getBanner().isEmpty()) {
+            if (!this.level().isClientSide) {
+                this.spawnAtLocation(this.entityData.get(DATA_BANNER));
+                this.entityData.set(DATA_BANNER, ItemStack.EMPTY);
+
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.AMBIENT_UNDERWATER_EXIT,
+                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.ARMOR_EQUIP_LEATHER,
+                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
+            }
+            return InteractionResult.sidedSuccess(this.level().isClientSide);
+        }
+        if (player.getItemInHand(hand).is(ItemTags.BANNERS)) {
+            if (!this.level().isClientSide) {
+                if (!this.getBanner().isEmpty()) {
+                    this.spawnAtLocation(this.entityData.get(DATA_BANNER));
+                }
+                ItemStack bannerStack = player.getItemInHand(hand).copy();
+                bannerStack.setCount(1);
+
+                this.entityData.set(DATA_BANNER, bannerStack);
+
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.ARMOR_EQUIP_LEATHER,
+                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
+                if (!player.getAbilities().instabuild) {
+                    player.getItemInHand(hand).shrink(1);
+                }
+            }
+            return InteractionResult.sidedSuccess(this.level().isClientSide);
+        }
+        // Orientation change when placed on the ground (not a passenger)
+        if (!this.isPassenger()) {
+            if (player.isShiftKeyDown()) {
+                this.setYRot(getYRot() - 11.25f);
+            } else {
+                this.setYRot(getYRot() + 11.25f);
+            }
+            this.playSound(SoundEvents.WOOD_HIT);
+            return InteractionResult.SUCCESS;
+        }
+        return super.interact(player, hand);
     }
 
     @Override
