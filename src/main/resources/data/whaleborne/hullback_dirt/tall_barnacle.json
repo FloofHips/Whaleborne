@@ -1,7 +1,7 @@
 {
   "block": "whaleborne:tall_barnacle",
-  "placements": ["body_top", "head_top", "body_bottom", "head_bottom"],
-  "placement_chance": 0.07,
+  "placements": ["head_top", "body_bottom", "head_bottom"],
+  "placement_chance": 0.025,
   "removable_with": ["axe"],
   "drop": "whaleborne:rough_barnacle",
   "drop_amount": 3,

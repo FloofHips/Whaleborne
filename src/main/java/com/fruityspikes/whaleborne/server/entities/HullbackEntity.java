@@ -711,8 +711,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         compound.put("BodyDirt", saveDirtArray(bodyDirt));
         compound.put("BodyTopDirt", saveDirtArray(bodyTopDirt));
 
-        compound.put("tailDirt", saveDirtArray(tailDirt));
-        compound.put("flukeDirt", saveDirtArray(flukeDirt));
+        compound.put("TailDirt", saveDirtArray(tailDirt));
+        compound.put("FlukeDirt", saveDirtArray(flukeDirt));
 
         compound.putInt("TicksSinceSpawn", ticksSinceSpawn);
     }
@@ -1167,26 +1167,42 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         mouthTarget = 0.2f;
         if ((handleVegetationRemoval(player, hand, part, top)) == InteractionResult.PASS) {
-
+            // No dirt was removed — check if taming conditions are met
+            boolean hasTopDirt = false;
             for (BlockState[] states : headTopDirt) {
                 for (BlockState state : states) {
                     if (state != Blocks.AIR.defaultBlockState()) {
-                        mouthTarget = 0.5f;
-                        playSound(WBSoundRegistry.HULLBACK_MAD.get());
-                        return InteractionResult.SUCCESS;
+                        hasTopDirt = true;
+                        break;
                     }
                 }
+                if (hasTopDirt) break;
             }
-            for (BlockState[] blockStates : bodyTopDirt) {
-                for (BlockState blockState : blockStates) {
-                    if (blockState != Blocks.AIR.defaultBlockState()) {
-                        mouthTarget = 0.5f;
-                        playSound(WBSoundRegistry.HULLBACK_MAD.get());
-                        return InteractionResult.SUCCESS;
+            if (!hasTopDirt) {
+                for (BlockState[] blockStates : bodyTopDirt) {
+                    for (BlockState blockState : blockStates) {
+                        if (blockState != Blocks.AIR.defaultBlockState()) {
+                            hasTopDirt = true;
+                            break;
+                        }
                     }
+                    if (hasTopDirt) break;
                 }
             }
 
+            if (hasTopDirt) {
+                // Whale still has dirt — reject interaction (mad)
+                mouthTarget = 0.5f;
+                playSound(WBSoundRegistry.HULLBACK_MAD.get());
+                return InteractionResult.SUCCESS;
+            }
+
+            if (isTamed()) {
+                // Already tamed and clean — let other handlers process the item
+                return InteractionResult.PASS;
+            }
+
+            // All clean! Tame the whale
             setTamed(true);
             this.setPersistenceRequired();
             mouthTarget = 0.1f;
@@ -1205,6 +1221,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
             return InteractionResult.SUCCESS;
         }
+        // Dirt was successfully removed
         return InteractionResult.SUCCESS;
     }
 
@@ -2556,18 +2573,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
 
     public class HullbackArmorPlayerGoal extends Goal {
-        private static final float APPROACH_DISTANCE = 6.0f; // Slightly increased to avoid crude collision
+        private static final float APPROACH_DISTANCE = 6.0f;
         private static final float SIDE_OFFSET = 5.0f;
-        private static final float ROTATION_SPEED = 0.8f;
         private static Ingredient TEMPT_PLANKS = Ingredient.of(WBTagRegistry.HULLBACK_EQUIPPABLE);
         private static Ingredient TEMPT_WIDGETS = Ingredient.of(WBItemRegistry.SAIL.get(), WBItemRegistry.ANCHOR.get(), WBItemRegistry.MAST.get(), WBItemRegistry.HELM.get(), WBItemRegistry.CANNON.get());
         private final HullbackEntity hullback;
         private final float speedModifier;
-        private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(40.0).ignoreLineOfSight(); // Increased range
+        private static final TargetingConditions TEMP_TARGETING = TargetingConditions.forNonCombat().range(40.0).ignoreLineOfSight();
         private final TargetingConditions targetingConditions;
         private Player targetPlayer;
         private boolean approachFromRight;
         private Vec3 targetPosition;
+        private Vec3 approachDirection; // Fixed direction computed once at start
 
         public HullbackArmorPlayerGoal(HullbackEntity hullback, float speedModifier) {
             this.hullback = hullback;
@@ -2590,6 +2607,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         @Override
         public boolean canUse() {
             if (hullback.hasAnchorDown()) return false;
+            if (hullback.getAirSupply() < hullback.getMaxAirSupply() * 0.2) return false;
+            if (hullback.isBreaching()) return false;
             this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 40, 50, 40);
             if (this.targetPlayer == null) return false;
             if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback))))
@@ -2599,6 +2618,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canContinueToUse() {
+            if (hullback.getAirSupply() < hullback.getMaxAirSupply() * 0.2) return false;
+            if (hullback.isBreaching()) return false;
             return canUse();
         }
 
@@ -2608,6 +2629,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
             Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
             this.approachFromRight = toPlayer.dot(whaleRight) > 0;
+            // Compute a stable approach direction from the whale-to-player vector
+            Vec3 horizToPlayer = new Vec3(toPlayer.x, 0, toPlayer.z).normalize();
+            Vec3 sideDir = new Vec3(-horizToPlayer.z, 0, horizToPlayer.x);
+            this.approachDirection = sideDir.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET)
+                    .add(horizToPlayer.scale(-APPROACH_DISTANCE));
             playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
             this.hullback.mouthTarget = 0.1f;
         }
@@ -2617,6 +2643,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.hullback.setApproachingPlayer(false);
             this.targetPlayer = null;
             this.targetPosition = null;
+            this.approachDirection = null;
             this.hullback.setTarget(null);
             this.hullback.getNavigation().stop();
             this.hullback.mouthTarget = 0.0f;
@@ -2624,45 +2651,57 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public void tick() {
-            if (this.targetPlayer == null) return;
+            if (this.targetPlayer == null || this.approachDirection == null) return;
 
             this.hullback.mouthTarget = 0.6f;
 
-            // Constantly recalculates target for smoothness
-            Vec3 playerLook = this.targetPlayer.getLookAngle();
-            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            this.targetPosition = this.targetPlayer.position()
-                    .add(sideOffset)
-                    .add(playerLook.scale(-APPROACH_DISTANCE));
+            // Use stable offset direction computed at start — does not depend on player look
+            this.targetPosition = this.targetPlayer.position().add(this.approachDirection);
+            // Clamp target Y to whale's Y level to prevent vertical chasing
+            this.targetPosition = new Vec3(targetPosition.x, this.hullback.getY(), targetPosition.z);
 
-            double distSqr = this.hullback.position().distanceToSqr(targetPosition);
-
-            // HYBRID NAVIGATION SYSTEM
-            // If standard navigation fails (common on surface) or is too close/far, we use brute force.
+            // Try native water navigation first
             boolean pathFound = this.hullback.getNavigation().moveTo(targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
 
             if (!pathFound || this.hullback.getNavigation().isDone()) {
-                // Manual Vector "Push"
-                Vec3 moveDir = targetPosition.subtract(this.hullback.position()).normalize();
-                // Applies smooth speed in the target direction
-                double speed = this.speedModifier * 0.15; // Manual speed fine tuning
-                this.hullback.setDeltaMovement(this.hullback.getDeltaMovement().add(moveDir.scale(speed)));
-                
-                // Manual Rotation (Smooth Look)
+                // Manual fallback for surface movement — horizontal only, capped speed
+                Vec3 moveDir = targetPosition.subtract(this.hullback.position());
+                moveDir = new Vec3(moveDir.x, 0, moveDir.z);
+                if (moveDir.lengthSqr() > 0.001) {
+                    moveDir = moveDir.normalize();
+                }
+
+                double speed = this.speedModifier * 0.08;
+                Vec3 currentMotion = this.hullback.getDeltaMovement();
+                Vec3 newMotion = new Vec3(
+                        currentMotion.x + moveDir.x * speed,
+                        currentMotion.y,
+                        currentMotion.z + moveDir.z * speed);
+
+                // Cap horizontal speed
+                double maxHorizontalSpeed = 0.3;
+                double horizSpeedSqr = newMotion.x * newMotion.x + newMotion.z * newMotion.z;
+                if (horizSpeedSqr > maxHorizontalSpeed * maxHorizontalSpeed) {
+                    double scale = maxHorizontalSpeed / Math.sqrt(horizSpeedSqr);
+                    newMotion = new Vec3(newMotion.x * scale, newMotion.y, newMotion.z * scale);
+                }
+
+                this.hullback.setDeltaMovement(newMotion);
+
+                // Smooth visual rotation
                 double d0 = targetPosition.x - this.hullback.getX();
                 double d2 = targetPosition.z - this.hullback.getZ();
                 float targetYaw = (float)(Mth.atan2(d2, d0) * (double)(180F / (float)Math.PI)) - 90.0F;
-                this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
+                this.hullback.setYRot(Mth.rotLerp(0.05f, this.hullback.getYRot(), targetYaw));
                 this.hullback.yBodyRot = this.hullback.getYRot();
             }
         }
     }
 
     public class HullbackApproachPlayerGoal extends Goal {
-        private static final float APPROACH_DISTANCE = 6.0f; 
+        private static final float APPROACH_DISTANCE = 6.0f;
         private static final float SIDE_OFFSET = 5.0f;
-        
+
         private static Ingredient TEMPT_SADDLE = Ingredient.of(Items.SADDLE);
         private static Ingredient TEMPT_ITEMS = Ingredient.of(Items.SHEARS);
         private static Ingredient TEMPT_AXES = Ingredient.of(ItemTags.AXES);
@@ -2673,6 +2712,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         private Player targetPlayer;
         private boolean approachFromRight;
         private Vec3 targetPosition;
+        private Vec3 approachDirection; // Fixed direction computed once at start
 
         public HullbackApproachPlayerGoal(HullbackEntity hullback, float speedModifier) {
             this.hullback = hullback;
@@ -2690,6 +2730,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         @Override
         public boolean canUse() {
             if (hullback.hasAnchorDown()) return false;
+            if (hullback.getAirSupply() < hullback.getMaxAirSupply() * 0.2) return false;
+            if (hullback.isBreaching()) return false;
             this.targetPlayer = this.hullback.level().getNearestPlayer(this.targetingConditions, this.hullback, 40, 50, 40);
             if (this.targetPlayer == null) return false;
             if (this.targetPlayer.isPassenger() && (this.targetPlayer.getVehicle().is(this.hullback) || (this.targetPlayer.getVehicle().isPassenger() && this.targetPlayer.getVehicle().getVehicle().is(this.hullback))))
@@ -2699,6 +2741,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public boolean canContinueToUse() {
+            if (hullback.getAirSupply() < hullback.getMaxAirSupply() * 0.2) return false;
+            if (hullback.isBreaching()) return false;
             return canUse();
         }
 
@@ -2708,6 +2752,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
             Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
             this.approachFromRight = toPlayer.dot(whaleRight) > 0;
+            // Compute a stable approach direction from the whale-to-player vector
+            Vec3 horizToPlayer = new Vec3(toPlayer.x, 0, toPlayer.z).normalize();
+            Vec3 sideDir = new Vec3(-horizToPlayer.z, 0, horizToPlayer.x);
+            this.approachDirection = sideDir.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET)
+                    .add(horizToPlayer.scale(-APPROACH_DISTANCE));
             this.hullback.setTarget(this.targetPlayer);
             playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
             this.hullback.mouthTarget = 0.2f;
@@ -2718,6 +2767,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.hullback.setApproachingPlayer(false);
             this.targetPlayer = null;
             this.targetPosition = null;
+            this.approachDirection = null;
             this.hullback.setTarget(null);
             this.hullback.getNavigation().stop();
             this.hullback.mouthTarget = 0.0f;
@@ -2725,33 +2775,48 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         @Override
         public void tick() {
+            if (this.targetPlayer == null || this.approachDirection == null) return;
             this.hullback.mouthTarget = 0.6f;
-            if (this.targetPlayer == null) return;
 
-            Vec3 playerLook = this.targetPlayer.getLookAngle();
-            Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-            Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-            this.targetPosition = this.targetPlayer.position()
-                    .add(sideOffset)
-                    .add(playerLook.scale(-APPROACH_DISTANCE));
+            // Use stable offset direction computed at start — does not depend on player look
+            this.targetPosition = this.targetPlayer.position().add(this.approachDirection);
+            // Clamp target Y to whale's Y level to prevent vertical chasing
+            this.targetPosition = new Vec3(targetPosition.x, this.hullback.getY(), targetPosition.z);
 
-            // HYBRID SYSTEM: Tries to navigate, if fails, pushes.
+            // Try native water navigation first
             boolean pathFound = this.hullback.getNavigation().moveTo(targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
 
             if (!pathFound || this.hullback.getNavigation().isDone()) {
-                // Manual vector calculation to ensure movement even on the surface
-                Vec3 moveDir = targetPosition.subtract(this.hullback.position()).normalize();
-                
-                // Forces movement (This overcomes Pathfinding limitation on the surface)
-                double speed = this.speedModifier * 0.15;
-                this.hullback.setDeltaMovement(this.hullback.getDeltaMovement().add(moveDir.scale(speed)));
+                // Manual fallback for surface movement — horizontal only, capped speed
+                Vec3 moveDir = targetPosition.subtract(this.hullback.position());
+                moveDir = new Vec3(moveDir.x, 0, moveDir.z);
+                if (moveDir.lengthSqr() > 0.001) {
+                    moveDir = moveDir.normalize();
+                }
 
-                // Forces visual rotation
+                double speed = this.speedModifier * 0.08;
+                Vec3 currentMotion = this.hullback.getDeltaMovement();
+                Vec3 newMotion = new Vec3(
+                        currentMotion.x + moveDir.x * speed,
+                        currentMotion.y,
+                        currentMotion.z + moveDir.z * speed);
+
+                // Cap horizontal speed
+                double maxHorizontalSpeed = 0.3;
+                double horizSpeedSqr = newMotion.x * newMotion.x + newMotion.z * newMotion.z;
+                if (horizSpeedSqr > maxHorizontalSpeed * maxHorizontalSpeed) {
+                    double scale = maxHorizontalSpeed / Math.sqrt(horizSpeedSqr);
+                    newMotion = new Vec3(newMotion.x * scale, newMotion.y, newMotion.z * scale);
+                }
+
+                this.hullback.setDeltaMovement(newMotion);
+
+                // Smooth visual rotation
                 double d0 = targetPosition.x - this.hullback.getX();
                 double d2 = targetPosition.z - this.hullback.getZ();
                 float targetYaw = (float)(Mth.atan2(d2, d0) * (double)(180F / (float)Math.PI)) - 90.0F;
-                
-                this.hullback.setYRot(Mth.rotLerp(0.1f, this.hullback.getYRot(), targetYaw));
+
+                this.hullback.setYRot(Mth.rotLerp(0.05f, this.hullback.getYRot(), targetYaw));
                 this.hullback.yBodyRot = this.hullback.getYRot();
             }
         }

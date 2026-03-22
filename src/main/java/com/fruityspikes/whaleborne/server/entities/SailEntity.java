@@ -93,6 +93,7 @@ public class SailEntity extends WhaleWidgetEntity{
         return this.entityData.get(DATA_BANNER);
     }
     public void addAdditionalSaveData(CompoundTag compound) {
+        super.addAdditionalSaveData(compound);
         ItemStack banner = getBanner();
 
         if (!banner.isEmpty()) {
@@ -103,6 +104,7 @@ public class SailEntity extends WhaleWidgetEntity{
     }
 
     public void readAdditionalSaveData(CompoundTag compound) {
+        super.readAdditionalSaveData(compound);
         if (compound.contains("Banner")) {
             CompoundTag tag = compound.getCompound("Banner");
             ItemStack banner = ItemStack.of(tag);

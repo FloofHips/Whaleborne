@@ -89,6 +89,11 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             return handleSeatInteraction(player, hand, vec, topClicked, entity);
         }
 
+        // Let vanilla handle nametags (routes through Mob.interact → NameTagItem logic)
+        if (heldItem.getItem() instanceof NameTagItem) {
+            return parent.interact(player, hand);
+        }
+
         InteractionResult result = parent.interactClean(player, hand, this, topClicked);
         return result.consumesAction() ? result : parent.interact(player, hand);
     }
