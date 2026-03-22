@@ -175,27 +175,42 @@ public class HullbackInteractionManager {
      */
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         hullback.setMouthTarget(0.2f);
-        
+
         InteractionResult removalResult = this.handleVegetationRemoval(player, hand, part, top);
         if (removalResult == InteractionResult.PASS) {
-            // Check if any dirt remains
+            // No dirt was removed — check if taming conditions are met
+            boolean hasTopDirt = false;
             for (BlockState[] states : hullback.hullbackDirt.headTopDirt) {
                 for (BlockState state : states) {
                     if (state != Blocks.AIR.defaultBlockState()) {
-                        hullback.setMouthTarget(0.5f);
-                        hullback.playSound(WBSoundRegistry.HULLBACK_MAD.get());
-                        return InteractionResult.SUCCESS;
+                        hasTopDirt = true;
+                        break;
                     }
+                }
+                if (hasTopDirt) break;
+            }
+            if (!hasTopDirt) {
+                for (BlockState[] blockStates : hullback.hullbackDirt.bodyTopDirt) {
+                    for (BlockState blockState : blockStates) {
+                        if (blockState != Blocks.AIR.defaultBlockState()) {
+                            hasTopDirt = true;
+                            break;
+                        }
+                    }
+                    if (hasTopDirt) break;
                 }
             }
-            for (BlockState[] blockStates : hullback.hullbackDirt.bodyTopDirt) {
-                for (BlockState blockState : blockStates) {
-                    if (blockState != Blocks.AIR.defaultBlockState()) {
-                        hullback.setMouthTarget(0.5f);
-                        hullback.playSound(WBSoundRegistry.HULLBACK_MAD.get());
-                        return InteractionResult.SUCCESS;
-                    }
-                }
+
+            if (hasTopDirt) {
+                // Whale still has dirt — reject interaction (mad)
+                hullback.setMouthTarget(0.5f);
+                hullback.playSound(WBSoundRegistry.HULLBACK_MAD.get());
+                return InteractionResult.SUCCESS;
+            }
+
+            if (hullback.isTamed()) {
+                // Already tamed and clean — let other handlers process the item
+                return InteractionResult.PASS;
             }
 
             // All clean! Tame the Hullback
@@ -219,6 +234,7 @@ public class HullbackInteractionManager {
             return InteractionResult.SUCCESS;
         }
 
+        // Dirt was successfully removed
         return InteractionResult.SUCCESS;
     }
 

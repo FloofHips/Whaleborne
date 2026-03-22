@@ -698,7 +698,9 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     }
 
     public InteractionResult mobInteract(Player player, InteractionHand hand) {
-        return interactionManager.mobInteract(player, hand);
+        InteractionResult result = interactionManager.mobInteract(player, hand);
+        if (result.consumesAction()) return result;
+        return super.mobInteract(player, hand);
     }
 
     public InteractionResult interactDebug(Player player, InteractionHand hand){

@@ -29,6 +29,7 @@ public class HullbackApproachPlayerGoal extends Goal {
     private Player targetPlayer;
     private boolean approachFromRight;
     private Vec3 targetPosition;
+    private Vec3 approachDirection; // Fixed direction computed once at start
 
     public HullbackApproachPlayerGoal(HullbackEntity hullback, float speedModifier) {
         this.hullback = hullback;
@@ -70,13 +71,18 @@ public class HullbackApproachPlayerGoal extends Goal {
     public void start() {
         super.start();
         this.hullback.setApproachingPlayer(true);
-        
+
         Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
         Vec3 whaleRight = Vec3.directionFromRotation(0, hullback.getYRot() + 90);
         this.approachFromRight = toPlayer.dot(whaleRight) > 0;
+        // Compute a stable approach direction from the whale-to-player vector
+        Vec3 horizToPlayer = new Vec3(toPlayer.x, 0, toPlayer.z).normalize();
+        Vec3 sideDir = new Vec3(-horizToPlayer.z, 0, horizToPlayer.x);
+        this.approachDirection = sideDir.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET)
+                .add(horizToPlayer.scale(-APPROACH_DISTANCE));
 
         this.hullback.setTarget(this.targetPlayer);
-        
+
         hullback.playSound(WBSoundRegistry.HULLBACK_HAPPY.get());
         this.hullback.setMouthTarget(0.2f);
     }
@@ -85,6 +91,7 @@ public class HullbackApproachPlayerGoal extends Goal {
     public void stop() {
         this.targetPlayer = null;
         this.targetPosition = null;
+        this.approachDirection = null;
         this.hullback.setTarget(null);
         this.hullback.setApproachingPlayer(false);
         this.hullback.getNavigation().stop();
@@ -93,22 +100,17 @@ public class HullbackApproachPlayerGoal extends Goal {
 
     @Override
     public void tick() {
-        if (this.targetPlayer == null) return;
+        if (this.targetPlayer == null || this.approachDirection == null) return;
         this.hullback.setMouthTarget(0.6f);
 
-        // RECALCULATION PER TICK
-        Vec3 playerLook = this.targetPlayer.getLookAngle();
-        Vec3 perpendicular = new Vec3(-playerLook.z, 0, playerLook.x).normalize();
-        Vec3 sideOffset = perpendicular.scale(approachFromRight ? SIDE_OFFSET : -SIDE_OFFSET);
-        this.targetPosition = this.targetPlayer.position()
-                .add(sideOffset)
-                .add(playerLook.scale(-APPROACH_DISTANCE));
+        // Use stable offset direction computed at start — does not depend on player look
+        this.targetPosition = this.targetPlayer.position().add(this.approachDirection);
 
         // NATIVE NAVIGATION: Tries pathfinding
         this.hullback.getNavigation().moveTo(
                 targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
 
-        // SMOOTH ROTATION
+        // SMOOTH ROTATION toward the player
         Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
         float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
         float sideYawOffset = approachFromRight ? -90f : 90f;
