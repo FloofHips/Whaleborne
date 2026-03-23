@@ -17,7 +17,7 @@ public class Config {
             .comment("Probability of a Hullback spawn attempt succeeding (0.0 to 1.0).",
                      "0.001 = 0.1% chance per spawn attempt. 0.0 disables natural spawning entirely.",
                      "The Hullback uses its own spawn category and does not compete with other ocean mobs.")
-            .defineInRange("hullbackSpawnChance", 0.001, 0.0, 1.0);
+            .defineInRange("hullbackSpawnChance", 0.01, 0.0, 1.0);
 
     public static final ForgeConfigSpec.IntValue HULLBACK_SPAWN_CAP = SERVER_BUILDER
             .comment("Maximum number of wild Hullbacks allowed in the nearby area.",
