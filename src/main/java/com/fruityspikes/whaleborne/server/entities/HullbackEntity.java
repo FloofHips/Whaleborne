@@ -3126,7 +3126,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 return Vec3.ZERO;
             }
 
-            if (tickCount % 2 == 0) this.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
+            if (tickCount % 2 == 0 && player.xxa != 0) this.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
 
             if (!this.level().isClientSide && getControllingPassenger() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity) {
                 helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / 10);
