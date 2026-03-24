@@ -2124,6 +2124,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                         return controller;
                     }
                 }
+
+                if (entity instanceof CannonEntity cannon) {
+                    LivingEntity controller = cannon.getControllingPassenger();
+                    if (controller != null) {
+                        return controller;
+                    }
+                }
             }
         }
         return null;
@@ -3119,6 +3126,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
         boolean hasInput = Mth.abs(player.xxa) > 0 || Mth.abs(player.zza) > 0;
+
+        if (getControllingPassenger() != null && getControllingPassenger().getVehicle() instanceof CannonEntity) {
+            return Vec3.ZERO;
+        }
 
         if (hasInput) {
             if (hasAnchorDown()) {

@@ -120,12 +120,14 @@ public class SailEntity extends WhaleWidgetEntity{
     @Override
     public void tick() {
         super.tick();
+        if (!this.level().isClientSide) return;
         if(this.isPassenger()){
             Entity whale = this.getVehicle();
 
-            if (whale.getDeltaMovement().length()>0.1f){
-                if (this.tickCount % 500 == 0)
-                    this.level().playSound(this, BlockPos.containing(this.position()), SoundEvents.ELYTRA_FLYING, SoundSource.NEUTRAL, 1, (float) whale.getDeltaMovement().length());
+            if (whale != null && whale.getDeltaMovement().length() > 0.1){
+                if (this.tickCount % 100 == 0) {
+                    this.level().playLocalSound(this.getX(), this.getY(), this.getZ(), SoundEvents.ELYTRA_FLYING, SoundSource.AMBIENT, 0.3f, (float) whale.getDeltaMovement().length()*2, true);
+                }
             }
         }
     }
