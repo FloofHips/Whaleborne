@@ -245,7 +245,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                         (float) power / 50);
             }
             else if(ammo.getItem() instanceof SpawnEggItem spawnEggItem){
-                projectile = spawnEggItem.getType(null).create(this.level());
+                projectile = spawnEggItem.getType(ammo).create(this.level());
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);

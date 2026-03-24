@@ -15,8 +15,8 @@ import net.minecraft.util.Mth;
 import java.util.EnumSet;
 
 public class HullbackArmorPlayerGoal extends Goal {
-    private static final float APPROACH_DISTANCE = 6.0f;
-    private static final float SIDE_OFFSET = 5.0f;
+    private static final float APPROACH_DISTANCE = 10.0f;
+    private static final float SIDE_OFFSET = 10.0f;
     private static final float ROTATION_SPEED = 0.8f;
     private static Ingredient TEMPT_PLANKS = Ingredient.of(WBTagRegistry.HULLBACK_EQUIPPABLE);
     private static Ingredient TEMPT_WIDGETS = Ingredient.of(WBItemRegistry.SAIL.get(), WBItemRegistry.ANCHOR.get(), WBItemRegistry.MAST.get(), WBItemRegistry.HELM.get(), WBItemRegistry.CANNON.get());
@@ -108,21 +108,24 @@ public class HullbackArmorPlayerGoal extends Goal {
     public void tick() {
         if (this.targetPlayer == null || this.approachDirection == null) return;
 
-        this.hullback.setMouthTarget(0.6f);
+        // reapplied delay to allow survival players to equip widgets with ease
+        if (hullback.tickCount % 200 == 0) {
+            this.hullback.setMouthTarget(0.6f);
 
-        // Use stable offset direction computed at start — does not depend on player look
-        this.targetPosition = this.targetPlayer.position().add(this.approachDirection);
+            // Use stable offset direction computed at start — does not depend on player look
+            this.targetPosition = this.targetPlayer.position().add(this.approachDirection);
 
-        // NATIVE NAVIGATION: Tries pathfinding
-        this.hullback.getNavigation().moveTo(
-                targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
+            // NATIVE NAVIGATION: Tries pathfinding
+            this.hullback.getNavigation().moveTo(
+                    targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
 
-        // SMOOTH ROTATION toward the player
-        Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
-        float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
-        float sideYawOffset = approachFromRight ? -90f : 90f;
-        float targetYaw = desiredYaw + sideYawOffset;
-        this.hullback.setYRot(Mth.rotLerp(0.05f, this.hullback.getYRot(), targetYaw));
-        this.hullback.yBodyRot = this.hullback.getYRot();
+            // SMOOTH ROTATION toward the player
+            Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());
+            float desiredYaw = (float) Math.toDegrees(Math.atan2(toPlayer.z, toPlayer.x)) - 90f;
+            float sideYawOffset = approachFromRight ? -90f : 90f;
+            float targetYaw = desiredYaw + sideYawOffset;
+            this.hullback.setYRot(Mth.rotLerp(0.05f, this.hullback.getYRot(), targetYaw));
+            this.hullback.yBodyRot = this.hullback.getYRot();
+        }
     }
 }

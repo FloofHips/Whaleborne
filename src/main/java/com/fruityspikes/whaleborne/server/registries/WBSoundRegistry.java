@@ -53,4 +53,8 @@ public class WBSoundRegistry {
             "entity.hullback.mad",
             () -> SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "entity.hullback.mad"))
     );
+    public static final Supplier<SoundEvent> SAIL_BLOW = SOUND_EVENTS.register(
+            "entity.sail.blow",
+            () -> SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "entity.sail.blow"))
+    );
 }

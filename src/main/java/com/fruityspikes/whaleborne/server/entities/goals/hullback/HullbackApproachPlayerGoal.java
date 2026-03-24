@@ -15,8 +15,8 @@ import net.minecraft.util.Mth;
 import java.util.EnumSet;
 
 public class HullbackApproachPlayerGoal extends Goal {
-    private static final float APPROACH_DISTANCE = 6.0f;
-    private static final float SIDE_OFFSET = 5.0f;
+    private static final float APPROACH_DISTANCE = 2.0f;
+    private static final float SIDE_OFFSET = 3.0f;
     private static final float ROTATION_SPEED = 0.8f;
 
     private static Ingredient TEMPT_SADDLE = Ingredient.of(Items.SADDLE);

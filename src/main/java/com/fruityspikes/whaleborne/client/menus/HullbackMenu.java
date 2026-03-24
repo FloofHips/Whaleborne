@@ -142,7 +142,7 @@ public class HullbackMenu extends AbstractContainerMenu {
         return this.hullback.getArmorProgress();
     }
     public float getSpeedModifier(){
-        AttributeInstance inst = this.hullback.getAttribute(Attributes.MOVEMENT_SPEED);
+        AttributeInstance inst = this.hullback.getAttribute(NeoForgeMod.SWIM_SPEED);
         if (inst != null) {
             AttributeModifier modifier = inst.getModifier(HullbackEntity.getSailSpeedModifierId());
             if (modifier != null)

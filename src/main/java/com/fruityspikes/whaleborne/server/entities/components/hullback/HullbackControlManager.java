@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne.server.entities.components.hullback;
 
 
 import com.fruityspikes.whaleborne.network.ToggleControlPayload;
+import com.fruityspikes.whaleborne.server.entities.CannonEntity;
 import com.fruityspikes.whaleborne.server.entities.HelmEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 
@@ -122,13 +123,17 @@ public class HullbackControlManager {
     public Vec3 getRiddenInput(Player player, Vec3 travelVector) {
         boolean hasInput = Mth.abs(player.xxa) > 0 || Mth.abs(player.zza) > 0;
 
+        if(whale.getControllingPassenger() != null && whale.getControllingPassenger().getVehicle() instanceof CannonEntity cannon){
+            return Vec3.ZERO;
+        }
+
         if (hasInput) {
             if (whale.hasAnchorDown()) {
                 if (whale.tickCount % ANCHOR_SOUND_INTERVAL == 0) whale.playSound(SoundEvents.WOOD_HIT, 1, 1);
                 return Vec3.ZERO; 
             }
             
-            if (whale.tickCount % STEERING_SOUND_INTERVAL == 0) whale.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
+            if (whale.tickCount % STEERING_SOUND_INTERVAL == 0 && player.xxa != 0) whale.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
              
             if(!whale.level().isClientSide && whale.getControllingPassenger() != null && whale.getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
                  helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / WHEEL_ROTATION_DIVISOR);

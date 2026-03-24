@@ -1361,7 +1361,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         double speedModifier = 0.0;
 
         for (Entity passenger : getPassengers()) {
-            if (passenger instanceof com.fruityspikes.whaleborne.server.entities.SailEntity sail) {
+            if (passenger instanceof SailEntity sail) {
                 speedModifier += sail.getSpeedModifier();
             }
         }
@@ -1462,6 +1462,12 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
                 if (entity instanceof HelmEntity helm) {
                     LivingEntity controller = helm.getControllingPassenger();
+                    if (controller != null) {
+                        return controller;
+                    }
+                }
+                if (entity instanceof CannonEntity cannon) {
+                    LivingEntity controller = cannon.getControllingPassenger();
                     if (controller != null) {
                         return controller;
                     }

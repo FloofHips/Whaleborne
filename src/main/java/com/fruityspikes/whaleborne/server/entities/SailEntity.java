@@ -1,6 +1,7 @@
 package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -128,12 +129,14 @@ public class SailEntity extends WhaleWidgetEntity{
     @Override
     public void tick() {
         super.tick();
+        if (!this.level().isClientSide) return;
         if(this.isPassenger()){
             Entity whale = this.getVehicle();
 
-            if (whale.getDeltaMovement().length()>0.1f){
-                if (this.tickCount % 500 == 0)
-                    this.level().playSound(this, BlockPos.containing(this.position()), SoundEvents.ELYTRA_FLYING, SoundSource.NEUTRAL, 1, (float) whale.getDeltaMovement().length());
+            if (whale != null && whale.getDeltaMovement().length() > 0.1){
+                if (this.tickCount % 20 == 0) {
+                    this.level().playLocalSound(this.getX(), this.getY(), this.getZ(), WBSoundRegistry.SAIL_BLOW.get(), SoundSource.AMBIENT, 2, (float) whale.getDeltaMovement().length()*2, true);
+                }
             }
         }
     }

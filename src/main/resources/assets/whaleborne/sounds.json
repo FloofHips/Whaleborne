@@ -166,5 +166,13 @@
       }
     ],
     "subtitle": "subtitles.entity.hullback.death"
+  },
+  "entity.sail.blow": {
+    "sounds": [
+      "mob/breeze/idle1",
+      "mob/breeze/idle2",
+      "mob/breeze/idle3",
+      "mob/breeze/idle4"
+    ]
   }
 }
