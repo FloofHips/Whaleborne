@@ -52,6 +52,11 @@ public class Config {
                      "-6.5 keeps wild whales slightly deeper.")
             .defineInRange("hullbackDepthWild", -6.5, -20.0, 0.0);
 
+    public static final ModConfigSpec.BooleanValue HULLBACK_PAUSE_BREACH_TIMER = SERVER_BUILDER
+            .comment("When enabled, the Hullback's breaching air timer pauses while it is immobile or being controlled by a player.",
+                     "This prevents the whale from needing to breach for air while someone is at the helm or while stationary.")
+            .define("hullbackPauseBreachTimer", true);
+
     public static final ModConfigSpec.BooleanValue ARMOR_PROGRESS = CLIENT_BUILDER
             .comment("Shows hullback building and damage progress. Turning this off solve incompatibility issues with shaders but will sacrifice some visual flair")
             .define("hullbackArmorProgress", true);
@@ -92,6 +97,7 @@ public class Config {
     public static double hullbackDepthSailing;
     public static double hullbackDepthBoarding;
     public static double hullbackDepthWild;
+    public static boolean hullbackPauseBreachTimer;
 
     public static boolean armorProgress;
     public static double soundDistance;
@@ -123,6 +129,7 @@ public class Config {
             hullbackDepthSailing = HULLBACK_DEPTH_SAILING.get();
             hullbackDepthBoarding = HULLBACK_DEPTH_BOARDING.get();
             hullbackDepthWild = HULLBACK_DEPTH_WILD.get();
+            hullbackPauseBreachTimer = HULLBACK_PAUSE_BREACH_TIMER.get();
         }
     }
 }

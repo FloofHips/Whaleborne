@@ -863,7 +863,19 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         // 2. Handle core stationary logic and base entity tick
         handleStationaryState();
         updatePlatformHeight();
+
+        // Pause breaching timer: save air before base tick if immobile or has controlling passenger
+        boolean pauseAir = false;
+        int savedAir = this.getAirSupply();
+        if (!this.level().isClientSide && com.fruityspikes.whaleborne.Config.hullbackPauseBreachTimer) {
+            if (this.getStationaryTicks() > 0 || this.getControllingPassenger() != null) {
+                pauseAir = true;
+            }
+        }
         super.tick();
+        if (pauseAir) {
+            this.setAirSupply(savedAir);
+        }
 
         // 3. Re-enforce the stationary orientation if applicable (Hard Lock)
         applyHardLock(snapshot);
