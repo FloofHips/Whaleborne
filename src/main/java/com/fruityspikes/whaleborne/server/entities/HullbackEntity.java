@@ -540,7 +540,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
             int simDistBlocks = serverLevel.getServer().getPlayerList().getSimulationDistance() * 16;
             double simDistSq = (double) simDistBlocks * simDistBlocks;
-            net.minecraft.world.entity.player.Player nearest = this.level().getNearestPlayer(this, -1.0);
+            Player nearest = this.level().getNearestPlayer(this, -1.0);
             if (nearest != null && nearest.distanceToSqr(this) < simDistSq) {
                 this.setNoActionTime(0);
             }
@@ -845,7 +845,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     public boolean canBreatheUnderwater() {
-        return isVehicle();
+        for (Entity passenger : this.getPassengers()) {
+            if (passenger instanceof Player) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Override to suppress default air supply tick — prevents the entity from
@@ -1495,7 +1500,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             boolean inGraceZone = false;
             if (graceRadius > 0) {
                 double graceDistSq = (double) graceRadius * graceRadius;
-                net.minecraft.world.entity.player.Player nearestPlayer = this.level().getNearestPlayer(this, -1.0);
+                Player nearestPlayer = this.level().getNearestPlayer(this, -1.0);
                 inGraceZone = nearestPlayer != null && nearestPlayer.distanceToSqr(this) < graceDistSq;
             }
             if (!inGraceZone) {
@@ -1528,8 +1533,19 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.entityData.set(DATA_STATIONARY_TICKS, stationaryTicks);
         }
 
+        // Pause breaching timer: save air before base tick if immobile or has controlling passenger
+        boolean pauseAir = false;
+        int savedAir = this.getAirSupply();
+        if (!this.level().isClientSide && com.fruityspikes.whaleborne.Config.hullbackPauseBreachTimer) {
+            if (this.getStationaryTicks() > 0 || this.getControllingPassenger() != null) {
+                pauseAir = true;
+            }
+        }
         // Core entity tick (ONLY ONCE)
         super.tick();
+        if (pauseAir) {
+            this.setAirSupply(savedAir);
+        }
 
         // Apply Hard Lock if stationary to prevent snapping caused by AI combat/movement
         // BREATHING COMPATIBILITY: Do NOT lock pitch if the whale is trying to breach/breathe!
@@ -2452,8 +2468,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             // FIX: Allows surfacing if air is critical, even if stationaryTicks > 0
             if(hullback.stationaryTicks > 0 && this.hullback.getAirSupply() > 100) return false;
 
-            for (net.minecraft.world.entity.Entity passenger : hullback.getPassengers()) {
-                if (passenger instanceof net.minecraft.world.entity.player.Player) {
+            for (Entity passenger : hullback.getPassengers()) {
+                if (passenger instanceof Player) {
                     return false;
                 }
             }
