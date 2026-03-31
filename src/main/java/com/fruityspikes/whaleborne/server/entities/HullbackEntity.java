@@ -1528,8 +1528,19 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.entityData.set(DATA_STATIONARY_TICKS, stationaryTicks);
         }
 
+        // Pause breaching timer: save air before base tick if immobile or has controlling passenger
+        boolean pauseAir = false;
+        int savedAir = this.getAirSupply();
+        if (!this.level().isClientSide && com.fruityspikes.whaleborne.Config.hullbackPauseBreachTimer) {
+            if (this.getStationaryTicks() > 0 || this.getControllingPassenger() != null) {
+                pauseAir = true;
+            }
+        }
         // Core entity tick (ONLY ONCE)
         super.tick();
+        if (pauseAir) {
+            this.setAirSupply(savedAir);
+        }
 
         // Apply Hard Lock if stationary to prevent snapping caused by AI combat/movement
         // BREATHING COMPATIBILITY: Do NOT lock pitch if the whale is trying to breach/breathe!
