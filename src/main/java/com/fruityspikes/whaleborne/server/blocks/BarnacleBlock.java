@@ -18,6 +18,7 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.piston.MovingPistonBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -46,11 +47,18 @@ public class BarnacleBlock extends Block {
 
     @Override
     public void neighborChanged(BlockState state, Level level, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
-        boolean signal = level.hasNeighborSignal(pos);
-
-        if (signal) {
-            this.playNote(null, state, level, pos);
+        if (level.hasNeighborSignal(pos) && !state.getValue(TRIGGERED)) {
+            BlockPos base = getBase(level, pos);
+            level.scheduleTick(base.above(getStackHeight(level, base)), this, 0);
         }
+    }
+
+    @Override
+    public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
+        if (state.getValue(TRIGGERED) && isMoving) {
+            level.setBlock(pos, state.setValue(TRIGGERED, false), 3);
+        }
+        super.onPlace(state, level, pos, oldState, isMoving);
     }
 
     private void playNote(@Nullable Entity entity, BlockState state, Level level, BlockPos pos) {
@@ -65,7 +73,7 @@ public class BarnacleBlock extends Block {
 
         double pitch = Math.pow(2.0F, (double)(stackHeight - 12) / (double)12.0F);
 
-        AABB boundingBox = new AABB(topPos).move(0, 0, 0);
+        AABB boundingBox = new AABB(topPos).inflate(0, 1, 0);
         List<Entity> entities = level.getEntities(null, boundingBox);
         entities.removeIf(entity1 -> (!entity1.isPushable() && !(entity1 instanceof ItemEntity)));
         for (Entity entity2 : entities) {
@@ -77,7 +85,7 @@ public class BarnacleBlock extends Block {
             level.addParticle(WBParticleRegistry.SMOKE.get(), topPos.getX() + 0.5, topPos.getY() + 0.25, topPos.getZ() + 0.5, 0, 0, 0);
         }
 
-        if (!level.getBlockState(pos.below()).is(BlockTags.WOOL)) {
+        if (!level.getBlockState(base.below()).is(BlockTags.WOOL)) {
             double xSpeed = (double) (stackHeight) / 24.0D;
             level.addParticle(ParticleTypes.NOTE, topPos.getX() + 0.5, topPos.getY(), topPos.getZ() + 0.5, xSpeed, 0.0D, 0.0D);
             level.addParticle(ParticleTypes.NOTE, base.getX() + 0.5 + 0.65, base.getY() + 0.25, base.getZ() + 0.5, xSpeed, 0.0D, 0.0D);
@@ -92,20 +100,22 @@ public class BarnacleBlock extends Block {
 
     @Override
     public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState, LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
-        boolean hasBelow = level.getBlockState(pos.below()).getBlock() == this;
-        return super.updateShape(state, direction, neighborState, level, pos, neighborPos).setValue(BASE, !hasBelow);
+        return state.setValue(BASE, getBase(level, pos).equals(pos));
     }
 
     @Nullable
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        boolean hasBelow = context.getLevel().getBlockState(context.getClickedPos().below()).getBlock() == this;
-        return this.defaultBlockState().setValue(BASE, !hasBelow);
+        BlockPos blockPos = context.getClickedPos();
+        Level level = context.getLevel();
+        BlockPos base = getBase(level, blockPos);
+        return this.defaultBlockState().setValue(BASE, (base.equals(blockPos))).setValue(TRIGGERED, false);
     }
 
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
         BlockPos base = getBase(level, pos);
-        level.scheduleTick(base.above(getStackHeight(level, base)), this, 0);
+        BlockPos above = base.above(getStackHeight(level, base));
+        level.scheduleTick(above, this, 0);
         return InteractionResult.SUCCESS;
     }
 
@@ -115,10 +125,10 @@ public class BarnacleBlock extends Block {
             level.setBlock(pos, state.setValue(TRIGGERED, false), 3);
         } else {
             level.setBlock(pos, state.setValue(TRIGGERED, true), 3);
-            level.scheduleTick(pos, this, 7);
+            level.scheduleTick(pos, this, 30);
             BlockPos base = getBase(level, pos);
-            if ((pos.getY() - base.getY()) == getStackHeight(level, base) || level.getBlockState(pos.above()).getBlock() != this.asBlock()) this.playNote(null, state, level, pos);
-            if (level.getBlockState(pos.below()).getBlock() == this.asBlock()) level.scheduleTick(pos.below(), this, 0);
+            if ((pos.getY() - base.getY()) == getStackHeight(level, base)) this.playNote(null, state, level, pos);
+            if (!state.getValue(BASE) && level.getBlockState(pos.below()).getBlock() == this.asBlock()) level.scheduleTick(pos.below(), this, 0);
         }
 
     }
@@ -128,26 +138,26 @@ public class BarnacleBlock extends Block {
     }
 
     private int getStackHeight(Level level, BlockPos basePos) {
-        Block thisBlock = level.getBlockState(basePos).getBlock();
         int height = 0;
 
         BlockPos checkPos = basePos.above();
 
-        while (level.getBlockState(checkPos).getBlock() == thisBlock && height < 24) {
+        while (level.getBlockState(checkPos).is(this.asBlock()) && !level.getBlockState(checkPos).getValue(BASE)) {
             height++;
             checkPos = checkPos.above();
         }
         return height;
     }
 
-    private BlockPos getBase(Level level, BlockPos pos) {
-        Block thisBlock = level.getBlockState(pos).getBlock();
-        BlockPos current = pos;
+    private BlockPos getBase(LevelAccessor level, BlockPos pos) {
+        BlockPos lowest = pos;
+        BlockPos highest = pos;
 
-        while (level.getBlockState(current.below()).getBlock() == thisBlock) {
-            current = current.below();
-        }
+        while (level.getBlockState(lowest.below()).is(this.asBlock())) lowest = lowest.below();
+        while (level.getBlockState(highest.above()).is(this.asBlock())) highest = highest.above();
 
-        return current;
+        int segmentIndex = Math.floorDiv(pos.getY() - lowest.getY(), 25);
+
+        return lowest.above(segmentIndex * 25);
     }
 }
