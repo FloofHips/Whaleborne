@@ -7,8 +7,10 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.SoundType;
+import net.minecraftforge.common.util.ForgeSoundType;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 
 import java.util.function.Supplier;
 
@@ -53,4 +55,17 @@ public class WBSoundRegistry {
             "entity.hullback.mad",
             () -> SoundEvent.createVariableRangeEvent(new ResourceLocation(Whaleborne.MODID, "entity.hullback.mad"))
     );
+
+    public static final SoundType BARNACLE_BLOCK = register("barnacle_block", 1, 1.35F);
+
+
+    private static SoundType register(String name, float volume, float pitch) {
+        return new ForgeSoundType(volume, pitch, register("block." + name + ".break"), register("block." + name + ".step"), register("block." + name + ".place"), register("block." + name + ".hit"), register("block." + name + ".fall"));
+    }
+
+
+    public static RegistryObject<SoundEvent> register(String name) {
+        ResourceLocation id = new ResourceLocation(Whaleborne.MODID, name);
+        return SOUND_EVENTS.register(name, () -> SoundEvent.createVariableRangeEvent(id));
+    }
 }

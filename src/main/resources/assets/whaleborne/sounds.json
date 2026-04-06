@@ -3,7 +3,6 @@
     "sounds": [
       {
         "name": "whaleborne:block/barnacle/organ",
-        "volume": 0.5,
         "attenuation_distance": 64
       }
     ],
@@ -166,5 +165,52 @@
       }
     ],
     "subtitle": "subtitles.entity.hullback.death"
+  },
+  "block.barnacle_block.break": {
+    "sounds": [
+      "whaleborne:block/barnacle/heavy1",
+      "whaleborne:block/barnacle/heavy2",
+      "whaleborne:block/barnacle/heavy3",
+      "whaleborne:block/barnacle/heavy4"
+    ],
+    "subtitle": "subtitles.block.generic.break"
+  },
+  "block.barnacle_block.fall": {
+    "sounds": [
+      "whaleborne:block/barnacle/light1",
+      "whaleborne:block/barnacle/light2",
+      "whaleborne:block/barnacle/light3",
+      "whaleborne:block/barnacle/light4",
+      "whaleborne:block/barnacle/light5"
+    ]
+  },
+  "block.barnacle_block.hit": {
+    "sounds": [
+      "whaleborne:block/barnacle/light1",
+      "whaleborne:block/barnacle/light2",
+      "whaleborne:block/barnacle/light3",
+      "whaleborne:block/barnacle/light4",
+      "whaleborne:block/barnacle/light5"
+    ],
+    "subtitle": "subtitles.block.generic.hit"
+  },
+  "block.barnacle_block.place": {
+    "sounds": [
+      "whaleborne:block/barnacle/heavy1",
+      "whaleborne:block/barnacle/heavy2",
+      "whaleborne:block/barnacle/heavy3",
+      "whaleborne:block/barnacle/heavy4"
+    ],
+    "subtitle": "subtitles.block.generic.place"
+  },
+  "block.barnacle_block.step": {
+    "sounds": [
+      "whaleborne:block/barnacle/light1",
+      "whaleborne:block/barnacle/light2",
+      "whaleborne:block/barnacle/light3",
+      "whaleborne:block/barnacle/light4",
+      "whaleborne:block/barnacle/light5"
+    ],
+    "subtitle": "subtitles.block.generic.footsteps"
   }
 }
