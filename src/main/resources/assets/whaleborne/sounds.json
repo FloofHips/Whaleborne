@@ -212,5 +212,13 @@
       "whaleborne:block/barnacle/light5"
     ],
     "subtitle": "subtitles.block.generic.footsteps"
+  },
+  "music_disc.the_plank": {
+    "sounds": [
+      {
+        "name": "whaleborne:music/the_plank",
+        "stream": true
+      }
+    ]
   }
 }
