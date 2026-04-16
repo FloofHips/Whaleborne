@@ -1,7 +1,16 @@
 {
   "variants": {
-    "": {
+    "base=false,triggered=false": {
       "model": "whaleborne:block/barnacle"
+    },
+    "base=true,triggered=false": {
+      "model": "whaleborne:block/barnacle_base"
+    },
+    "base=false,triggered=true": {
+      "model": "whaleborne:block/barnacle_triggered"
+    },
+    "base=true,triggered=true": {
+      "model": "whaleborne:block/barnacle_base_triggered"
     }
   }
 }

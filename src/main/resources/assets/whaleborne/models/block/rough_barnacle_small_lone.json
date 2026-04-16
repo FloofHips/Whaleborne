@@ -1,7 +1,7 @@
 {
 	"parent": "block/cube",
 	"textures": {
-		"particle": "#side",
+		"particle": "whaleborne:block/rough_barnacle_tip_lone",
 		"side": "whaleborne:block/rough_barnacle_small_lone",
 		"bottom": "whaleborne:block/barnacle_bottom",
 		"top": "whaleborne:block/barnacle_top"

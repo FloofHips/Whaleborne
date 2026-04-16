@@ -1,0 +1,8 @@
+{
+  "comparator_output": 0,
+  "description": {
+    "translate": "jukebox_song.whaleborne.the_plank"
+  },
+  "length_in_seconds": 126,
+  "sound_event": "whaleborne:music_disc.the_plank"
+}

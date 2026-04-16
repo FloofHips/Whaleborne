@@ -5,6 +5,6 @@
   "removable_with": ["axe"],
   "drop": "whaleborne:rough_barnacle",
   "drop_amount": 3,
-  "sound_on_growth": "minecraft:block.bone_block.place",
-  "sound_on_remove": "minecraft:block.bone_block.break"
+  "sound_on_growth": "whaleborne:block.barnacle_block.place",
+  "sound_on_remove": "whaleborne:block.barnacle_block.break"
 }

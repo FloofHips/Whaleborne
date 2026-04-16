@@ -11,6 +11,6 @@
     "barnacle_type": "small_lone"
   },
   "drop": "whaleborne:rough_barnacle",
-  "sound_on_growth": "minecraft:block.bone_block.place",
-  "sound_on_remove": "minecraft:block.bone_block.break"
+  "sound_on_growth": "whaleborne:block.barnacle_block.place",
+  "sound_on_remove": "whaleborne:block.barnacle_block.break"
 }

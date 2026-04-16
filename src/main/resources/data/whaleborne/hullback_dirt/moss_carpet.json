@@ -1,6 +1,6 @@
 {
   "block": "minecraft:moss_carpet",
-  "placements": ["body_top", "head_top"],
+  "placements": ["tail_top", ",body_top", "head_top"],
   "placement_chance": 0.2,
   "removable_with": ["shears"],
   "drop": "minecraft:moss_carpet",
