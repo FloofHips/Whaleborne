@@ -28,6 +28,8 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.*;
+import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.TallSeagrassBlock;
@@ -43,6 +45,8 @@ import java.util.Optional;
 
 public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<HullbackEntity, HullbackModel<HullbackEntity>> {
     public static boolean isRenderingInHealthbarsGui = false;
+
+    private static final java.util.Set<String> SPECIAL_HEAD_NAMES = java.util.Set.of("SH8RK");
 
     // Configurable offset and scale overrides for GUI overlay
     public static float GUI_HEAD_X = 0.0f;
@@ -273,19 +277,12 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             poseStack.mulPose(Axis.XP.rotationDegrees(180));
             poseStack.mulPose(Axis.YP.rotationDegrees(180));
 
-            boolean isKingGeorge = pEntity.hasCustomName() && pEntity.getCustomName().getString().equalsIgnoreCase("king george");
-            float crownScale = isKingGeorge ? 2.0F : 1.75F;
-            poseStack.scale(crownScale, crownScale, crownScale);
-
             if (crown.is(ItemTags.SKULLS)) {
                 poseStack.pushPose();
                 poseStack.translate(0, 0, 0.23);
-                Minecraft.getInstance().getItemRenderer().renderStatic(crown, ItemDisplayContext.FIXED, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
-                poseStack.popPose();
-            } else if (crown.getItem() instanceof BlockItem) {
-                poseStack.pushPose();
-                poseStack.translate(0, -0.65f, 0);
-                poseStack.scale(1.5f, 1.5f, 1.5f);
+                if (isSpecialPlayerHead(crown)) {
+                    poseStack.scale(2.5F, 2.5F, 2.5F);
+                }
                 Minecraft.getInstance().getItemRenderer().renderStatic(crown, ItemDisplayContext.FIXED, packedLight, OverlayTexture.pack(0.0F, flag), poseStack, buffer, pEntity.level(), 0);
                 poseStack.popPose();
             } else {
@@ -293,6 +290,12 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
             }
             poseStack.popPose();
         }
+    }
+
+    private static boolean isSpecialPlayerHead(ItemStack stack) {
+        if (!stack.is(Items.PLAYER_HEAD)) return false;
+        ResolvableProfile profile = stack.get(DataComponents.PROFILE);
+        return profile != null && profile.name().isPresent() && SPECIAL_HEAD_NAMES.contains(profile.name().get());
     }
 
     private void renderArmor(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, int packedLight, boolean flag, ModelPart armorPart, int index) {
