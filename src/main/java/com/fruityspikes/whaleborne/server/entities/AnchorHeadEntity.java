@@ -39,12 +39,12 @@ public class AnchorHeadEntity extends Entity {
     public InteractionResult interact(Player player, InteractionHand hand) {
         if (player.isShiftKeyDown()) {
             this.setYRot(getYRot() - 11.25f);
-            this.playSound(SoundEvents.METAL_HIT);
+            this.playSound(WBSoundRegistry.WIDGET_METAL_HIT.get());
             return InteractionResult.SUCCESS;
         }
         else {
             this.setYRot(getYRot() + 11.25f);
-            this.playSound(SoundEvents.METAL_HIT);
+            this.playSound(WBSoundRegistry.WIDGET_METAL_HIT.get());
             return InteractionResult.SUCCESS;
         }
     }
@@ -63,7 +63,7 @@ public class AnchorHeadEntity extends Entity {
                 this.playSound(SoundEvents.METAL_HIT);
                 this.destroy(source);
             }
-            this.level().playSound((Player)null, this.getX(), this.getY(), this.getZ(), SoundEvents.ANVIL_PLACE, SoundSource.BLOCKS, 0.75F, this.random.nextFloat() * 0.5f + 0.4F);
+            this.level().playSound((Player)null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.WIDGET_METAL_BREAK.get(), SoundSource.BLOCKS, 0.75F, this.random.nextFloat() * 0.2f + 0.7F);
             this.discard();
             if (this.level() instanceof ServerLevel) {
                 ((ServerLevel)this.level()).sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, Blocks.ANVIL.defaultBlockState()), this.getX(), this.getY(0.6666666666666666), this.getZ(), 10, (double)(this.getBbWidth() / 4.0F), (double)(this.getBbHeight() / 4.0F), (double)(this.getBbWidth() / 4.0F), 0.05);

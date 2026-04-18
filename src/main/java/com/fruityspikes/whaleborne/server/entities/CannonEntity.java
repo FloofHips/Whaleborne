@@ -80,7 +80,8 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
         return cannonXRot;
     }
 
-    public SoundEvent getDeathSound() { return SoundEvents.ANVIL_PLACE;}
+    public SoundEvent getDeathSound() { return WBSoundRegistry.WIDGET_METAL_BREAK.get();}
+    public SoundEvent getHurtSound() { return WBSoundRegistry.WIDGET_METAL_HIT.get();}
     public BlockState getDeathBlock() { return Blocks.ANVIL.defaultBlockState();}
 
     @Override
@@ -156,10 +157,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
             ItemStack gunpowder = inventory.getItem(1);
 
             if (gunpowder.isEmpty()) {
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 1.0F, 1.0F);
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.NETHERITE_BLOCK_BREAK, SoundSource.NEUTRAL, 1.0F, 0.0F);
+                level().playSound(null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.CANNON_NO_FUEL.get(), SoundSource.BLOCKS, 1.0F, 1);
                 return;
             }
 
@@ -167,10 +165,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
             ItemStack ammo = inventory.getItem(0).copy().split(1);
 
             if (ammo.isEmpty()) {
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.DISPENSER_FAIL, SoundSource.NEUTRAL, 1.0F, 1.0F);
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.NETHERITE_BLOCK_BREAK, SoundSource.NEUTRAL, 1.0F, 0.0F);
+                level().playSound(null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.CANNON_SHOOT_FAIL.get(), SoundSource.BLOCKS, 1.0F, 1);
                 return;
             } else {
                 inventory.getItem(0).shrink(1);
@@ -179,35 +174,22 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
             Vec3 lookAngle = this.getFirstPassenger().getLookAngle();
             Entity projectile = null;
 
-            if(ammo.is(Items.ENDER_PEARL)){
-                projectile = new ThrownEnderpearl(
-                        this.level(),
-                        (LivingEntity) this.getFirstPassenger());
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.ENDER_PEARL_THROW, SoundSource.BLOCKS, 1.0F,
-                        (float) power / 50);
+            if (ammo.is(Items.ENDER_PEARL)) {
+                projectile = new ThrownEnderpearl(this.level(), this.getFirstPassenger());
+                level().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.ENDER_PEARL_THROW, SoundSource.BLOCKS, 1.0F, (float) power / 50);
             }
-            else if(ammo.is(WBItemRegistry.BARNACLE.get())){
+            else if (ammo.is(WBItemRegistry.BARNACLE.get())) {
                 Entity passenger = this.getFirstPassenger();
+                this.ejectPassengers();
+                //TODO this doesnt work
                 if (passenger != null) {
-                    this.ejectPassengers();
-
-                    passenger.setDeltaMovement(
-                            lookAngle.x * ((double) power),
-                            lookAngle.y * ((double) power),
-                            lookAngle.z * ((double) power)
-                    );
+                    passenger.setDeltaMovement(lookAngle.x * ((double) power), lookAngle.y * ((double) power), lookAngle.z * ((double) power));
                     passenger.hurtMarked = true;
                     passenger.setPose(Pose.CROUCHING);
-                    level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                            WBSoundRegistry.HULLBACK_ORGAN.get(), SoundSource.BLOCKS, 1.0F,
-                            (float) power / 50);
-                    level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                            SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
-                            (float) power / 50);
+                    level().playSound(null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.HULLBACK_ORGAN.get(), SoundSource.BLOCKS, 1.0F, (float) power / 50);
                 }
             }
-            else if(ammo.getItem().asItem() instanceof BoatItem boatItem){
+            else if(ammo.getItem().asItem() instanceof BoatItem){
                 Entity passenger = this.getFirstPassenger();
                 if (passenger != null) {
                     String[] boatName = ammo.getItem().asItem().toString().split("_");
@@ -215,7 +197,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                     boolean hasChest = false;
                     for (int i = 0; i < boatName.length - 1; i++) {
                         if (!boatName[i].equals("chest")) {
-                            if (boatTypeBuilder.length() > 0) {
+                            if (!boatTypeBuilder.isEmpty()) {
                                 boatTypeBuilder.append("_");
                             }
                             boatTypeBuilder.append(boatName[i]);
@@ -223,81 +205,42 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                             hasChest = true;
                         }
                     }
-                    Boat boat = (Boat)(hasChest ? new ChestBoat(this.level(), this.getX(), this.getY(), this.getZ()) : new Boat(this.level(), this.getX(), this.getY(), this.getZ()));
+                    Boat boat = hasChest ? new ChestBoat(this.level(), this.getX(), this.getY(), this.getZ()) : new Boat(this.level(), this.getX(), this.getY(), this.getZ());
                     boat.setVariant(Boat.Type.byName(boatTypeBuilder.toString()));
                     boat.setYRot(passenger.getYRot());
                     passenger.startRiding(boat);
-
                     projectile = boat;
-
-                    level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                            SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR, SoundSource.BLOCKS, 1.0F,
-                            (float) power / 50);
-                    level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                            SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
-                            (float) power / 50);
                 }
             }
             else if(ammo.getItem() instanceof SpawnEggItem spawnEggItem){
                 projectile = spawnEggItem.getType(ammo.getTag()).create(this.level());
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
-                        (float) power / 50);
             }
             else if(ammo.is(Items.TNT)){
-                projectile = new PrimedTnt(
-                        this.level(), this.getX(), this.getY(), this.getZ(),
-                        (LivingEntity) this.getVehicle());
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
-                        (float) power / 50);
+                projectile = new PrimedTnt(this.level(), this.getX(), this.getY(), this.getZ(), (LivingEntity) this.getVehicle());
+                level().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F, (float) power / 50);
             }
             else if(ammo.is(Items.ARROW)){
-                projectile = new Arrow(
-                        this.level(), (LivingEntity) this.getVehicle());
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.CROSSBOW_SHOOT, SoundSource.BLOCKS, 1.0F,
-                        (float) power / 50);
+                projectile = new Arrow(this.level(), (LivingEntity) this.getVehicle());
+                level().playSound(null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.CANNON_SHOOT_ARROW.get(), SoundSource.BLOCKS, 1.0F, (float) power / 50);
             }
             else {
-                projectile = new ItemEntity(
-                        this.level(), this.getX(), this.getY(), this.getZ(),
-                        ammo);
+                projectile = new ItemEntity(this.level(), this.getX(), this.getY(), this.getZ(), ammo);
                 ((ItemEntity) projectile).setPickUpDelay(10);
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.ITEM_BREAK, SoundSource.BLOCKS, 1.0F,
-                        (float) power / 50);
             }
 
-            projectile.setPos(this.position().add(0, 1, 0));
-            projectile.setDeltaMovement(
-                    lookAngle.x * ((double) power / 50),
-                    lookAngle.y * ((double) power / 50),
-                    lookAngle.z * ((double) power / 50)
-            );
+            if (projectile != null) {
+                projectile.setPos(this.position().add(0, 1, 0));
+                projectile.setDeltaMovement(lookAngle.x * ((double) power / 50), lookAngle.y * ((double) power / 50), lookAngle.z * ((double) power / 50));
+                projectile.hurtMarked = true;
 
-            if (this.getVehicle() != null)
-                this.getVehicle().push(-lookAngle.x * ((double) power / 200), 0, -lookAngle.z * ((double) power / 200));
+                this.level().addFreshEntity(projectile);
+            }
 
-            //tnt.setPickUpDelay(20);
-            this.level().addFreshEntity(projectile);
-
+            if (this.getVehicle() != null) this.getVehicle().push(-lookAngle.x * ((double) power / 200), 0, -lookAngle.z * ((double) power / 200));
             if (this.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(
-                        WBParticleRegistry.SMOKE.get(),
-                        this.getX(),
-                        this.getY() + 2,
-                        this.getZ(),
-                        5,
-                        0.1,
-                        0.1,
-                        0.1,
-                        0.02
-                );
+                serverLevel.sendParticles(WBParticleRegistry.SMOKE.get(), this.getX(), this.getY() + 2, this.getZ(), 5, 0.1, 0.1, 0.1, 0.02);
             }
-            level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                    SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS, 1.0F,
-                    power / 100 + (this.random.nextFloat() * 0.4F));
+            level().playSound(null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.CANNON_SHOOT.get(), SoundSource.BLOCKS, 3.0F, (float) power / 100 + (this.random.nextFloat() * 0.4F));
     }
 
     private void openCannonMenu(Player player) {
@@ -318,7 +261,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
 
     @Override
     public double getPassengersRidingOffset() {
-        return this.getBbHeight();
+        return this.getBbHeight()/3;
     }
 
     @Override

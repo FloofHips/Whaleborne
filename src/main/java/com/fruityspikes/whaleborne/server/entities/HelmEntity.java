@@ -114,9 +114,7 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     }
     @Override
     public void onPlayerJump(int i) {
-        //if (this.getVehicle() instanceof HullbackEntity hullback){
         this.getVehicle().playSound(WBSoundRegistry.HULLBACK_ORGAN.get());
-        //}
     }
 
     @Override

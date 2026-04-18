@@ -1,18 +1,13 @@
 package com.fruityspikes.whaleborne.server.items;
 
-import com.fruityspikes.whaleborne.server.entities.AnchorHeadEntity;
 import com.fruityspikes.whaleborne.server.entities.WhaleWidgetEntity;
-import com.fruityspikes.whaleborne.server.registries.WBEntityRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
@@ -21,7 +16,6 @@ import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class PlaceableWhaleEquipment extends WhaleEquipment {
@@ -47,20 +41,18 @@ public class PlaceableWhaleEquipment extends WhaleEquipment {
             Vec3 vec3 = Vec3.atBottomCenterOf(blockpos);
             AABB aabb = this.getEntity().getDimensions().makeBoundingBox(vec3.x(), vec3.y(), vec3.z());
 
-            if (level.noCollision((Entity)null, aabb) && level.getEntities((Entity)null, aabb).isEmpty()) {
+            if (level.noCollision(null, aabb) && level.getEntities((Entity)null, aabb).isEmpty()) {
 
                 Entity whaleWidget = this.getEntity().create(level);
 
-                if (whaleWidget == null || !(whaleWidget instanceof WhaleWidgetEntity widgetEntity)) {
-                    return InteractionResult.FAIL;
-                }
+                if (!(whaleWidget instanceof WhaleWidgetEntity widgetEntity)) return InteractionResult.FAIL;
 
                 float angle = ((int) (context.getPlayer().getYRot() / 11.25f)) * 11.25f;
                 widgetEntity.moveTo(blockpos.getX() + 0.5, blockpos.getY(), blockpos.getZ() + 0.5, angle, 0.0F);
                 level.addFreshEntity(widgetEntity);
                 widgetEntity.setPersistent(true);
 
-                level.playSound((Player)null, widgetEntity.getX(), widgetEntity.getY(), widgetEntity.getZ(), this.getPlaceSound(), SoundSource.BLOCKS, 0.75F, 0.4F);
+                level.playSound(null, widgetEntity.getX(), widgetEntity.getY(), widgetEntity.getZ(), this.getPlaceSound(), SoundSource.BLOCKS, 0.75F, 1);
                 widgetEntity.gameEvent(GameEvent.ENTITY_PLACE, context.getPlayer());
 
                 itemstack.shrink(1);

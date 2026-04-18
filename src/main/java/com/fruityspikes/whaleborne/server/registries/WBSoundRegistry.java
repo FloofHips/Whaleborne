@@ -26,6 +26,26 @@ public class WBSoundRegistry {
     public static final Supplier<SoundEvent> HULLBACK_MAD = register("entity.hullback.mad");
     public static final Supplier<SoundEvent> HULLBACK_ORGAN = register("entity.hullback.organ");
 
+    public static final Supplier<SoundEvent> WIDGET_WOODEN_PLACE = register("entity.widget_wooden.place");
+    public static final Supplier<SoundEvent> WIDGET_WOODEN_BREAK = register("entity.widget_wooden.break");
+    public static final Supplier<SoundEvent> WIDGET_WOODEN_HIT = register("entity.widget_wooden.hit");
+    public static final Supplier<SoundEvent> WIDGET_METAL_PLACE = register("entity.widget_metal.place");
+    public static final Supplier<SoundEvent> WIDGET_METAL_BREAK = register("entity.widget_metal.break");
+    public static final Supplier<SoundEvent> WIDGET_METAL_HIT = register("entity.widget_metal.hit");
+    public static final Supplier<SoundEvent> WIDGET_RIDE = register("entity.widget.ride");
+    public static final Supplier<SoundEvent> CANNON_SHOOT = register("entity.cannon.shoot");
+    public static final Supplier<SoundEvent> CANNON_NO_FUEL = register("entity.cannon.no_fuel");
+    public static final Supplier<SoundEvent> CANNON_SHOOT_FAIL = register("entity.cannon.shoot_fail");
+    public static final Supplier<SoundEvent> CANNON_SHOOT_ARROW = register("entity.cannon.shoot_arrow");
+    public static final Supplier<SoundEvent> SAIL_WIND = register("entity.sail.wind");
+    public static final Supplier<SoundEvent> SAIL_COLOR = register("entity.sail.color");
+    public static final Supplier<SoundEvent> SAIL_CLEAN = register("entity.sail.clean");
+    public static final Supplier<SoundEvent> HELM_TURN = register("entity.helm.turn");
+    public static final Supplier<SoundEvent> HELM_TURN_FAIL = register("entity.helm.turn_fail");
+    public static final Supplier<SoundEvent> ANCHOR_EXTEND = register("entity.anchor.extend");
+    public static final Supplier<SoundEvent> ANCHOR_RETRACT = register("entity.anchor.retract");
+    public static final Supplier<SoundEvent> ANCHOR_FINISH = register("entity.anchor.finish");
+
     public static final Supplier<SoundEvent> MUSIC_DISC_THE_PLANK = register("music_disc.the_plank");
 
     public static final SoundType BARNACLE_BLOCK = register("barnacle_block", 1, 1.35F);

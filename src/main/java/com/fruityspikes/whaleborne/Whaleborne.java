@@ -50,11 +50,11 @@ public class Whaleborne
 
         modEventBus.addListener(this::commonSetup);
 
+        WBSoundRegistry.SOUND_EVENTS.register(modEventBus);
         WBEntityRegistry.ENTITY_TYPES.register(modEventBus);
         WBBlockRegistry.BLOCKS.register(modEventBus);
         WBItemRegistry.ITEMS.register(modEventBus);
         WBMenuRegistry.MENUS.register(modEventBus);
-        WBSoundRegistry.SOUND_EVENTS.register(modEventBus);
         WBLootModifierRegistry.LOOT_MODIFIER_SERIALIZERS.register(modEventBus);
         WBParticleRegistry.PARTICLE_TYPES.register(modEventBus);
         WBCreativeTabsRegistry.CREATIVE_MODE_TABS.register(modEventBus);

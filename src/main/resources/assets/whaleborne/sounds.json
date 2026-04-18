@@ -224,5 +224,146 @@
         "stream": true
       }
     ]
+  },
+  "entity.widget_wooden.place": {
+    "sounds": [
+      "whaleborne:entity/widget/wooden/place1",
+      "whaleborne:entity/widget/wooden/place2"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.widget.place"
+  },
+  "entity.widget_wooden.break": {
+    "sounds": [
+      "whaleborne:entity/widget/wooden/break1",
+      "whaleborne:entity/widget/wooden/break2"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.widget.break"
+  },
+  "entity.widget_wooden.hit": {
+    "sounds": [
+      "whaleborne:entity/widget/wooden/hit1",
+      "whaleborne:entity/widget/wooden/hit2"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.widget.hit"
+  },
+  "entity.widget_metal.place": {
+    "sounds": [
+      "whaleborne:entity/widget/metal/place1",
+      "whaleborne:entity/widget/metal/place2"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.widget.place"
+  },
+  "entity.widget_metal.break": {
+    "sounds": [
+      "whaleborne:entity/widget/metal/break1",
+      "whaleborne:entity/widget/metal/break2"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.widget.break"
+  },
+  "entity.widget_metal.hit": {
+    "sounds": [
+      "whaleborne:entity/widget/metal/hit1",
+      "whaleborne:entity/widget/metal/hit2"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.widget.hit"
+  },
+  "entity.widget.ride": {
+    "sounds": [
+      "whaleborne:entity/widget/ride1",
+      "whaleborne:entity/widget/ride2"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.widget.ride"
+  },
+  "entity.cannon.shoot": {
+    "sounds": [
+      "whaleborne:entity/widget/cannon/shoot1",
+      "whaleborne:entity/widget/cannon/shoot2",
+      "whaleborne:entity/widget/cannon/shoot3",
+      "whaleborne:entity/widget/cannon/shoot4"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.cannon.shoot"
+  },
+  "entity.cannon.shoot_fail": {
+    "sounds": ["whaleborne:entity/widget/cannon/shoot_fail"],
+    "subtitle": "subtitles.whaleborne.entity.cannon.shoot_fail"
+  },
+  "entity.cannon.shoot_arrow": {
+    "sounds": [
+      {
+        "name": "minecraft:item.crossbow.shoot",
+        "type": "event"
+      }
+    ]
+  },
+  "entity.cannon.no_fuel": {
+    "sounds": ["whaleborne:entity/widget/cannon/no_fuel"],
+    "subtitle": "subtitles.whaleborne.entity.cannon.no_fuel"
+  },
+  "entity.helm.turn": {
+    "sounds": [
+      "whaleborne:entity/widget/helm/turn1",
+      "whaleborne:entity/widget/helm/turn2",
+      "whaleborne:entity/widget/helm/turn3",
+      "whaleborne:entity/widget/helm/turn4",
+      "whaleborne:entity/widget/helm/turn5"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.helm.turn"
+  },
+  "entity.helm.turn_fail": {
+    "sounds": ["whaleborne:entity/widget/helm/turn_fail"],
+    "subtitle": "subtitles.whaleborne.entity.helm.turn_fail"
+  },
+  "entity.anchor.extend": {
+    "sounds": [
+      "whaleborne:entity/widget/anchor/move1",
+      "whaleborne:entity/widget/anchor/move2",
+      "whaleborne:entity/widget/anchor/move3",
+      "whaleborne:entity/widget/anchor/move4",
+      "whaleborne:entity/widget/anchor/move5"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.anchor.extend"
+  },
+  "entity.anchor.retract": {
+    "sounds": [
+      "whaleborne:entity/widget/anchor/move1",
+      "whaleborne:entity/widget/anchor/move2",
+      "whaleborne:entity/widget/anchor/move3",
+      "whaleborne:entity/widget/anchor/move4",
+      "whaleborne:entity/widget/anchor/move5"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.anchor.retract"
+  },
+  "entity.anchor.finish": {
+    "sounds": ["whaleborne:entity/widget/anchor/finish"],
+    "subtitle": "subtitles.whaleborne.entity.anchor.finish"
+  },
+  "entity.sail.wind": {
+    "sounds": [
+      "whaleborne:entity/widget/sail/wind1",
+      "whaleborne:entity/widget/sail/wind2",
+      "whaleborne:entity/widget/sail/wind3",
+      "whaleborne:entity/widget/sail/wind4",
+      "whaleborne:entity/widget/sail/wind5",
+      "whaleborne:entity/widget/sail/wind6",
+      "whaleborne:entity/widget/sail/wind7"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.sail.wind"
+  },
+  "entity.sail.clean": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.sheep.shear",
+        "type": "event"
+      }
+    ],
+    "subtitle": "subtitles.whaleborne.entity.sail.clean"
+  },
+  "entity.sail.color": {
+    "sounds": [
+      "whaleborne:entity/widget/sail/color1",
+      "whaleborne:entity/widget/sail/color2",
+      "whaleborne:entity/widget/sail/color3"
+    ],
+    "subtitle": "subtitles.whaleborne.entity.sail.color"
   }
 }

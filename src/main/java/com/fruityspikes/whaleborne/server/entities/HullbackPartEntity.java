@@ -81,10 +81,8 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
 
         if (heldItem.getItem() instanceof WhaleEquipment) {
             EntityType<?> entity;
-            if (heldItem.getItem() instanceof WhaleEquipment whaleEquipment)
-                entity = whaleEquipment.getEntity();
-            else
-                entity = EntityType.EXPERIENCE_ORB;
+            if (heldItem.getItem() instanceof WhaleEquipment whaleEquipment) entity = whaleEquipment.getEntity();
+            else entity = EntityType.EXPERIENCE_ORB;
 
             return handleSeatInteraction(player, hand, vec, topClicked, entity);
         }

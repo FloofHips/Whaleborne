@@ -1,6 +1,7 @@
 package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -19,6 +20,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraftforge.common.Tags;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -42,17 +44,14 @@ public class SailEntity extends WhaleWidgetEntity{
 
     @Override
     public InteractionResult interact(Player player, InteractionHand hand) {
-        if (player.getItemInHand(hand).is(Items.WATER_BUCKET) && !this.getBanner().isEmpty()) {
+        if (player.getItemInHand(hand).is(Tags.Items.SHEARS) && !this.getBanner().isEmpty()) {
             if (!this.level().isClientSide) {
                 this.spawnAtLocation(this.entityData.get(DATA_BANNER));
                 this.entityData.set(DATA_BANNER, ItemStack.EMPTY);
-
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.AMBIENT_UNDERWATER_EXIT,
-                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.ARMOR_EQUIP_LEATHER,
-                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.SAIL_CLEAN.get(), SoundSource.PLAYERS, 1.0F, 0.85f);
+                player.getItemInHand(hand).hurtAndBreak(1, player, (player1) -> {
+                    player1.broadcastBreakEvent(hand);
+                });
             }
             return InteractionResult.sidedSuccess(this.level().isClientSide);
         }
@@ -66,9 +65,7 @@ public class SailEntity extends WhaleWidgetEntity{
 
                 this.entityData.set(DATA_BANNER, bannerStack);
 
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.ARMOR_EQUIP_LEATHER,
-                        SoundSource.PLAYERS, 1.0F, this.random.nextFloat() * 0.5f + 0.5f);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.SAIL_COLOR.get(), SoundSource.PLAYERS, 1.0F, 1);
                 if (!player.getAbilities().instabuild) {
                     player.getItemInHand(hand).shrink(1);
                 }
@@ -82,7 +79,7 @@ public class SailEntity extends WhaleWidgetEntity{
             } else {
                 this.setYRot(getYRot() + 11.25f);
             }
-            this.playSound(SoundEvents.WOOD_HIT);
+            this.playSound(getHurtSound());
             return InteractionResult.SUCCESS;
         }
         return super.interact(player, hand);
@@ -125,8 +122,8 @@ public class SailEntity extends WhaleWidgetEntity{
             Entity whale = this.getVehicle();
 
             if (whale != null && whale.getDeltaMovement().length() > 0.1){
-                if (this.tickCount % 100 == 0) {
-                    //this.level().playLocalSound(this.getX(), this.getY(), this.getZ(), SoundEvents.ELYTRA_FLYING, SoundSource.AMBIENT, 0.3f, (float) whale.getDeltaMovement().length()*2, true);
+                if (this.tickCount % 20 == 0 && this.random.nextBoolean()) {
+                    this.level().playLocalSound(this.getX(), this.getY(), this.getZ(), WBSoundRegistry.SAIL_WIND.get(), SoundSource.AMBIENT, 2, 1, true);
                 }
             }
         }

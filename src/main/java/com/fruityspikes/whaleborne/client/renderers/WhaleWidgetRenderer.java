@@ -30,18 +30,19 @@ public class WhaleWidgetRenderer<T extends WhaleWidgetEntity> extends EntityRend
     public void render(WhaleWidgetEntity entity, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         super.render(entity, entityYaw, partialTick, poseStack, buffer, packedLight);
         poseStack.pushPose();
-        poseStack.translate(0.0F, 1.5F, 0.0F);
-        poseStack.mulPose(Axis.XP.rotationDegrees(180));
-        poseStack.mulPose(Axis.YP.rotationDegrees(Mth.rotLerp(partialTick, entity.prevWidgetYRot, entity.getYRot())));
         float f = (float)entity.getHurtTime() - partialTick;
         float f1 = entity.getDamage() - partialTick;
         if (f1 < 0.0F) {
             f1 = 0.0F;
         }
-
         if (f > 0.0F) {
             poseStack.mulPose(Axis.XP.rotationDegrees(Mth.sin(f) * f * f1 / 10.0F * (float)entity.getHurtDir()));
         }
+        poseStack.translate(0.0F, 1.5F, 0.0F);
+        poseStack.mulPose(Axis.XP.rotationDegrees(180));
+        poseStack.mulPose(Axis.YP.rotationDegrees(Mth.rotLerp(partialTick, entity.prevWidgetYRot, entity.getYRot())));
+
+
 
         poseStack.mulPose(Axis.XN.rotationDegrees(Mth.rotLerp(partialTick, entity.prevWidgetXRot, entity.getXRot())));
         model.setupAnim(entity, partialTick, 0.0F, -0.1F, 0.0F, 0.0F);

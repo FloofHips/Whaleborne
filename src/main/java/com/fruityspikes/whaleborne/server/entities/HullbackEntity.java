@@ -7,6 +7,7 @@ import com.fruityspikes.whaleborne.network.HullbackHurtPacket;
 import com.fruityspikes.whaleborne.network.SyncHullbackDirtPacket;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
 import com.fruityspikes.whaleborne.server.data.HullbackDirtManager;
+import com.fruityspikes.whaleborne.server.items.WhaleEquipment;
 import com.fruityspikes.whaleborne.server.registries.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
@@ -973,7 +974,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     protected void playSwimSound(float volume) {
         if (this.random.nextInt(4) != 0) return;
-        super.playSwimSound(2);
+        super.playSwimSound(1.5f);
     }
 
     @Override
@@ -1082,7 +1083,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (!isTamed()) {
             setTamed(true);
             this.setPersistenceRequired();
-            //equipSaddle();
             return InteractionResult.SUCCESS;
         }
 
@@ -1124,13 +1124,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
 
         return mountPlayer(player, seatIndex);
-        //return super.interact(player, hand);
     }
 
     private InteractionResult placeEquipment(Player player, InteractionHand hand, int seatIndex, EntityType<?> entityType) {
-//        if (level().isClientSide) {
-//            return InteractionResult.SUCCESS;
-//        }
 
         Entity entity = entityType.create(this.level());
         if (entity == null) {
@@ -1143,13 +1139,15 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         if (entity.startRiding(this, true)) {
             assignSeat(seatIndex, entity);
+            if (player.getItemInHand(hand).getItem() instanceof WhaleEquipment equipment) {
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(), equipment.getPlaceSound(), SoundSource.BLOCKS, 0.75F, this.random.nextFloat() * 0.5f + 0.75F);
+            }
             if (!player.getAbilities().instabuild) {
                 player.getItemInHand(hand).shrink(1);
             }
             return InteractionResult.SUCCESS;
         }
 
-        //entity.discard();
         return InteractionResult.FAIL;
     }
 
@@ -3150,11 +3148,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         if (hasInput) {
             if (hasAnchorDown()) {
-                if (tickCount % 10 == 0) this.playSound(SoundEvents.WOOD_HIT, 1, 1);
+                if (tickCount % 10 == 0) this.level().playSound(null, this.getControllingPassenger().blockPosition(), WBSoundRegistry.HELM_TURN_FAIL.get(), this.getSoundSource(), 1, this.random.nextFloat() * 0.5f + 0.75f);
                 return Vec3.ZERO;
             }
 
-            if (tickCount % 2 == 0 && player.xxa != 0) this.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
+            if (tickCount % 4 == 0 && player.xxa != 0) {
+                this.level().playSound(null, this.getControllingPassenger().blockPosition(), WBSoundRegistry.HELM_TURN.get(), this.getSoundSource(), 0.5f, this.random.nextFloat() * 0.5f + 0.75f);
+            }
 
             if (!this.level().isClientSide && getControllingPassenger() != null && getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity) {
                 helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / 10);

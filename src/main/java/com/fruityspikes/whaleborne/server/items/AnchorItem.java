@@ -60,7 +60,7 @@ public class AnchorItem extends WhaleEquipment {
                     float angle = ((int) (context.getPlayer().getYRot() / 11.25f)) * 11.25f;
                     anchorHead.moveTo(anchorHead.getX(), anchorHead.getY(), anchorHead.getZ(), angle, 0.0F);
                     serverlevel.addFreshEntityWithPassengers(anchorHead);
-                    level.playSound((Player)null, anchorHead.getX(), anchorHead.getY(), anchorHead.getZ(), this.getPlaceSound(), SoundSource.BLOCKS, 0.75F, 0.4F);
+                    level.playSound((Player)null, anchorHead.getX(), anchorHead.getY(), anchorHead.getZ(), this.getPlaceSound(), SoundSource.BLOCKS, 0.75F, 0.9F);
                     anchorHead.gameEvent(GameEvent.ENTITY_PLACE, context.getPlayer());
                 }
 

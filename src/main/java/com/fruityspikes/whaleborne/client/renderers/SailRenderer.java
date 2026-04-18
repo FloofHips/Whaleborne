@@ -63,9 +63,6 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
     public void render(WhaleWidgetEntity entity, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         super.render(entity, entityYaw, partialTick, poseStack, buffer, packedLight);
         poseStack.pushPose();
-        poseStack.translate(0.0F, 1.5F, 0.0F);
-        poseStack.mulPose(Axis.XP.rotationDegrees(180));
-        poseStack.mulPose(Axis.YP.rotationDegrees(Mth.rotLerp(partialTick, entity.yRotO, entity.getYRot())));
         float f = (float)entity.getHurtTime() - partialTick;
         float f1 = entity.getDamage() - partialTick;
         if (f1 < 0.0F) {
@@ -76,6 +73,9 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
             poseStack.mulPose(Axis.XP.rotationDegrees(Mth.sin(f) * f * f1 / 10.0F * (float)entity.getHurtDir()));
         }
 
+        poseStack.translate(0.0F, 1.5F, 0.0F);
+        poseStack.mulPose(Axis.XP.rotationDegrees(180));
+        poseStack.mulPose(Axis.YP.rotationDegrees(Mth.rotLerp(partialTick, entity.yRotO, entity.getYRot())));
         poseStack.mulPose(Axis.XN.rotationDegrees(Mth.rotLerp(partialTick, entity.xRotO, entity.getXRot())));
         model.setupAnim((SailEntity) entity, partialTick, 0.0F, -0.1F, 0.0F, 0.0F);
         poseStack.pushPose();

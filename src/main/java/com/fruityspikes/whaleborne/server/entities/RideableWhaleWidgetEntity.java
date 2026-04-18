@@ -1,6 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
-import net.minecraft.nbt.CompoundTag;
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
@@ -11,9 +11,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
-import java.util.List;
 
-public class RideableWhaleWidgetEntity extends WhaleWidgetEntity{
+public class RideableWhaleWidgetEntity extends WhaleWidgetEntity {
     public RideableWhaleWidgetEntity(EntityType<?> entityType, Level level, Item dropItem) {
         super(entityType, level, dropItem);
     }
@@ -36,6 +35,7 @@ public class RideableWhaleWidgetEntity extends WhaleWidgetEntity{
         if (this.getPassengers().isEmpty()) {
             if (!this.level().isClientSide) {
                 player.startRiding(this);
+                this.playSound(WBSoundRegistry.WIDGET_RIDE.get(), 1,1);
             }
             return InteractionResult.sidedSuccess(this.level().isClientSide);
         }

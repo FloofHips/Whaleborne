@@ -7,6 +7,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.*;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.*;
@@ -96,12 +97,12 @@ public class AnchorEntity extends WhaleWidgetEntity {
         if (isDown()) {
             if (!this.level().getBlockState(anchorHeadPosition).isSolid()) {
                 this.sinkSpeed -= 0.05f;
-                playSound(SoundEvents.CHAIN_STEP, 1.0f, 1.0f);
+                playSound(WBSoundRegistry.ANCHOR_EXTEND.get(), 1.0f, 1.0f);
                 Vec3 newPos = currentHeadPos.add(0, this.sinkSpeed, 0);
                 anchorHeadPosition = BlockPos.containing(newPos);
                 this.hasHitTheBottom = false;
             } else if (!this.hasHitTheBottom) {
-                playSound(SoundEvents.ANVIL_LAND, 1.0f, 0.9f);
+                //playSound(SoundEvents.ANVIL_LAND, 1.0f, 0.9f);
 
                 if (this.getVehicle() != null && this.getVehicle() instanceof HullbackEntity hullback) {
                     for (int side : new int[]{-1, 1}) {
@@ -111,31 +112,11 @@ public class AnchorEntity extends WhaleWidgetEntity {
                         double z = particlePos.z;
 
                         if (this.level() instanceof ServerLevel serverLevel) {
-                            serverLevel.sendParticles(
-                                    WBParticleRegistry.SMOKE.get(),
-                                    x,
-                                    y,
-                                    z,
-                                    20,
-                                    0.2,
-                                    0.2,
-                                    0.2,
-                                    0.02
-                            );
+                            serverLevel.sendParticles(WBParticleRegistry.SMOKE.get(), x, y, z, 20, 0.2, 0.2, 0.2, 0.02);
                         }
 
                         if (this.level() instanceof ServerLevel serverLevel) {
-                            serverLevel.sendParticles(
-                                    ParticleTypes.BUBBLE,
-                                    currentHeadPos.x,
-                                    currentHeadPos.y+1,
-                                    currentHeadPos.z,
-                                    50,
-                                    0.5,
-                                    0.5,
-                                    0.5,
-                                    0.02
-                            );
+                            serverLevel.sendParticles(ParticleTypes.BUBBLE, currentHeadPos.x, currentHeadPos.y+1, currentHeadPos.z, 50, 0.5, 0.5, 0.5, 0.02);
                         }
                     }
                     hullback.playSound(WBSoundRegistry.HULLBACK_MAD.get());
@@ -149,7 +130,7 @@ public class AnchorEntity extends WhaleWidgetEntity {
             }
 
             this.sinkSpeed += 0.03f;
-            playSound(SoundEvents.CHAIN_STEP, 1.0f, 1.0f);
+            playSound(WBSoundRegistry.ANCHOR_RETRACT.get(), 1.0f, 1.0f);
             Vec3 newPos = currentHeadPos.add(0, this.sinkSpeed, 0);
             anchorHeadPosition = BlockPos.containing(newPos);
         }
@@ -158,6 +139,8 @@ public class AnchorEntity extends WhaleWidgetEntity {
             close();
         }
     }
+    public SoundEvent getDeathSound() { return WBSoundRegistry.WIDGET_METAL_BREAK.get();}
+    public SoundEvent getHurtSound() { return WBSoundRegistry.WIDGET_METAL_HIT.get();}
 
     @Override
     public InteractionResult interact(Player player, InteractionHand hand) {
@@ -206,14 +189,13 @@ public class AnchorEntity extends WhaleWidgetEntity {
 
         anchorHeadPosition = BlockPos.containing(x, this.getY() - 1, z);
         this.entityData.set(DATA_HEAD_POSITION, anchorHeadPosition);
-        playSound(SoundEvents.CHAIN_PLACE, 1.0f, 0.9f);
+        playSound(WBSoundRegistry.ANCHOR_FINISH.get(), 3f, 0.6f);
     }
 
     private void toggleAnchorState() {
         boolean newDownState = !isDown();
         this.sinkSpeed = newDownState ? -0.05f : 0.05f;
         this.entityData.set(DATA_IS_DOWN, newDownState);
-        playSound(newDownState ? SoundEvents.CHAIN_PLACE : SoundEvents.CHAIN_BREAK, 1.0f, 1.0f);
     }
 
     public void close() {
@@ -222,7 +204,7 @@ public class AnchorEntity extends WhaleWidgetEntity {
         this.entityData.set(DATA_HEAD_POSITION, BlockPos.ZERO);
         this.sinkSpeed = 0.05f;
         anchorHeadPosition = BlockPos.ZERO;
-        playSound(SoundEvents.NETHERITE_BLOCK_HIT, 0.7f, 1.2f);
+        playSound(WBSoundRegistry.ANCHOR_FINISH.get(), 1, 1.5f);
     }
 
     @Override
