@@ -200,7 +200,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                     passenger.hurtMarked = true;
                     passenger.setPose(Pose.CROUCHING);
                     level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                            WBSoundRegistry.ORGAN.get(), SoundSource.BLOCKS, 1.0F,
+                            WBSoundRegistry.HULLBACK_ORGAN.get(), SoundSource.BLOCKS, 1.0F,
                             (float) power / 50);
                     level().playSound(null, this.getX(), this.getY(), this.getZ(),
                             SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,

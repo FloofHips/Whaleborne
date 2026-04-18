@@ -156,6 +156,10 @@
     ],
     "subtitle": "subtitles.entity.hullback.tame"
   },
+  "entity.hullback.organ": {
+    "sounds": ["whaleborne:entity/hullback/anchor"],
+    "subtitle": "subtitles.block.barnacle.organ"
+  },
   "entity.hullback.death": {
     "sounds": [
       {

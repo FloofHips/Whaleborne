@@ -20,6 +20,7 @@ public class WBBlockRegistry {
     public static final RegistryObject<Block> ROUGH_BARNACLE = BLOCKS.register("rough_barnacle", () -> new RoughBarnacleBlock(BlockBehaviour.Properties.of().strength(1,2).sound(WBSoundRegistry.BARNACLE_BLOCK).mapColor(MapColor.STONE)));
     public static final RegistryObject<Block> BARNACLE = BLOCKS.register("barnacle", () -> new BarnacleBlock(BlockBehaviour.Properties.of().sound(WBSoundRegistry.BARNACLE_BLOCK).strength(1,2).isRedstoneConductor(WBBlockRegistry::never).mapColor(MapColor.STONE)));
     public static final RegistryObject<Block> TALL_BARNACLE = BLOCKS.register("tall_barnacle", () -> new Block(BlockBehaviour.Properties.of().sound(WBSoundRegistry.BARNACLE_BLOCK).strength(1,2).isRedstoneConductor(WBBlockRegistry::never).mapColor(MapColor.STONE)));
+    public static final RegistryObject<Block> MUSIC_DISC_THE_PLANK = BLOCKS.register("music_disc_the_plank", () -> new Block(BlockBehaviour.Properties.copy(BARNACLE.get()).noOcclusion().noCollission()));
 
     private static boolean never(BlockState state, BlockGetter blockGetter, BlockPos pos) {
         return false;

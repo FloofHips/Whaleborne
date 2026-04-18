@@ -972,6 +972,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     @Override
     protected void playSwimSound(float volume) {
+        if (this.random.nextInt(4) != 0) return;
         super.playSwimSound(2);
     }
 
@@ -2909,8 +2910,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 double lungePower = 1.5; // Increased from 1.0 for better mobility
                 Vec3 velocity = direction.scale(lungePower).add(0, 1.0, 0); // Increased Y from 0.5 to 0.7
                 if (isBeached) {
-                    mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 2f);
-                    mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 1f);
+                    mob.playSound(WBSoundRegistry.HULLBACK_ORGAN.get(), 2, 2f);
+                    mob.playSound(WBSoundRegistry.HULLBACK_ORGAN.get(), 2, 1f);
                     mob.playSound(WBSoundRegistry.HULLBACK_HURT.get(), Config.SOUND_DISTANCE.get().floatValue(), 0.2f);
                     mob.playSound(WBSoundRegistry.HULLBACK_SWIM.get(), 2, 0.5f);
                     pushEntities();

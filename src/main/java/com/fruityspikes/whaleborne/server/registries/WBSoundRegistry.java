@@ -1,11 +1,8 @@
 package com.fruityspikes.whaleborne.server.registries;
 
 import com.fruityspikes.whaleborne.Whaleborne;
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraftforge.common.util.ForgeSoundType;
 import net.minecraftforge.registries.DeferredRegister;
@@ -27,6 +24,7 @@ public class WBSoundRegistry {
     public static final Supplier<SoundEvent> HULLBACK_AMBIENT = register("entity.hullback.ambient");
     public static final Supplier<SoundEvent> HULLBACK_HAPPY = register("entity.hullback.happy");
     public static final Supplier<SoundEvent> HULLBACK_MAD = register("entity.hullback.mad");
+    public static final Supplier<SoundEvent> HULLBACK_ORGAN = register("entity.hullback.organ");
 
     public static final Supplier<SoundEvent> MUSIC_DISC_THE_PLANK = register("music_disc.the_plank");
 

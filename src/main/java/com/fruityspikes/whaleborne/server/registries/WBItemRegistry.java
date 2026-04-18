@@ -25,6 +25,6 @@ public class WBItemRegistry {
     public static final RegistryObject<ForgeSpawnEggItem> HULLBACK_SPAWN_EGG = ITEMS.register("hullback_spawn_egg", () -> new ForgeSpawnEggItem(WBEntityRegistry.HULLBACK, -5787987,  -9600639, new Item.Properties()));
     public static final RegistryObject<Item> BARNACLE = ITEMS.register("barnacle", () -> new BlockItem(WBBlockRegistry.BARNACLE.get(), new Item.Properties()));
     public static final RegistryObject<Item> ROUGH_BARNACLE = ITEMS.register("rough_barnacle", () -> new BlockItem(WBBlockRegistry.ROUGH_BARNACLE.get(), new Item.Properties()));
-    public static final RegistryObject<Item> MUSIC_DISC_THE_PLANK = ITEMS.register("music_disc_the_plank", () -> new RecordItem(0, WBSoundRegistry.MUSIC_DISC_THE_PLANK.get(), new Item.Properties().stacksTo(1).rarity(Rarity.RARE), 126));
+    public static final RegistryObject<Item> MUSIC_DISC_THE_PLANK = ITEMS.register("music_disc_the_plank", () -> new RecordItem(0, WBSoundRegistry.MUSIC_DISC_THE_PLANK.get(), new Item.Properties().stacksTo(1).rarity(Rarity.RARE), 127));
 
 }

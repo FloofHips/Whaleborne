@@ -126,7 +126,7 @@ public class SailEntity extends WhaleWidgetEntity{
 
             if (whale != null && whale.getDeltaMovement().length() > 0.1){
                 if (this.tickCount % 100 == 0) {
-                    this.level().playLocalSound(this.getX(), this.getY(), this.getZ(), SoundEvents.ELYTRA_FLYING, SoundSource.AMBIENT, 0.3f, (float) whale.getDeltaMovement().length()*2, true);
+                    //this.level().playLocalSound(this.getX(), this.getY(), this.getZ(), SoundEvents.ELYTRA_FLYING, SoundSource.AMBIENT, 0.3f, (float) whale.getDeltaMovement().length()*2, true);
                 }
             }
         }

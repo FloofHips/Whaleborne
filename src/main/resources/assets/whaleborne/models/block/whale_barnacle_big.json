@@ -3,9 +3,9 @@
 	"textures": {
 		"3": "whaleborne:block/rough_barnacle_tip",
 		"4": "whaleborne:block/rough_barnacle_base",
+		"particle": "whaleborne:block/rough_barnacle_tip",
 		"bottom": "whaleborne:block/barnacle_bottom",
-		"top": "whaleborne:block/barnacle_top",
-		"particle": "whaleborne:block/rough_barnacle_tip"
+		"top": "whaleborne:block/barnacle_top"
 	},
 	"elements": [
 		{
@@ -28,8 +28,7 @@
 				"east": {"uv": [0, 0, 16, 16], "texture": "#3"},
 				"south": {"uv": [0, 0, 16, 16], "texture": "#3"},
 				"west": {"uv": [0, 0, 16, 16], "texture": "#3"},
-				"up": {"uv": [0, 0, 16, 16], "texture": "#top"},
-				"down": {"uv": [0, 0, 16, 16], "texture": "#missing"}
+				"up": {"uv": [0, 0, 16, 16], "texture": "#top"}
 			}
 		}
 	]
