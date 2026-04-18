@@ -997,6 +997,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Nullable
     @Override
     protected SoundEvent getAmbientSound() {
+        if (this.random.nextInt(10) == 0) return WBSoundRegistry.HULLBACK_SING.get();
         return WBSoundRegistry.HULLBACK_AMBIENT.get();
     }
 

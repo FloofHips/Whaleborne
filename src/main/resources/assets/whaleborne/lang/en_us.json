@@ -45,7 +45,8 @@
   "item.whaleborne.hullback_spawn_egg": "Hullback Spawn Egg",
   "entity.whaleborne.hullback": "Hullback",
 
-  "subtitles.entity.hullback.ambient": "Hullback sings",
+  "subtitles.entity.hullback.ambient": "Hullback clicks",
+  "subtitles.entity.hullback.sing": "Hullback sings",
   "subtitles.entity.hullback.hurt": "Hullback hurts",
   "subtitles.entity.hullback.death": "Hullback dies",
   "subtitles.entity.hullback.happy": "Hullback amused",

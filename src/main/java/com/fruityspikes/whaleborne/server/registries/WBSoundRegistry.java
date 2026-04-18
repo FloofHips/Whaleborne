@@ -22,6 +22,7 @@ public class WBSoundRegistry {
     public static final Supplier<SoundEvent> HULLBACK_SWIM = register("entity.hullback.swim");
     public static final Supplier<SoundEvent> HULLBACK_BREATHE = register("entity.hullback.breathe");
     public static final Supplier<SoundEvent> HULLBACK_AMBIENT = register("entity.hullback.ambient");
+    public static final Supplier<SoundEvent> HULLBACK_SING = register("entity.hullback.sing");
     public static final Supplier<SoundEvent> HULLBACK_HAPPY = register("entity.hullback.happy");
     public static final Supplier<SoundEvent> HULLBACK_MAD = register("entity.hullback.mad");
     public static final Supplier<SoundEvent> HULLBACK_ORGAN = register("entity.hullback.organ");
