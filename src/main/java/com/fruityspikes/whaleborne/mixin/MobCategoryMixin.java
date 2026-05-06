@@ -17,7 +17,10 @@ public class MobCategoryMixin {
         // Check if it's the Whaleborne Hullback category
         if ("HULLBACK".equals(self.getName()) || "hullback".equals(self.getName())) {
             // Return the custom cap direct from the configuration file
-            cir.setReturnValue(Config.HULLBACK_SPAWN_CAP.get());
+            if (Config.SERVER_SPEC.isLoaded())
+                cir.setReturnValue(Config.HULLBACK_SPAWN_CAP.get());
+            else
+                cir.setReturnValue(1);
         }
     }
 }
