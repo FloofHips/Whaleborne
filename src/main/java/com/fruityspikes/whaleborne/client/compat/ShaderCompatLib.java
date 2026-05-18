@@ -4,22 +4,14 @@ import net.neoforged.fml.ModList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Detects whether shader-altering mods (Iris, Oculus) are loaded in the modpack.
- * When these mods are present, certain vanilla RenderTypes (dragonExplosionAlpha,
- * entityDecal) break due to G-Buffer/depth-test incompatibilities. In that case,
- * Whaleborne uses a safe single-pass rendering path.
- */
+/** Detects Iris/Oculus, which break certain RenderTypes (dragonExplosionAlpha,
+ *  entityDecal); when present, a safe single-pass render path is used instead. */
 public class ShaderCompatLib {
     private static final Logger LOGGER = LoggerFactory.getLogger("Whaleborne-ShaderCompat");
     private static Boolean cachedResult = null;
 
-    /**
-     * Returns true if Iris or Oculus is loaded in the modpack.
-     * This check is cached after the first call since mods cannot be loaded/unloaded at runtime.
-     * We intentionally check mod PRESENCE, not shader ACTIVITY, because Iris corrupts
-     * OpenGL state even after toggling shaders off mid-session.
-     */
+    /** True if Iris or Oculus is loaded (cached). Checks presence, not shader activity,
+     *  since Iris corrupts GL state even after shaders are toggled off. */
     public static boolean isShaderModLoaded() {
         if (cachedResult == null) {
             boolean iris = ModList.get().isLoaded("iris");

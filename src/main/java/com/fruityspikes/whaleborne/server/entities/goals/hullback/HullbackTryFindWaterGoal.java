@@ -82,8 +82,8 @@ public class HullbackTryFindWaterGoal extends Goal {
             double lungePower = 1.5;
             Vec3 velocity = direction.scale(lungePower).add(0, 1.0, 0);
             if(isBeached) {
-                mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 2f);
-                mob.playSound(WBSoundRegistry.ORGAN.get(), 2, 1f);
+                mob.playSound(WBSoundRegistry.HULLBACK_ORGAN.get(), 2, 2f);
+                mob.playSound(WBSoundRegistry.HULLBACK_ORGAN.get(), 2, 1f);
                 mob.playSound(WBSoundRegistry.HULLBACK_HURT.get(), 3.0f, 0.2f);
                 mob.playSound(WBSoundRegistry.HULLBACK_SWIM.get(), 2, 0.5f);
                 pushEntities();

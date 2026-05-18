@@ -47,14 +47,31 @@ public class HullbackArmorTextureManager {
         // State changed or doesn't exist. Regenerate.
         try {
             Minecraft mc = Minecraft.getInstance();
-            Optional<Resource> baseRes = mc.getResourceManager().getResource(baseTexture);
+
+            // Load base image: prefer auto-generated NativeImage, fall back to ResourceManager
+            NativeImage baseImage;
+            NativeImage generatedImage = ArmorTextureGenerator.getCachedNativeImage(armorItem);
+            if (generatedImage != null) {
+                // Copy the auto-generated image since we'll composite on it
+                int gw = generatedImage.getWidth();
+                int gh = generatedImage.getHeight();
+                baseImage = new NativeImage(gw, gh, true);
+                for (int gy = 0; gy < gh; gy++) {
+                    for (int gx = 0; gx < gw; gx++) {
+                        baseImage.setPixelRGBA(gx, gy, generatedImage.getPixelRGBA(gx, gy));
+                    }
+                }
+            } else {
+                Optional<Resource> baseRes = mc.getResourceManager().getResource(baseTexture);
+                if (baseRes.isEmpty()) return baseTexture;
+                baseImage = NativeImage.read(baseRes.get().open());
+            }
+
             Optional<Resource> maskRes = mc.getResourceManager().getResource(PROGRESS_MASK);
 
-            if (baseRes.isPresent() && maskRes.isPresent()) {
-                try (InputStream baseIn = baseRes.get().open();
-                     InputStream maskIn = maskRes.get().open()) {
-                     
-                    NativeImage baseImage = NativeImage.read(baseIn);
+            if (maskRes.isPresent()) {
+                try (InputStream maskIn = maskRes.get().open()) {
+
                     NativeImage maskImage = NativeImage.read(maskIn);
 
                     int width = baseImage.getWidth();
@@ -72,12 +89,8 @@ public class HullbackArmorTextureManager {
                             int maskY = (int) ((y / (float) height) * maskImage.getHeight());
                             int maskColor = maskImage.getPixelRGBA(maskX, maskY);
                             
-                            // EXACT VANILLA REPLICATION:
-                            // dragonExplosionAlpha uses rendertype_entity_alpha shader.
-                            // Vertex color alpha = progress * 255 acts as the DISCARD THRESHOLD.
-                            // Mask pixels with alpha ABOVE threshold survive → entityDecal draws wood.
-                            // Mask pixels with alpha AT or BELOW threshold → discarded → transparent.
-                            // NativeImage.getPixelRGBA: bits 24-31 = Alpha.
+                            // Replicates the dragonExplosionAlpha discard test: mask pixels with
+                            // alpha above progress*255 survive (wood drawn), the rest go transparent.
                             int maskAlpha = (maskColor >> 24) & 0xFF;
                             int threshold = (int)(progress * 255);
                             

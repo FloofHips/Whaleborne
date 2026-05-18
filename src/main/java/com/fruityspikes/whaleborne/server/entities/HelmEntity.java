@@ -26,12 +26,8 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     /** Client-only previous value kept for render interpolation. */
     public float prevWheelRotation;
 
-    /**
-     * Client-side predicted wheel rotation.  On the LOCAL client we replicate
-     * the server's {@code wheel += xxa / 10} logic so the wheel responds
-     * instantly to input without waiting for the entityData round-trip.
-     * A slow blend towards the server-synced value (entityData) prevents drift.
-     */
+    /** Client-side predicted wheel rotation: mirrors the server's {@code wheel += xxa / 10}
+     *  for instant input response, slowly blended back to the synced value to avoid drift. */
     private float clientWheelRotation;
 
     public HelmEntity(EntityType<?> entityType, Level level) {
@@ -81,11 +77,7 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
         return this.entityData.get(DATA_WHEEL_ROTATION);
     }
 
-    /**
-     * Returns the wheel rotation the renderer should display.
-     * On the client this is the locally-predicted value;
-     * elsewhere it falls back to the synced entityData value.
-     */
+    /** Wheel rotation for rendering: locally-predicted on the client, synced value otherwise. */
     public float getRenderWheelRotation() {
         return this.level().isClientSide ? this.clientWheelRotation : this.getWheelRotation();
     }
@@ -114,10 +106,7 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     }
     @Override
     public void onPlayerJump(int i) {
-        Entity vehicle = this.getVehicle();
-        if (vehicle != null) {
-            vehicle.playSound(WBSoundRegistry.ORGAN.get());
-        }
+        this.getVehicle().playSound(WBSoundRegistry.HULLBACK_ORGAN.get());
     }
 
     @Override
@@ -127,26 +116,22 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
 
     @Override
     public void handleStartJump(int i) {
-        Entity vehicle = this.getVehicle();
-        if (vehicle == null) return;
-
-        vehicle.playSound(WBSoundRegistry.ORGAN.get(), 2, 2);
-        vehicle.playSound(WBSoundRegistry.ORGAN.get(), 1.5f, 1.5f);
+        this.getVehicle().playSound(WBSoundRegistry.HULLBACK_ORGAN.get(), 1.5f, 1.5f);
 
         boolean hasAnchorDown = false;
-        if(vehicle instanceof HullbackEntity hullback){
+        if(this.getVehicle()!=null && this.getVehicle() instanceof HullbackEntity hullback){
             hasAnchorDown = hullback.hasAnchorDown();
         }
-        for (Entity passenger : vehicle.getPassengers()) {
+        for (Entity passenger : this.getVehicle().getPassengers()) {
             if (passenger instanceof AnchorEntity anchor) {
                 if (hasAnchorDown) {
                     if (anchor.isDown()) {
-                        vehicle.playSound(SoundEvents.CHAIN_PLACE, 1, 0);
+                        this.getVehicle().playSound(SoundEvents.CHAIN_PLACE, 1, 0);
                         anchor.toggleDown();
                     }
                 } else {
                     if (!anchor.isDown() && anchor.isClosed()) {
-                        vehicle.playSound(SoundEvents.CHAIN_BREAK, 1, 2);
+                        this.getVehicle().playSound(SoundEvents.CHAIN_BREAK, 1, 2);
                         anchor.toggleDown();
                     }
                 }

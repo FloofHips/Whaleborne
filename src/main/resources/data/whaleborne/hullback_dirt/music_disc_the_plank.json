@@ -1,0 +1,13 @@
+{
+  "block": "whaleborne:music_disc_the_plank",
+  "placements": ["body_bottom", "head_bottom", "tail_bottom", "fluke_bottom"],
+  "placement_chance": 0.0005,
+  "removable_with": ["axe"],
+  "drop": "whaleborne:music_disc_the_plank",
+  "growth": "whaleborne:rough_barnacle",
+  "growth_properties": {
+    "barnacle_type": "small_lone"
+  },
+  "sound_on_growth": "whaleborne:block.barnacle_block.place",
+  "sound_on_remove": "whaleborne:block.barnacle_block.break"
+}

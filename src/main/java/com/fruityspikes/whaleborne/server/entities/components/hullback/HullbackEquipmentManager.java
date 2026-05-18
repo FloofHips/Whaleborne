@@ -8,10 +8,7 @@ import net.minecraft.world.item.ItemStack;
 
 import javax.annotation.Nullable;
 
-/**
- * Manages equipment-related functionality for the Hullback entity.
- * Handles armor, crown, saddle, and equipment synchronization.
- */
+/** Armor, crown, saddle, and equipment synchronization for the Hullback. */
 public class HullbackEquipmentManager {
     private final HullbackEntity hullback;
 
@@ -24,25 +21,15 @@ public class HullbackEquipmentManager {
         this.hullback = hullback;
     }
 
-    /**
-     * Returns the armor ItemStack currently equipped.
-     */
     public ItemStack getArmor() {
         return hullback.getEntityData().get(HullbackEntity.DATA_ARMOR);
     }
 
-    /**
-     * Returns the crown ItemStack currently equipped.
-     */
     public ItemStack getCrown() {
         return hullback.getEntityData().get(HullbackEntity.DATA_CROWN_ID);
     }
 
-    /**
-     * Equips a saddle on the Hullback.
-     * @param stack The saddle ItemStack
-     * @param source Optional sound source for saddle equip sound
-     */
+    /** Equips a saddle; plays the equip sound when source is non-null. */
     public void equipSaddle(ItemStack stack, @Nullable SoundSource source) {
         hullback.inventory.setItem(INV_SLOT_SADDLE, stack);
         if (source != null) {
@@ -50,11 +37,7 @@ public class HullbackEquipmentManager {
         }
     }
 
-    /**
-     * Updates equipment data from inventory to entity data.
-     * Synchronizes armor, crown, and saddle status.
-     * Called when inventory changes.
-     */
+    /** Copies armor/crown/saddle from inventory into entity data and syncs on the server. */
     public void updateContainerEquipment() {
         ItemStack crown = hullback.inventory.getItem(INV_SLOT_CROWN);
         ItemStack armor = hullback.inventory.getItem(INV_SLOT_ARMOR);
@@ -72,11 +55,7 @@ public class HullbackEquipmentManager {
         }
     }
 
-    /**
-     * Called when the container (inventory) changes.
-     * Plays appropriate sounds for saddle and armor changes.
-     * @param invBasic The container that changed
-     */
+    /** Inventory-change hook: plays saddle/armor sounds and (re)applies hull config. */
     public void containerChanged(Container invBasic) {
         ItemStack previousArmor = getArmor();
         boolean wasSaddled = hullback.isSaddled();
@@ -94,12 +73,16 @@ public class HullbackEquipmentManager {
         if (hullback.tickCount > 20 && previousArmor != currentArmor) {
             hullback.playSound(SoundEvents.HORSE_ARMOR, 0.5F, 1.0F);
         }
+
+        // Apply hull config (speed modifier + seat layout) based on armor material
+        if (!currentArmor.isEmpty()) {
+            hullback.applyHullConfig(currentArmor.getItem());
+        } else {
+            hullback.removeHullConfig();
+        }
     }
 
-    /**
-     * Forces equipment synchronization to clients.
-     * Useful when equipment needs to be updated immediately.
-     */
+    /** Forces an immediate equipment sync to clients. */
     public void forceEquipmentSync() {
         if (!hullback.level().isClientSide) {
             hullback.sendHurtSyncPacket();

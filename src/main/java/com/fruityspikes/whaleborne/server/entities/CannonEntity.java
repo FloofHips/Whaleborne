@@ -67,7 +67,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
         return cannonXRot;
     }
 
-    public SoundEvent getDeathSound() { return SoundEvents.ANVIL_PLACE;}
+    public SoundEvent getDeathSound() { return WBSoundRegistry.WIDGET_METAL_BREAK.get();}
     public BlockState getDeathBlock() { return Blocks.ANVIL.defaultBlockState();}
 
     @Override
@@ -147,9 +147,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
 
             if (gunpowder.isEmpty()) {
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 1.0F, 1.0F);
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.NETHERITE_BLOCK_BREAK, SoundSource.NEUTRAL, 1.0F, 0.0F);
+                        WBSoundRegistry.CANNON_NO_FUEL.get(), SoundSource.BLOCKS, 1.0F, 1.0F);
                 return;
             }
 
@@ -161,9 +159,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
 
             if (ammo.isEmpty()) {
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.DISPENSER_FAIL, SoundSource.NEUTRAL, 1.0F, 1.0F);
-                level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.NETHERITE_BLOCK_BREAK, SoundSource.NEUTRAL, 1.0F, 0.0F);
+                        WBSoundRegistry.CANNON_SHOOT_FAIL.get(), SoundSource.NEUTRAL, 1.0F, 1.0F);
                 return;
             } else {
                 inventory.getItem(0).shrink(1);
@@ -195,7 +191,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                 passenger.hurtMarked = true;
                 passenger.setPose(Pose.CROUCHING);
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        WBSoundRegistry.ORGAN.get(), SoundSource.BLOCKS, 1.0F,
+                        WBSoundRegistry.HULLBACK_ORGAN.get(), SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
@@ -264,7 +260,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                 projectile = new Arrow(
                         this.level(), arrowOwner, new ItemStack(Items.ARROW), new ItemStack(Items.BOW));
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.CROSSBOW_SHOOT, SoundSource.BLOCKS, 1.0F,
+                        WBSoundRegistry.CANNON_SHOOT_ARROW.get(), SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);
             }
             else {
@@ -304,8 +300,8 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                 );
             }
             level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                    SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS, 1.0F,
-                    power / 100 + (this.random.nextFloat() * 0.4F));
+                    WBSoundRegistry.CANNON_SHOOT.get(), SoundSource.BLOCKS, 3.0F,
+                    power / 100f + (this.random.nextFloat() * 0.4F));
     }
 
     private void openCannonMenu(Player player) {

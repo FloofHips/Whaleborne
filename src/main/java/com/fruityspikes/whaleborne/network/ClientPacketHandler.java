@@ -31,6 +31,9 @@ public class ClientPacketHandler {
 
                 whale.inventory.setItem(HullbackEntity.INV_SLOT_ARMOR, payload.armorItem());
                 whale.inventory.setItem(HullbackEntity.INV_SLOT_CROWN, payload.crownItem());
+                // Saddle slot must be set before updateContainerEquipment runs, otherwise it
+                // recomputes flag(4) from an empty client-side slot and clears the saddle bit.
+                whale.inventory.setItem(HullbackEntity.INV_SLOT_SADDLE, payload.saddleItem());
 
                 whale.getEntityData().set(HullbackEntity.DATA_ARMOR, payload.armorItem());
                 whale.getEntityData().set(HullbackEntity.DATA_CROWN_ID, payload.crownItem());

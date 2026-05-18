@@ -98,7 +98,7 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
         poseStack.translate(0.07, -2.44, -0.19);
 
         double deltaZ = entity.getDeltaMovement().length();
-        if(entity.isPassenger() && entity.getVehicle() != null)
+        if(entity.isPassenger())
             deltaZ = entity.getVehicle().getDeltaMovement().length();
 
         float windEffect = (float) Math.abs(deltaZ) * 10f;
@@ -137,8 +137,7 @@ public class SailRenderer<T extends SailEntity> extends WhaleWidgetRenderer<Sail
             renderSailSegment(poseStack, multiBufferSource.getBuffer(RenderType.entityCutoutNoCull(TARP_TEXTURE)), edge3, edge4, width, packedLight, overlay, baseRed, baseGreen, baseBlue, alpha);
             renderSailSegment(poseStack, multiBufferSource.getBuffer(RenderType.entityCutoutNoCull(TARP_TEXTURE)), edge4, edge5, width, packedLight, overlay, baseRed, baseGreen, baseBlue, alpha);
 
-            // In 1.21.1, BANNER_PATTERNS does not include the base color at index 0
-            // (unlike 1.20.1's createPatterns()), so no skip needed here.
+            // BANNER_PATTERNS does not include the base color at index 0, so no skip needed here.
             for(int i = 0; i < 17 && i < patterns.size(); ++i) {
                 Pair<Holder<BannerPattern>, DyeColor> pair = patterns.get(i);
                 int patternColorInt = pair.getSecond().getTextureDiffuseColor();

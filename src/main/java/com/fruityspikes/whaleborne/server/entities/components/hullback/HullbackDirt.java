@@ -24,17 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Manages the vegetation and debris ("dirt") growing on the Hullback's body.
- *
- * Initializes dirt arrays (top and bottom) for each body part on spawn,
- * grows/places/removes dirt entries via randomTick(), clears top dirt when
- * tamed (clean top = taming condition), serializes dirt state in NBT, and
- * syncs dirt state to clients via syncDirtToClients().
- *
- * Ticked every game tick from handleDirtTicks() in HullbackEntity.tick().
- * Each randomTick() call has its own independent random gate (6/30000 chance).
- */
+/** Vegetation/debris ("dirt") on the Hullback's body: per-part top/bottom arrays grown
+ *  via randomTick (independent 6/30000 gate per call), cleared on tame, NBT-saved and client-synced. */
 public class HullbackDirt {
     private final HullbackEntity whale;
 
@@ -156,10 +147,8 @@ public class HullbackDirt {
     }
 
 
-    /**
-     * Attempts to grow or place dirt on the whale. Called every tick per-part from handleDirtTicks.
-     * Each call independently rolls its own random gate (6/30000 chance).
-     */
+    /** Attempts to grow or place dirt; called per-part each tick with an independent
+     *  6/30000 random gate. */
     public void randomTick(String partName, boolean bottom) {
         if (whale.level().isClientSide) return;
         if (random.nextInt(RANDOM_TICK_DENOMINATOR) > RANDOM_TICK_THRESHOLD) return;
@@ -247,9 +236,7 @@ public class HullbackDirt {
         return length - 1;
     }
     
-    /**
-     * Maps a part name to the internal array index used by {@link #getDirtArray(int, boolean)}.
-     */
+    /** Maps a part name to the array index used by {@link #getDirtArray(int, boolean)}. */
     private int getArrayIndex(String partName, boolean bottom) {
         if (bottom) {
             if (partName.contains("head")) return 0;

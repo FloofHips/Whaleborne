@@ -1,6 +1,7 @@
 package com.fruityspikes.whaleborne.server.entities.components.hullback;
 
 import com.fruityspikes.whaleborne.Whaleborne;
+import com.fruityspikes.whaleborne.server.data.HullConfigManager;
 import com.fruityspikes.whaleborne.server.data.HullbackDirtManager;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackPartEntity;
@@ -29,10 +30,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Manages player interactions with the Hullback entity.
- * Handles riding, equipment placement, cleaning, and debug interactions.
- */
+/** Player interactions with the Hullback: riding, equipment placement, cleaning, taming. */
 public class HullbackInteractionManager {
     private final HullbackEntity hullback;
 
@@ -40,24 +38,12 @@ public class HullbackInteractionManager {
         this.hullback = hullback;
     }
 
-    /**
-     * Main interaction handler.
-     * Currently delegates to parent class.
-     * @param player The interacting player
-     * @param hand The hand used for interaction
-     * @return The interaction result
-     */
+    /** Main interaction handler; currently passes through to the parent class. */
     public InteractionResult mobInteract(Player player, InteractionHand hand) {
         return InteractionResult.PASS;
     }
 
-    /**
-     * Debug interaction for development/testing.
-     * Tames the Hullback and prints seat data.
-     * @param player The interacting player
-     * @param hand The hand used for interaction
-     * @return The interaction result
-     */
+    /** Debug interaction: tames the Hullback. */
     public InteractionResult interactDebug(Player player, InteractionHand hand) {
         if (!hullback.isTamed()) {
             hullback.setTamed(true);
@@ -65,22 +51,13 @@ public class HullbackInteractionManager {
             return InteractionResult.SUCCESS;
         }
 
-        // Debug output removed for production
-
         return InteractionResult.SUCCESS;
     }
 
-    /**
-     * Handles riding interaction for a specific seat.
-     * @param player The player attempting to ride
-     * @param hand The hand used for interaction
-     * @param seatIndex The seat index (0-6)
-     * @param entityType Optional entity type to place as equipment
-     * @return The interaction result
-     */
+    /** Riding interaction for a seat; places equipment instead when entityType is non-null. */
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
         // Validate seat index
-        if (seatIndex < 0 || seatIndex >= 7) {
+        if (seatIndex < 0 || seatIndex >= hullback.hullbackSeatManager.getActiveSeatCount()) {
             return InteractionResult.FAIL;
         }
 
@@ -96,8 +73,8 @@ public class HullbackInteractionManager {
             return InteractionResult.PASS;
         }
 
-        // Check if seat is occupied
-        Optional<UUID> currentSeatOccupant = hullback.getEntityData().get(hullback.getSeatAccessor(seatIndex));
+        // Check if seat is occupied (uses SeatManager which handles both base and overflow seats)
+        Optional<UUID> currentSeatOccupant = hullback.hullbackSeatManager.getSeatData(seatIndex);
         if (currentSeatOccupant.isPresent()) {
             if (currentSeatOccupant.get().equals(player.getUUID())) {
                 return InteractionResult.PASS;
@@ -113,21 +90,18 @@ public class HullbackInteractionManager {
         return mountPlayer(player, seatIndex);
     }
 
-    /**
-     * Places equipment (cannon, mast, etc.) on a seat.
-     * @param player The player placing the equipment
-     * @param hand The hand holding the equipment
-     * @param seatIndex The seat index
-     * @param entityType The type of equipment entity
-     * @return The interaction result
-     */
+    /** Places equipment (cannon, mast, etc.) on a seat. */
     private InteractionResult placeEquipment(Player player, InteractionHand hand, int seatIndex, EntityType<?> entityType) {
         Entity entity = entityType.create(hullback.level());
         if (entity == null) {
             return InteractionResult.FAIL;
         }
 
-        Vec3 seatPos = hullback.partManager.seats[seatIndex];
+        Vec3 seatPos = seatIndex < hullback.partManager.seats.length ? hullback.partManager.seats[seatIndex] : null;
+        if (seatPos == null) {
+            entity.discard();
+            return InteractionResult.FAIL;
+        }
         entity.moveTo(seatPos.x, seatPos.y + 1, seatPos.z, hullback.getYRot(), 0);
         hullback.level().addFreshEntity(entity);
 
@@ -142,16 +116,11 @@ public class HullbackInteractionManager {
         return InteractionResult.FAIL;
     }
 
-    /**
-     * Mounts a player on a specific seat.
-     * @param player The player to mount
-     * @param seatIndex The seat index
-     * @return The interaction result
-     */
+    /** Mounts a player on a seat, dismounting them from any other seat first. */
     private InteractionResult mountPlayer(Player player, int seatIndex) {
         // Dismount player from any other seat first
-        for (int i = 0; i < 7; i++) {
-            Optional<UUID> occupant = hullback.getEntityData().get(hullback.getSeatAccessor(i));
+        for (int i = 0; i < hullback.hullbackSeatManager.getActiveSeatCount(); i++) {
+            Optional<UUID> occupant = hullback.hullbackSeatManager.getSeatData(i);
             if (occupant.isPresent() && occupant.get().equals(player.getUUID())) {
                 player.stopRiding();
             }
@@ -165,14 +134,7 @@ public class HullbackInteractionManager {
         }
     }
 
-    /**
-     * Handles cleaning interaction (removing vegetation).
-     * @param player The player cleaning
-     * @param hand The hand used
-     * @param part The Hullback part being cleaned
-     * @param top Whether cleaning the top or bottom
-     * @return The interaction result
-     */
+    /** Cleaning interaction: removes vegetation, then tames the whale once fully clean. */
     public InteractionResult interactClean(Player player, InteractionHand hand, HullbackPartEntity part, Boolean top) {
         hullback.setMouthTarget(0.2f);
 
@@ -300,7 +262,7 @@ public class HullbackInteractionManager {
 
         if (heldItem.getItem() instanceof SaddleItem) {
             return handleSaddleEquip(player, hand, heldItem);
-        } else if (heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
+        } else if (WBTagRegistry.isHullMaterial(heldItem)) {
             return handleArmorEquip(player, hand, heldItem);
         }
         return InteractionResult.PASS;
@@ -332,8 +294,9 @@ public class HullbackInteractionManager {
         }
 
         ItemStack currentArmor = hullback.getInventory().getItem(HullbackEntity.INV_SLOT_ARMOR);
+        int maxPlanks = HullConfigManager.getMaxPlanks(heldItem.getItem());
 
-        if (currentArmor.getCount() >= currentArmor.getMaxStackSize()) {
+        if (!currentArmor.isEmpty() && currentArmor.getCount() >= maxPlanks) {
             rejectWithMad();
             return InteractionResult.PASS;
         }
@@ -343,7 +306,7 @@ public class HullbackInteractionManager {
             hullback.updateContainerEquipment();
         } else if (heldItem.getItem() == currentArmor.getItem()) {
             if (player.isCreative()) {
-                currentArmor.setCount(64);
+                currentArmor.setCount(maxPlanks);
             } else {
                 currentArmor.grow(1);
             }
@@ -391,12 +354,7 @@ public class HullbackInteractionManager {
         return "hand";
     }
 
-    /**
-     * Gets decoration candidates for a specific part and position.
-     * @param bottom Whether to get bottom or top candidates
-     * @param partName The name of the part
-     * @return List of decoration candidates
-     */
+    /** Decoration candidates for a part's top or bottom face. */
     public List<HullbackDirtManager.HullbackDirtEntry> getCandidates(boolean bottom, String partName) {
         String key = partName + "_" + (bottom ? "bottom" : "top");
         return Whaleborne.PROXY.getHullbackDirtManager().get().stream()

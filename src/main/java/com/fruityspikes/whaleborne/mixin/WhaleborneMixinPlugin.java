@@ -29,6 +29,9 @@ public class WhaleborneMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.HealthBarsVisibilityMixin")) {
             return this.getClass().getClassLoader().getResource("fuzs/healthbars/client/helper/EntityVisibilityHelper.class") != null;
         }
+        if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesEffectRuleMixin")) {
+            return this.getClass().getClassLoader().getResource("com/leclowndu93150/wakes/utils/WakesUtils.class") != null;
+        }
         return true;
     }
 

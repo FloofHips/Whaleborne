@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -104,8 +105,7 @@ public abstract class WhaleWidgetEntity extends Entity {
     @Override
     public void tick() {
         // Use end-of-previous-tick snapshot so that rotatePassengers() (which runs
-        // BEFORE passenger ticks) can't clobber the prev value.  Same delayed-
-        // capture pattern used for HelmEntity.prevWheelRotation in 1.20.1.
+        // BEFORE passenger ticks) can't clobber the prev value.
         this.prevWidgetYRot = this.endOfTickWidgetYRot;
         this.prevWidgetXRot = this.endOfTickWidgetXRot;
         super.tick();
@@ -152,7 +152,7 @@ public abstract class WhaleWidgetEntity extends Entity {
         return this.item;
     }
 
-    public SoundEvent getDeathSound() { return SoundEvents.WOOD_BREAK;}
+    public SoundEvent getDeathSound() { return WBSoundRegistry.WIDGET_WOODEN_BREAK.get();}
     public BlockState getDeathBlock() { return Blocks.SPRUCE_PLANKS.defaultBlockState();}
 
     public boolean hurt(DamageSource source, float amount) {
@@ -183,15 +183,9 @@ public abstract class WhaleWidgetEntity extends Entity {
         }
     }
 
-    /**
-     * When riding a HullbackEntity, ignore entity tracking's lerpTo() entirely.
-     * Entity.lerpTo() does an immediate snap of position AND rotation.
-     * This corrupts prevWidgetYRot/prevWidgetXRot before rotatePassengers()
-     * can capture the correct local values, causing render interpolation
-     * to jitter between the server-snapped rotation and the locally
-     * calculated rotation. Position is handled by positionRider(), and
-     * rotation is handled by rotatePassengers() — both run every tick.
-     */
+    /** When riding a Hullback, skip entity-tracking lerpTo(): its position/rotation
+     *  snap would corrupt prev rotation and jitter interpolation. positionRider()
+     *  and rotatePassengers() handle position and rotation every tick instead. */
     @Override
     public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps) {
         if (this.getVehicle() instanceof HullbackEntity) {

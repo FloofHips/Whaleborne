@@ -39,5 +39,11 @@ public class WhaleborneNetwork {
                 ToggleControlPayload.STREAM_CODEC,
                 ToggleControlPayload::handle
         );
+
+        registrar.playToClient(
+                SeatLayoutPayload.TYPE,
+                SeatLayoutPayload.STREAM_CODEC,
+                SeatLayoutPayload::handle
+        );
     }
 }

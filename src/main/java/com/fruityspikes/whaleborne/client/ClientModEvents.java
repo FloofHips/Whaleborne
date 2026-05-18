@@ -25,6 +25,7 @@ import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
+import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 
 import static com.fruityspikes.whaleborne.Whaleborne.ANCHOR_GUI;
 import static com.fruityspikes.whaleborne.Whaleborne.LOGGER;
@@ -73,7 +74,7 @@ public class ClientModEvents
     @SubscribeEvent
     public static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
         event.registerLayerDefinition(WBEntityModelLayers.HULLBACK, HullbackModel::createBodyLayer);
-        event.registerLayerDefinition(WBEntityModelLayers.HULLBACK_ARMOR, HullbackArmorModel::createBodyLayer);
+        event.registerLayerDefinition(WBEntityModelLayers.HULLBACK_ARMOR, HullbackArmorModel::createDataDrivenLayer);
         event.registerLayerDefinition(WBEntityModelLayers.SAIL, SailModel::createBodyLayer);
         event.registerLayerDefinition(WBEntityModelLayers.HELM, HelmModel::createBodyLayer);
         event.registerLayerDefinition(WBEntityModelLayers.MAST, MastModel::createBodyLayer);
@@ -97,5 +98,11 @@ public class ClientModEvents
     @SubscribeEvent
     public static void registerParticleFactories(RegisterParticleProvidersEvent event) {
         event.registerSpriteSet(WBParticleRegistry.SMOKE.get(), WBSmokeProvider::new);
+    }
+
+    @SubscribeEvent
+    public static void registerReloadListeners(RegisterClientReloadListenersEvent event) {
+        event.registerReloadListener((net.minecraft.server.packs.resources.ResourceManagerReloadListener)
+                resourceManager -> ArmorTextureResolver.clearCache());
     }
 }

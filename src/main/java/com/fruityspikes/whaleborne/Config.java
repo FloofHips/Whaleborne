@@ -65,6 +65,10 @@ public class Config {
             .comment("Determines how far hullback sounds travel.")
             .defineInRange("hullbackSoundDistance", 3f, 0f, 5f);
 
+    public static final ModConfigSpec.BooleanValue WAKE_RENDERING = CLIENT_BUILDER
+            .comment("Built-in procedural Hullback wake rendering (foam, bow splash); independent from the Wakes mod's own integration.")
+            .define("hullbackWakeRendering", false);
+
     public static final ModConfigSpec.DoubleValue NEAT_OFFSET;
     public static final ModConfigSpec.IntValue HEALTH_BARS_OFFSET;
 
@@ -101,6 +105,7 @@ public class Config {
 
     public static boolean armorProgress;
     public static double soundDistance;
+    public static boolean wakeRendering;
     public static double neatOffset;
     public static int healthBarsOffset;
 
@@ -114,6 +119,7 @@ public class Config {
         if (event.getConfig().getSpec() == CLIENT_SPEC) {
             armorProgress = ARMOR_PROGRESS.get();
             soundDistance = SOUND_DISTANCE.get();
+            wakeRendering = WAKE_RENDERING.get();
             if (NEAT_OFFSET != null) neatOffset = NEAT_OFFSET.get();
             if (HEALTH_BARS_OFFSET != null) {
                 healthBarsOffset = HEALTH_BARS_OFFSET.get();

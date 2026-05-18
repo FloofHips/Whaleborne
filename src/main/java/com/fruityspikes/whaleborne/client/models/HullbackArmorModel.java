@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.client.models;
 
+import com.fruityspikes.whaleborne.client.renderers.ArmorModelLoader;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -8,6 +9,8 @@ import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.model.geom.builders.*;
+import org.slf4j.LoggerFactory;
+
 public class HullbackArmorModel<T extends HullbackEntity> extends EntityModel<T> {
 
     private final ModelPart head;
@@ -61,6 +64,17 @@ public class HullbackArmorModel<T extends HullbackEntity> extends EntityModel<T>
 
         return LayerDefinition.create(meshdefinition, 1024, 512);
     }
+
+    public static LayerDefinition createDataDrivenLayer() {
+        LayerDefinition loaded = ArmorModelLoader.loadMergedArmor(null); // default models
+        if (loaded != null) {
+            LoggerFactory.getLogger("Whaleborne").info("Loaded data-driven armor model from JSON");
+            return loaded;
+        }
+        LoggerFactory.getLogger("Whaleborne").info("Using hardcoded armor model (no JSON found)");
+        return createBodyLayer();
+    }
+
     @Override
     public void setupAnim(T entity, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch) {
 

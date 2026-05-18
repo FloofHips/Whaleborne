@@ -96,12 +96,12 @@ public class AnchorEntity extends WhaleWidgetEntity {
         if (isDown()) {
             if (!this.level().getBlockState(anchorHeadPosition).isSolid()) {
                 this.sinkSpeed -= 0.05f;
-                playSound(SoundEvents.CHAIN_STEP, 1.0f, 1.0f);
+                playSound(WBSoundRegistry.ANCHOR_EXTEND.get(), 1.0f, 1.0f);
                 Vec3 newPos = currentHeadPos.add(0, this.sinkSpeed, 0);
                 anchorHeadPosition = BlockPos.containing(newPos);
                 this.hasHitTheBottom = false;
             } else if (!this.hasHitTheBottom) {
-                playSound(SoundEvents.ANVIL_LAND, 1.0f, 0.9f);
+                playSound(WBSoundRegistry.ANCHOR_FINISH.get(), 3f, 0.6f);
 
                 if (this.getVehicle() != null && this.getVehicle() instanceof HullbackEntity hullback) {
                     if (this.level() instanceof ServerLevel serverLevel) {
@@ -128,7 +128,7 @@ public class AnchorEntity extends WhaleWidgetEntity {
             }
 
             this.sinkSpeed += 0.03f;
-            playSound(SoundEvents.CHAIN_STEP, 1.0f, 1.0f);
+            playSound(WBSoundRegistry.ANCHOR_RETRACT.get(), 1.0f, 1.0f);
             Vec3 newPos = currentHeadPos.add(0, this.sinkSpeed, 0);
             anchorHeadPosition = BlockPos.containing(newPos);
         }
@@ -201,7 +201,7 @@ public class AnchorEntity extends WhaleWidgetEntity {
         this.entityData.set(DATA_HEAD_POSITION, BlockPos.ZERO);
         this.sinkSpeed = 0.05f;
         anchorHeadPosition = BlockPos.ZERO;
-        playSound(SoundEvents.NETHERITE_BLOCK_HIT, 0.7f, 1.2f);
+        playSound(WBSoundRegistry.ANCHOR_FINISH.get(), 1f, 1.5f);
     }
 
     @Override

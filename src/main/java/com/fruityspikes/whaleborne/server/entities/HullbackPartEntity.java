@@ -13,6 +13,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.*;
+import net.minecraft.world.item.NameTagItem;
 import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
@@ -88,11 +89,16 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
         boolean topClicked = vec.y > size.height() * 0.6f;
         ItemStack heldItem = player.getItemInHand(hand);
 
+        // Let vanilla handle nametags (routes through Mob.interact → NameTagItem logic)
+        if (heldItem.getItem() instanceof NameTagItem) {
+            return getParent().interact(player, hand);
+        }
+
         if (heldItem.getItem() instanceof DebugStickItem) {
             return getParent().interactDebug(player, hand);
         }
 
-        if (heldItem.getItem() instanceof SaddleItem || heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
+        if (heldItem.getItem() instanceof SaddleItem || WBTagRegistry.isHullMaterial(heldItem)) {
             return getParent().interactArmor(player, hand, this, topClicked);
         }
 
@@ -112,57 +118,80 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             return handleSeatInteraction(player, hand, vec, topClicked, entity);
         }
 
-        // Let vanilla handle nametags (routes through Mob.interact → NameTagItem logic)
-        if (heldItem.getItem() instanceof NameTagItem) {
-            return getParent().interact(player, hand);
-        }
-
         InteractionResult result = getParent().interactClean(player, hand, this, topClicked);
         return result.consumesAction() ? result : getParent().interact(player, hand);
     }
 
-    /**
-     * Unified seat interaction logic for both empty hand and equipment placement.
-     * @param player The interacting player
-     * @param hand The hand used
-     * @param vec Click position vector
-     * @param topClicked Whether the top of the part was clicked
-     * @param entityType Entity type to place, or null for player mounting
-     * @return The interaction result
-     */
+    /** Unified seat interaction for empty-hand mounting and equipment placement
+     *  (entityType null means mount the player). */
     private InteractionResult handleSeatInteraction(Player player, InteractionHand hand, Vec3 vec, boolean topClicked, @Nullable EntityType<?> entityType) {
         if ("tail".equals(this.name))
             return getParent().interact(player, hand);
         if ("fluke".equals(this.name))
-            return getParent().interactRide(player, hand, 6, entityType);
+            return getParent().interactRide(player, hand, getParent().getPartManager().getFlukeSeatIndex(), entityType);
         if (topClicked) {
-            if ("body".equals(this.name)) {
-                int seatIndex = getBodySeatFromClick(vec);
-                return getParent().interactRide(player, hand, seatIndex, entityType);
+            int partIndex = getPartIndex();
+            if (partIndex >= 0) {
+                int seatIndex = findNearestSeatForPart(vec, partIndex);
+                if (seatIndex >= 0) {
+                    return getParent().interactRide(player, hand, seatIndex, entityType);
+                }
             }
-            if ("nose".equals(this.name))
-                return getParent().interactRide(player, hand, 0, entityType);
-            if ("head".equals(this.name))
-                return getParent().interactRide(player, hand, 1, entityType);
         }
         return getParent().interact(player, hand);
     }
 
-    /**
-     * Determines seat index from click position on the body part.
-     */
-    private int getBodySeatFromClick(Vec3 vec) {
-        Vec3 localClick = new Vec3(vec.x, 0, vec.z);
-        float inverseYaw = this.getYRot() * Mth.DEG_TO_RAD;
-        localClick = localClick.yRot(inverseYaw);
-        double angle = Math.atan2(localClick.z, localClick.x) + Math.PI;
-        int quadrant = (int) (angle / (Math.PI / 2)) % 4;
-
-        return switch (quadrant) {
-            case 0 -> 5;
-            case 1 -> 4;
-            case 2 -> 2;
-            default -> 3;
+    /** Part index for this named part, or -1 if no seats allowed. */
+    private int getPartIndex() {
+        return switch (this.name) {
+            case "nose" -> 0;
+            case "head" -> 1;
+            case "body" -> 2;
+            case "fluke" -> 4;
+            default -> -1; // tail and others: no seat
         };
+    }
+
+    /** Nearest seat to the click in world space; matches seats whose pos or rot
+     *  part index is this part, preferring empty seats. */
+    private int findNearestSeatForPart(Vec3 clickVec, int partIndex) {
+        if (getParent() == null || getParent().getPartManager() == null) return -1;
+        var seatManager = getParent().hullbackSeatManager;
+        var partManager = getParent().getPartManager();
+        if (seatManager == null) return -1;
+        var layout = partManager.getSeatLayout();
+        int activeSeatCount = layout.getActiveSeatCount();
+
+        // Convert click to world coordinates: click is relative to this PartEntity's position
+        Vec3 clickWorld = this.position().add(clickVec);
+
+        int bestSeat = -1;
+        double bestDist = Double.MAX_VALUE;
+
+        for (int i = 0; i < activeSeatCount; i++) {
+            var def = layout.getSeatDef(i);
+            if (def == null) continue;
+
+            // Match seats that belong to this part (either position OR rotation source)
+            if (def.posPartIndex() != partIndex && def.rotPartIndex() != partIndex) continue;
+
+            // Use the pre-computed world-space seat position (from calculateSeats)
+            Vec3 seatWorldPos = i < partManager.seats.length ? partManager.seats[i] : null;
+            if (seatWorldPos == null) continue;
+
+            // 3D distance from click to seat world position
+            double dist = clickWorld.distanceToSqr(seatWorldPos);
+
+            // Prefer empty seats — add heavy penalty for occupied ones
+            boolean occupied = seatManager.getSeatData(i).isPresent();
+            double penalty = occupied ? 10000.0 : 0.0;
+
+            if (dist + penalty < bestDist) {
+                bestDist = dist + penalty;
+                bestSeat = i;
+            }
+        }
+
+        return bestSeat;
     }
 }

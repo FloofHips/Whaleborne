@@ -1,15 +1,20 @@
 package com.fruityspikes.whaleborne.server.events;
 
 import com.fruityspikes.whaleborne.Whaleborne;
+import com.fruityspikes.whaleborne.network.SeatLayoutPayload;
+import com.fruityspikes.whaleborne.server.data.HullConfigManager;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.SimpleContainer;
@@ -29,17 +34,8 @@ public class HullbackDamageHandler {
             return;
         }
 
-        // Calculate block resistance
-        float resistance = 1;
-        if (armorStack.getItem() instanceof BlockItem blockItem) {
-            BlockState defaultState = blockItem.getBlock().defaultBlockState();
-            resistance = defaultState.getDestroySpeed(hullback.level(), hullback.blockPosition());
-            if (resistance < 0) {
-                resistance = 50f;
-            }
-        }
-
-        float blockChance = resistance / 70f;
+        // Get block chance from HullConfig (uses direct block_chance if set, else resistance/70)
+        float blockChance = HullConfigManager.getBlockChance(armorStack.getItem());
         boolean blocked = hullback.getRandom().nextFloat() < blockChance;
 
         if (blocked) {
@@ -67,6 +63,18 @@ public class HullbackDamageHandler {
             event.setAmount(remainingDamage);
             
             hullback.updateContainerEquipment();
+        }
+    }
+
+    /** Sync the current seat layout when a player starts tracking a Hullback
+     *  (covers mid-game joins and newly loaded chunks). */
+    @SubscribeEvent
+    public static void onStartTracking(PlayerEvent.StartTracking event) {
+        if (event.getTarget() instanceof HullbackEntity hullback && event.getEntity() instanceof ServerPlayer player) {
+            var layout = hullback.partManager.getSeatLayout();
+            PacketDistributor.sendToPlayer(player,
+                    new SeatLayoutPayload(
+                            hullback.getId(), layout.getAllSeatDefs(), layout.getFlukeSeatIndex()));
         }
     }
 }

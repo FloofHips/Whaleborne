@@ -38,5 +38,26 @@
   "subtitles.entity.hullback.tame": "Hullback sings happily",
   "subtitles.entity.hullback.mad": "Hullback groans",
   "subtitles.entity.hullback.swim": "Hullback swims",
-  "subtitles.entity.hullback.breathe": "Hullback breaches"
+  "subtitles.entity.hullback.breathe": "Hullback breaches",
+  "subtitles.entity.hullback.sing": "Hullback sings",
+
+  "subtitles.whaleborne.entity.widget.place": "Equipment placed",
+  "subtitles.whaleborne.entity.widget.break": "Equipment broken",
+  "subtitles.whaleborne.entity.widget.hit": "Equipment hit",
+  "subtitles.whaleborne.entity.widget.ride": "Riding equipment",
+
+  "subtitles.whaleborne.entity.cannon.shoot": "Cannon fires",
+  "subtitles.whaleborne.entity.cannon.shoot_fail": "Cannon misfires",
+  "subtitles.whaleborne.entity.cannon.no_fuel": "Cannon clicks empty",
+
+  "subtitles.whaleborne.entity.helm.turn": "Helm turns",
+  "subtitles.whaleborne.entity.helm.turn_fail": "Helm jams",
+
+  "subtitles.whaleborne.entity.anchor.extend": "Anchor lowers",
+  "subtitles.whaleborne.entity.anchor.retract": "Anchor raises",
+  "subtitles.whaleborne.entity.anchor.finish": "Anchor settles",
+
+  "subtitles.whaleborne.entity.sail.wind": "Sail flutters",
+  "subtitles.whaleborne.entity.sail.clean": "Sail cleaned",
+  "subtitles.whaleborne.entity.sail.color": "Sail dyed"
 }

@@ -10,7 +10,8 @@
         "HealthBarsVisibilityMixin",
         "HealthBarsGuiMixin",
         "HealthBarsPickMixin",
-        "MobCategoryMixin"
+        "MobCategoryMixin",
+        "WakesEffectRuleMixin"
     ],
   "injectors": {
     "defaultRequire": 1

@@ -5,6 +5,7 @@ import com.fruityspikes.whaleborne.network.ToggleControlPayload;
 import com.fruityspikes.whaleborne.server.entities.CannonEntity;
 import com.fruityspikes.whaleborne.server.entities.HelmEntity;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
@@ -18,15 +19,8 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
 /**
- * Manages movement and rotation controls for the Hullback entity.
- *
- * Processes player steering input, client-side control state prediction,
- * and vector control toggling (mouse vs keyboard steering).
- *
- * Also contains inner classes for stationary-aware move/look/body rotation
- * controls that prevent AI from rotating the whale when anchored or stationary.
- *
- * Called during tick() from HullbackEntity.
+ * Movement/rotation controls for the Hullback: steering input, client control prediction,
+ * vector-control toggle, and stationary-aware AI controls. Driven from HullbackEntity tick().
  */
 public class HullbackControlManager {
     private final HullbackEntity whale;
@@ -129,11 +123,11 @@ public class HullbackControlManager {
 
         if (hasInput) {
             if (whale.hasAnchorDown()) {
-                if (whale.tickCount % ANCHOR_SOUND_INTERVAL == 0) whale.playSound(SoundEvents.WOOD_HIT, 1, 1);
-                return Vec3.ZERO; 
+                if (whale.tickCount % ANCHOR_SOUND_INTERVAL == 0) whale.playSound(WBSoundRegistry.HELM_TURN_FAIL.get(), 1, whale.getRandom().nextFloat() * 0.5f + 0.75f);
+                return Vec3.ZERO;
             }
-            
-            if (whale.tickCount % STEERING_SOUND_INTERVAL == 0 && player.xxa != 0) whale.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5f, 1.0f);
+
+            if (whale.tickCount % STEERING_SOUND_INTERVAL == 0 && player.xxa != 0) whale.playSound(WBSoundRegistry.HELM_TURN.get(), 0.5f, whale.getRandom().nextFloat() * 0.5f + 0.75f);
              
             if(!whale.level().isClientSide && whale.getControllingPassenger() != null && whale.getControllingPassenger().getVehicle() instanceof HelmEntity helmEntity){
                  helmEntity.setWheelRotation(helmEntity.getWheelRotation() + player.xxa / WHEEL_ROTATION_DIVISOR);

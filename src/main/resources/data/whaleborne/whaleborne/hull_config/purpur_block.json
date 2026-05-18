@@ -1,0 +1,11 @@
+{
+  "item": "minecraft:purpur_block",
+  "planks_required": 64,
+  "resistance": 1.5,
+  "armor_model": "default",
+  "platforms": [
+    { "part": "nose", "width": 5.5, "height": 0.5, "y_offset": 4.7 },
+    { "part": "head", "width": 6.5, "height": 0.5, "y_offset": 4.7 },
+    { "part": "body", "width": 7.0, "height": 0.5, "y_offset": 4.7 }
+  ]
+}

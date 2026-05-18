@@ -33,14 +33,8 @@ public abstract class HealthBarsCompatMixin {
     )
     private static void redirectRenderHealthBar(PoseStack poseStack, float partialTick, int packedLight, HealthTracker healthTracker, LivingEntity livingEntity, int heightOffset, Font font, BiFunction<PoseStack, Integer, GuiGraphics> factory, @Nullable RenderType renderType) {
         if (livingEntity instanceof HullbackEntity) {
-            // Logic improvement:
-            // 1. Multiply by 10 to match Neat's scale (~10 pixels per unit feels closer to block-like adjustments).
-            // 2. Subtract from heightOffset because in GUI rendering, Y increases downwards.
-            //    So "Move UP" means "Decrease Y".
-            // 3. User requested that the old "-2" be the new "0".
-            //    f(new_config) = old_f(new_config - 2)
-            //    old_f(x) = -(x * 10)
-            //    new_f(x) = -((x - 2) * 10)
+            // Scale by 10 to match Neat's pixels-per-unit; subtract because GUI Y grows
+            // downward (up = lower Y). The -2 offset makes config 0 the neutral position.
             heightOffset -= ((Config.healthBarsOffset - 2) * 10);
         }
         renderHealthBar(poseStack, partialTick, packedLight, healthTracker, livingEntity, heightOffset, font, factory, renderType);

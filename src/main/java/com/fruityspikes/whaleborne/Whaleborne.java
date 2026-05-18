@@ -2,6 +2,7 @@ package com.fruityspikes.whaleborne;
 
 import com.fruityspikes.whaleborne.client.ClientProxy;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
+import com.fruityspikes.whaleborne.server.data.HullConfigManager;
 import com.fruityspikes.whaleborne.server.registries.*;
 import com.mojang.logging.LogUtils;
 import net.neoforged.neoforge.event.entity.RegisterSpawnPlacementsEvent;
@@ -68,8 +69,11 @@ public class Whaleborne
     }
 
 
+    private static final HullConfigManager HULL_CONFIG_MANAGER = new HullConfigManager();
+
     @SubscribeEvent
     public void register(AddReloadListenerEvent event) {
         event.addListener(Whaleborne.PROXY.getHullbackDirtManager());
+        event.addListener(HULL_CONFIG_MANAGER);
     }
 }

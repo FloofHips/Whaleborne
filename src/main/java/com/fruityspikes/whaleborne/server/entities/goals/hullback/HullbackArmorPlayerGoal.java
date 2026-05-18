@@ -18,7 +18,6 @@ public class HullbackArmorPlayerGoal extends Goal {
     private static final float APPROACH_DISTANCE = 10.0f;
     private static final float SIDE_OFFSET = 10.0f;
     private static final float ROTATION_SPEED = 0.8f;
-    private static Ingredient TEMPT_PLANKS = Ingredient.of(WBTagRegistry.HULLBACK_EQUIPPABLE);
     private static Ingredient TEMPT_WIDGETS = Ingredient.of(WBItemRegistry.SAIL.get(), WBItemRegistry.ANCHOR.get(), WBItemRegistry.MAST.get(), WBItemRegistry.HELM.get(), WBItemRegistry.CANNON.get());
     private final HullbackEntity hullback;
     private final float speedModifier;
@@ -40,10 +39,10 @@ public class HullbackArmorPlayerGoal extends Goal {
     private boolean shouldFollow(LivingEntity entity) {
         if (hullback.isSaddled()) {
             if (hullback.getArmorProgress() >= 0.5 && hullback.getArmorProgress() < 1)
-                return TEMPT_PLANKS.test(entity.getMainHandItem()) || TEMPT_PLANKS.test(entity.getOffhandItem()) || TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
+                return WBTagRegistry.isHullMaterial(entity.getMainHandItem()) || WBTagRegistry.isHullMaterial(entity.getOffhandItem()) || TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
             if (hullback.getArmorProgress() == 1)
                 return TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
-            return TEMPT_PLANKS.test(entity.getMainHandItem()) || TEMPT_PLANKS.test(entity.getOffhandItem());
+            return WBTagRegistry.isHullMaterial(entity.getMainHandItem()) || WBTagRegistry.isHullMaterial(entity.getOffhandItem());
         }
         return false;
     }

@@ -1,6 +1,7 @@
 package com.fruityspikes.whaleborne.server.world;
 
 import com.fruityspikes.whaleborne.Config;
+import com.fruityspikes.whaleborne.server.registries.WBBiomeModifierRegistry;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.Holder;
@@ -42,6 +43,6 @@ public record ConfigurableSpawnModifier(HolderSet<Biome> biomes, List<MobSpawnSe
 
     @Override
     public MapCodec<? extends BiomeModifier> codec() {
-        return com.fruityspikes.whaleborne.server.registries.WBBiomeModifierRegistry.CONFIGURABLE_SPAWNS.get();
+        return WBBiomeModifierRegistry.CONFIGURABLE_SPAWNS.get();
     }
 }

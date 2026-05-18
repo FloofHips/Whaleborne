@@ -25,10 +25,10 @@ public class WBItemRegistry {
     );
 
     public static final DeferredHolder<Item, WhaleEquipment> SAIL = ITEMS.register("sail", () -> new PlaceableWhaleEquipment(WBEntityRegistry.SAIL::get, new Item.Properties().stacksTo(1)));
-    public static final DeferredHolder<Item, WhaleEquipment> CANNON = ITEMS.register("cannon", () -> new PlaceableWhaleEquipment(WBEntityRegistry.CANNON::get, SoundEvents.ANVIL_PLACE, new Item.Properties().stacksTo(1)));
+    public static final DeferredHolder<Item, WhaleEquipment> CANNON = ITEMS.register("cannon", () -> new PlaceableWhaleEquipment(WBEntityRegistry.CANNON::get, WBSoundRegistry.WIDGET_METAL_PLACE.get(), new Item.Properties().stacksTo(1)));
     public static final DeferredHolder<Item, WhaleEquipment> MAST = ITEMS.register("mast", () -> new WhaleEquipment(WBEntityRegistry.MAST::get, new Item.Properties().stacksTo(1)));
     public static final DeferredHolder<Item, WhaleEquipment> HELM = ITEMS.register("helm", () -> new WhaleEquipment(WBEntityRegistry.HELM::get, new Item.Properties().stacksTo(1)));
-    public static final DeferredHolder<Item, WhaleEquipment> ANCHOR = ITEMS.register("anchor", () -> new AnchorItem(WBEntityRegistry.ANCHOR::get, SoundEvents.ANVIL_PLACE, new Item.Properties().stacksTo(1)));
+    public static final DeferredHolder<Item, WhaleEquipment> ANCHOR = ITEMS.register("anchor", () -> new AnchorItem(WBEntityRegistry.ANCHOR::get, WBSoundRegistry.WIDGET_METAL_PLACE.get(), new Item.Properties().stacksTo(1)));
     public static final DeferredHolder<Item, DeferredSpawnEggItem> HULLBACK_SPAWN_EGG = ITEMS.register("hullback_spawn_egg", () -> new DeferredSpawnEggItem(WBEntityRegistry.HULLBACK, -5787987,  -9600639, new Item.Properties()));
     public static final DeferredHolder<Item, Item> BARNACLE = ITEMS.register("barnacle", () -> new BlockItem(WBBlockRegistry.BARNACLE.get(), new Item.Properties()));
     public static final DeferredHolder<Item, Item> ROUGH_BARNACLE = ITEMS.register("rough_barnacle", () -> new BlockItem(WBBlockRegistry.ROUGH_BARNACLE.get(), new Item.Properties()));

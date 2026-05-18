@@ -31,8 +31,14 @@ public class WBEntityRegistry {
     public static final DeferredHolder<EntityType<?>, EntityType<HullbackWalkableEntity>> HULLBACK_PLATFORM = ENTITY_TYPES.register(
             "hullback_platform", () ->
                     EntityType.Builder.of(HullbackWalkableEntity::new, MobCategory.MISC)
-                            .sized(5.5F, 0.5F)
-                            .clientTrackingRange(128)
+                            // Must match the tile size used by HullbackPartManager: if larger,
+                            // the client gets stuck on the type default BB whenever applyDimensions
+                            // sets the same value as the synched default (no sync packet fires).
+                            .sized(1.5F, 0.5F)
+                            // Tiles are invisible — only relevant when a player is close enough
+                            // to actually walk on them. 64 blocks covers approach distance well
+                            // and roughly halves position-packet traffic vs the previous 128.
+                            .clientTrackingRange(64)
                             .setShouldReceiveVelocityUpdates(true)
                             .build(ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "hullback_platform").toString())
     );

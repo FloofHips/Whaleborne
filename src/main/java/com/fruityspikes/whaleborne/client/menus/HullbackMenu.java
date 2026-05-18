@@ -38,8 +38,8 @@ public class HullbackMenu extends AbstractContainerMenu {
 
     public HullbackMenu(int windowId, Inventory playerInventory, HullbackEntity hullback) {
         super(WBMenuRegistry.HULLBACK_MENU.get(), windowId);
-
         this.hullback = hullback;
+
         if (hullback.getInventory() == null) {
             throw new IllegalStateException("Hullback inventory is null for entity " + hullback.getId());
         }
@@ -143,10 +143,10 @@ public class HullbackMenu extends AbstractContainerMenu {
     }
     public float getSpeedModifier(){
         AttributeInstance inst = this.hullback.getAttribute(NeoForgeMod.SWIM_SPEED);
-        if (inst != null) {
-            AttributeModifier modifier = inst.getModifier(HullbackEntity.getSailSpeedModifierId());
-            if (modifier != null)
-                return (float) modifier.amount();
+        if (inst != null){
+            if(inst.getModifier(HullbackEntity.getSailSpeedModifierId()) != null)
+                return (float) inst.getModifier(HullbackEntity.getSailSpeedModifierId()).amount();
+            return 0;
         }
         return 0;
     }

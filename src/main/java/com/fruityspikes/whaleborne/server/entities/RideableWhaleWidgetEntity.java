@@ -1,5 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
+import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -39,6 +40,7 @@ public class RideableWhaleWidgetEntity extends WhaleWidgetEntity{
         if (this.getPassengers().isEmpty()) {
             if (!this.level().isClientSide) {
                 player.startRiding(this);
+                this.playSound(WBSoundRegistry.WIDGET_RIDE.get(), 1, 1);
             }
             return InteractionResult.sidedSuccess(this.level().isClientSide);
         }

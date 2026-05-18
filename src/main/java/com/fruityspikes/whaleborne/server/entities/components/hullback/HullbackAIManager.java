@@ -4,10 +4,7 @@ import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.entities.goals.hullback.*;
 import net.minecraft.world.entity.ai.goal.FollowBoatGoal;
 
-/**
- * Manages AI goals for the Hullback entity.
- * Centralizes goal registration and management logic.
- */
+/** AI goal registration and management for the Hullback. */
 public class HullbackAIManager {
     private final HullbackEntity hullback;
 
@@ -15,10 +12,7 @@ public class HullbackAIManager {
         this.hullback = hullback;
     }
 
-    /**
-     * Registers all AI goals for the Hullback.
-     * Called during entity initialization.
-     */
+    /** Registers all AI goals; called during entity initialization. */
     public void registerGoals() {
         // Priority 0: Critical survival and interaction goals
         hullback.goalSelector.addGoal(0, new HullbackBreathAirGoal(hullback));
@@ -34,39 +28,26 @@ public class HullbackAIManager {
         hullback.goalSelector.addGoal(3, new FollowBoatGoal(hullback));
     }
 
-    /**
-     * Clears all goals from the Hullback.
-     * Useful for debugging or dynamic goal management.
-     */
+    /** Clears all goals from the Hullback. */
     public void clearGoals() {
         hullback.goalSelector.getAvailableGoals().clear();
         hullback.targetSelector.getAvailableGoals().clear();
     }
 
-    /**
-     * Removes a specific goal by class type.
-     * @param goalClass The class of the goal to remove
-     */
+    /** Removes a specific goal by class type. */
     public void removeGoal(Class<?> goalClass) {
         hullback.goalSelector.getAvailableGoals().removeIf(
             wrappedGoal -> goalClass.isInstance(wrappedGoal.getGoal())
         );
     }
 
-    /**
-     * Checks if the Hullback has a specific goal registered.
-     * @param goalClass The class of the goal to check
-     * @return true if the goal is registered
-     */
+    /** Whether a specific goal class is registered. */
     public boolean hasGoal(Class<?> goalClass) {
         return hullback.goalSelector.getAvailableGoals().stream()
             .anyMatch(wrappedGoal -> goalClass.isInstance(wrappedGoal.getGoal()));
     }
 
-    /**
-     * Checks if the Hullback is currently executing a breaching/breathing maneuver.
-     * @return true if HullbackBreathAirGoal is active and breaching.
-     */
+    /** Whether the Hullback is currently breaching/breathing. */
     public boolean isBreaching() {
         for (net.minecraft.world.entity.ai.goal.WrappedGoal goal : hullback.goalSelector.getAvailableGoals()) {
             if (goal.getGoal() instanceof HullbackBreathAirGoal breachGoal) {
