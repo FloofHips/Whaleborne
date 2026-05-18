@@ -162,6 +162,40 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     private boolean platformsStable = false; // Added for Integrated Fix
     private boolean isApproachingPlayer = false; // Flag to apply movement during approach
     private float currentPlatformHeight = 4.55f;
+
+    // ─── Wake state (client-side rendering, not saved/synced) ─────
+    public float wakeIntensity = 0f;
+    public float flukeSplashIntensity = 0f;
+    public float bowSprayIntensity = 0f;
+    public static final int WAKE_TRAIL_LENGTH = 16;
+    public final Vec3[] wakeTrailPos = new Vec3[WAKE_TRAIL_LENGTH];
+    public final float[] wakeTrailYaw = new float[WAKE_TRAIL_LENGTH];
+    public final float[] wakeTrailAlpha = new float[WAKE_TRAIL_LENGTH];
+    public int wakeTrailHead = 0;
+    private int wakeTrailTick = 0;
+    public float wakeDepthFactor = 1.0f;
+    public float wakeWeatherFactor = 1.0f;
+    public int wakeFoamR = 230, wakeFoamG = 245, wakeFoamB = 255;
+
+    /** Length-5 view of internal part positions for WakesCompat (nose/head/body/tail/fluke). */
+    public Vec3[] getPartPositionsArray() { return partPosition; }
+
+    // ─── Part-position update cache (stable-skip + alloc-free hot path) ─────
+    private static final float[] PART_DRAG_FACTORS = {1f, 0.9f, 0.2f, 0.1f, 0.09f};
+    private static final Vec3[] PART_BASE_OFFSETS = {
+            new Vec3(0, 0, 6),      // Nose
+            new Vec3(0, 0, 2.5),    // Head
+            new Vec3(0, 0, -2.25),  // Body
+            new Vec3(0, 0, -7),     // Tail
+            new Vec3(0, 0, -11)     // Fluke
+    };
+    private final Vec3[] partOffsetsScratch = new Vec3[5];
+    private double lastWhalePartX = Double.NaN, lastWhalePartY = Double.NaN, lastWhalePartZ = Double.NaN;
+    private float lastWhalePartYaw = Float.NaN, lastWhalePartPitch = Float.NaN;
+    private boolean partsConverged = false;
+    private boolean partSnapshotValid = false;
+    private static final double PART_STABILITY_EPSILON_SQ = 1.0e-8;
+
     private float targetPlatformHeight = 4.55f;
     private float oldPlatformHeight = 4.55f; // Rastreia a altura do tick anterior
     private int platformHeightCooldown = 0;
@@ -968,7 +1002,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        playSound(WBSoundRegistry.HULLBACK_AMBIENT.get(), Config.SOUND_DISTANCE.get().floatValue(), 1);
+        // 10% chance to sing instead of the usual ambient vocalization
+        SoundEvent sound = this.random.nextInt(10) == 0
+                ? WBSoundRegistry.HULLBACK_SING.get()
+                : WBSoundRegistry.HULLBACK_AMBIENT.get();
+        playSound(sound, Config.SOUND_DISTANCE.get().floatValue(), 1);
     }
 
     @Override
@@ -992,13 +1030,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     protected SoundEvent getDeathSound() {
         return WBSoundRegistry.HULLBACK_DEATH.get();
-    }
-
-    @Nullable
-    @Override
-    protected SoundEvent getAmbientSound() {
-        if (this.random.nextInt(10) == 0) return WBSoundRegistry.HULLBACK_SING.get();
-        return WBSoundRegistry.HULLBACK_AMBIENT.get();
     }
 
     public void moveEntitiesOnTop(int index, Set<Entity> movedThisTick) {
@@ -1313,7 +1344,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 }
             }
             return InteractionResult.PASS;
-        } else if (heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
+        } else if (WBTagRegistry.isHullMaterial(heldItem)) {
             if (!isSaddled()) {
                 mouthTarget = 0.3f;
                 playSound(WBSoundRegistry.HULLBACK_MAD.get());
@@ -1448,6 +1479,19 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     @Override
+    public void remove(net.minecraft.world.entity.Entity.RemovalReason reason) {
+        // Platforms must be released for every removal path, not just tickDeath: /kill, creative
+        // discard, chunk unload, dimension change and despawn all bypass tickDeath and would
+        // otherwise leave moving_nose/head/body orphaned in the world.
+        if (this.level() != null && !this.level().isClientSide) {
+            if (this.moving_nose != null) { this.moving_nose.discard(); this.moving_nose = null; }
+            if (this.moving_head != null) { this.moving_head.discard(); this.moving_head = null; }
+            if (this.moving_body != null) { this.moving_body.discard(); this.moving_body = null; }
+        }
+        super.remove(reason);
+    }
+
+    @Override
     protected void tickDeath() {
         if (this.moving_nose != null) {
             this.moving_nose.discard();
@@ -1523,7 +1567,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.inventory.setItem(INV_SLOT_ARMOR, getArmor());
         }
 
-        // Capture rotation snapshot for Hard Lock (Ported from 1.21.1 setup)
+        // Capture rotation snapshot for Hard Lock
         RotationSnapshot snapshot = new RotationSnapshot(this.getYRot(), this.yBodyRot, this.yHeadRot);
 
         updateModifiers(); // Update speed modifiers every tick for instant acceleration response
@@ -1561,8 +1605,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
 
 
-        // Discard logic: Only if NOT stationary (moving freely) AND not approaching
-        if (stationaryTicks == 0 && !scanPlayerAbove() && !isApproachingPlayer()) {
+        // Discard logic: Only if NOT stationary, not approaching, AND no passengers riding the
+        // whale (helm pilot, seated mobs, etc. — platforms should persist while anyone is on).
+        if (stationaryTicks == 0 && !scanPlayerAbove() && !isApproachingPlayer()
+                && this.getPassengers().isEmpty()) {
             if (this.moving_nose != null) { this.moving_nose.discard(); this.moving_nose = null; }
             if (this.moving_head != null) { this.moving_head.discard(); this.moving_head = null; }
             if (this.moving_body != null) { this.moving_body.discard(); this.moving_body = null; }
@@ -1714,9 +1760,88 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (this.getStationaryTicks() > 0) {
             updateWalkablePlatforms();
         }
+
+        // Wake state is computed client-side from position deltas synced by vanilla entity
+        // tracking, so all observing clients see the same wake automatically.
+        if (this.level().isClientSide) {
+            updateWakeState();
+            if (com.fruityspikes.whaleborne.client.renderers.HullbackWakeRenderer.isWakesModLoaded()) {
+                com.fruityspikes.whaleborne.client.compat.WakesCompat.generatePartWakes(this);
+            }
+        }
     }
 
 
+
+    /** Drives the renderer's foam, bow splash, and trail history each client tick. */
+    private void updateWakeState() {
+        float speed = getAnimationSwimSpeed();
+        float targetIntensity = Mth.clamp((speed - 0.008f) / (0.16f - 0.008f), 0f, 1f);
+        if (targetIntensity > wakeIntensity) {
+            wakeIntensity = Math.min(wakeIntensity + 0.05f, targetIntensity);
+        } else {
+            wakeIntensity = Math.max(wakeIntensity - 0.02f, 0f);
+        }
+        if (partPosition.length > 4 && partPosition[4] != null) {
+            float waterY = level().getSeaLevel();
+            boolean flukeNearSurface = partPosition[4].y > waterY - 0.5;
+            float splashTarget = (flukeNearSurface && speed > 0.004f)
+                    ? Mth.clamp(targetIntensity * 1.5f, 0f, 1f) : 0f;
+            if (splashTarget > flukeSplashIntensity) {
+                flukeSplashIntensity = Math.min(flukeSplashIntensity + 0.08f, splashTarget);
+            } else {
+                flukeSplashIntensity = Math.max(flukeSplashIntensity - 0.06f, 0f);
+            }
+        }
+        float sprayTarget = wakeIntensity * 0.7f;
+        if (sprayTarget > bowSprayIntensity) {
+            bowSprayIntensity = Math.min(bowSprayIntensity + 0.04f, sprayTarget);
+        } else {
+            bowSprayIntensity = Math.max(bowSprayIntensity - 0.012f, 0f);
+        }
+        if (this.tickCount % 20 == 0) updateWakeEnvironment();
+        wakeTrailTick++;
+        if (wakeTrailTick >= 3 && wakeIntensity > 0.02f) {
+            wakeTrailTick = 0;
+            if (partPosition.length > 3 && partPosition[3] != null) {
+                wakeTrailPos[wakeTrailHead] = partPosition[3];
+                wakeTrailYaw[wakeTrailHead] = (partYRot != null && partYRot.length > 3) ? partYRot[3] : 0f;
+                wakeTrailAlpha[wakeTrailHead] = wakeIntensity * 0.5f;
+                wakeTrailHead = (wakeTrailHead + 1) % WAKE_TRAIL_LENGTH;
+            }
+        }
+        for (int i = 0; i < WAKE_TRAIL_LENGTH; i++) {
+            if (wakeTrailAlpha[i] > 0) wakeTrailAlpha[i] = Math.max(0, wakeTrailAlpha[i] - 0.008f);
+        }
+    }
+
+    private void updateWakeEnvironment() {
+        net.minecraft.core.BlockPos pos = this.blockPosition();
+        int depth = 0;
+        net.minecraft.core.BlockPos.MutableBlockPos probe = new net.minecraft.core.BlockPos.MutableBlockPos();
+        int minY = Math.max(pos.getY() - 20, level().getMinBuildHeight());
+        for (int y = pos.getY() - 1; y > minY; y--) {
+            probe.set(pos.getX(), y, pos.getZ());
+            if (level().getBlockState(probe).isSolid()) break;
+            depth++;
+        }
+        wakeDepthFactor = depth < 5 ? 1.35f : (depth < 10 ? 1.15f : 1.0f);
+        wakeWeatherFactor = level().isThundering() ? 1.4f : (level().isRaining() ? 1.2f : 1.0f);
+        var biomeHolder = level().getBiome(this.blockPosition());
+        var keyOpt = biomeHolder.unwrapKey();
+        if (keyOpt.isPresent()) {
+            String path = keyOpt.get().location().getPath();
+            if (path.contains("swamp") || path.contains("mangrove")) {
+                wakeFoamR = 195; wakeFoamG = 225; wakeFoamB = 200;
+            } else if (path.contains("frozen") || path.contains("ice") || path.contains("snowy")) {
+                wakeFoamR = 240; wakeFoamG = 250; wakeFoamB = 255;
+            } else if (path.contains("warm")) {
+                wakeFoamR = 235; wakeFoamG = 248; wakeFoamB = 250;
+            } else {
+                wakeFoamR = 230; wakeFoamG = 245; wakeFoamB = 255;
+            }
+        }
+    }
 
     private void handleStationaryState() {
         // Maximum priority: If breathing, it doesn't stop.
@@ -1728,7 +1853,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.isApproachingPlayer = false;
         }
 
-        // Manage pilot -> dismounted transition (PORTED FROM 1.21.1)
+        // Manage pilot -> dismounted transition
         if (currentPilot != null) {
             this.stationaryTicks = 0; // Fix: Immediate acceleration when mounted (Fixes Speed Lag)
             this.wasPilotControlled = true;
@@ -2114,7 +2239,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 }
 
                 // Capture prev BEFORE applying the new rotation so the renderer
-                // can interpolate between old and new (matches 1.21.1 behaviour).
+                // can interpolate between old and new.
                 if (passenger instanceof WhaleWidgetEntity widget) {
                     widget.prevWidgetYRot = widget.getYRot();
                     widget.prevWidgetXRot = widget.getXRot();
@@ -2598,7 +2723,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public class HullbackArmorPlayerGoal extends Goal {
         private static final float APPROACH_DISTANCE = 10.0f;
         private static final float SIDE_OFFSET = 10.0f;
-        private static Ingredient TEMPT_PLANKS = Ingredient.of(WBTagRegistry.HULLBACK_EQUIPPABLE);
         private static Ingredient TEMPT_WIDGETS = Ingredient.of(WBItemRegistry.SAIL.get(), WBItemRegistry.ANCHOR.get(), WBItemRegistry.MAST.get(), WBItemRegistry.HELM.get(), WBItemRegistry.CANNON.get());
         private final HullbackEntity hullback;
         private final float speedModifier;
@@ -2619,10 +2743,10 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         private boolean shouldFollow(LivingEntity entity) {
             if (isSaddled()) {
                 if (getArmorProgress() >= 0.5 && getArmorProgress() < 1)
-                    return TEMPT_PLANKS.test(entity.getMainHandItem()) || TEMPT_PLANKS.test(entity.getOffhandItem()) || TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
+                    return WBTagRegistry.isHullMaterial(entity.getMainHandItem()) || WBTagRegistry.isHullMaterial(entity.getOffhandItem()) || TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
                 if (getArmorProgress() == 1)
                     return TEMPT_WIDGETS.test(entity.getMainHandItem()) || TEMPT_WIDGETS.test(entity.getOffhandItem());
-                return TEMPT_PLANKS.test(entity.getMainHandItem()) || TEMPT_PLANKS.test(entity.getOffhandItem());
+                return WBTagRegistry.isHullMaterial(entity.getMainHandItem()) || WBTagRegistry.isHullMaterial(entity.getOffhandItem());
             }
             return false;
         }
@@ -3005,8 +3129,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
     }
 
-    // --- Ported Logic from 1.21.1 for 1.20.1 (Definitive Fix) ---
-
     private boolean isVectorControlActive() {
         if (this.level().isClientSide) {
             return isVectorControlActiveClient();
@@ -3043,7 +3165,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 pTravelVector = Vec3.ZERO;
             }
 
-            // --- BUOYANCY LOGIC (Ported from 1.21.1) ---
+            // --- BUOYANCY LOGIC ---
             boolean isBreachingAction = false;
             // Seek the goal if present
             for (net.minecraft.world.entity.ai.goal.WrappedGoal goal : this.goalSelector.getAvailableGoals()) {
@@ -3210,8 +3332,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             xxa = 0; // Prevent drift
         }
 
-        // Buoyancy is handled EXCLUSIVELY in travel() to prevent "up and down" quivering (1.21.1 Parity)
-        // Ensure we don't return vertical force here
+        // Buoyancy is handled EXCLUSIVELY in travel() to prevent "up and down" quivering;
+        // ensure we don't return vertical force here
         return new Vec3(0, 0, zza);
     }
 
@@ -3334,10 +3456,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     /**
-     * Returns the smoothed horizontal swim speed for animation purposes.
-     * Uses position delta (getX()-xo) which works on ALL clients, including non-pilot observers,
-     * because vanilla entity tracking syncs positions to every client each tick.
-     * Smoothed via exponential moving average to prevent jitter from entity tracking lerps.
+     * Smoothed horizontal swim speed for animation, derived from synced position delta
+     * (works on all clients) and EMA-filtered to avoid entity-tracking lerp jitter.
      */
     public float getAnimationSwimSpeed() {
         if (this.tickCount != lastAnimSpeedTick) {
@@ -3383,16 +3503,26 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     private void updatePartPositions() {
+        // Stable-skip: when the whale hasn't moved/rotated and parts already converged from the
+        // swim-cycle lerp, the entire computation re-derives the same positions. Skip it.
+        double whaleX = this.getX(), whaleY = this.getY(), whaleZ = this.getZ();
+        float whaleYaw = this.getYRot(), whalePitch = this.getXRot();
+        boolean noSwim = this.pitchLocked || this.hasAnchorDown() || this.getStationaryTicks() > 0 || this.platformsStable;
+        if (partSnapshotValid && partsConverged && noSwim
+                && whaleX == lastWhalePartX && whaleY == lastWhalePartY && whaleZ == lastWhalePartZ
+                && whaleYaw == lastWhalePartYaw && whalePitch == lastWhalePartPitch
+                && prevPartPositions[0] != null) {
+            return;
+        }
+        lastWhalePartX = whaleX; lastWhalePartY = whaleY; lastWhalePartZ = whaleZ;
+        lastWhalePartYaw = whaleYaw; lastWhalePartPitch = whalePitch;
+        partSnapshotValid = true;
 
-        float[] partDragFactors = new float[]{1f, 0.9f, 0.2f, 0.1f, 0.09f};
-
-        Vec3[] baseOffsets = {
-                new Vec3(0, 0, 6),      // Nose
-                new Vec3(0, 0, 2.5),    // Head
-                new Vec3(0, 0, -2.25),  // Body
-                new Vec3(0, 0, -7),     // Tail
-                new Vec3(0, 0, -11)     // Fluke
-        };
+        float[] partDragFactors = PART_DRAG_FACTORS;
+        Vec3[] baseOffsets = partOffsetsScratch;
+        for (int i = 0; i < PART_BASE_OFFSETS.length; i++) {
+            baseOffsets[i] = PART_BASE_OFFSETS[i];
+        }
 
         if (prevPartPositions[0] == null) {
             for (int i = 0; i < prevPartPositions.length; i++) {
@@ -3539,6 +3669,18 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 }
             }
         }
+
+        // Convergence check for next-tick stable-skip.
+        double maxDeltaSq = 0.0;
+        for (int i = 0; i < 5; i++) {
+            Vec3 cur = partPosition[i];
+            Vec3 prev = oldPartPosition[i];
+            if (prev == null) { maxDeltaSq = Double.POSITIVE_INFINITY; break; }
+            double dx = cur.x - prev.x, dy = cur.y - prev.y, dz = cur.z - prev.z;
+            double sq = dx * dx + dy * dy + dz * dz;
+            if (sq > maxDeltaSq) maxDeltaSq = sq;
+        }
+        partsConverged = maxDeltaSq <= PART_STABILITY_EPSILON_SQ;
     }
 
     private float calculateYaw(Vec3 from, Vec3 to) {
@@ -3642,33 +3784,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
 
     private void updatePlatformHeight() {
-        boolean isMounted = this.getControllingPassenger() != null;
-        float target = isMounted ? 4.0f : 4.55f;
-
-        // Detects state change
-        if (wasMounted != isMounted) {
-            platformHeightCooldown = 40; // 2 seconds
-        }
-        wasMounted = isMounted;
-
-        this.targetPlatformHeight = target;
-
-        // Waits for cooldown to finish before adjusting
-        if (platformHeightCooldown > 0) {
-            platformHeightCooldown--;
-            if (platformHeightCooldown > 20) return; // Waits 1 full second before starting
-        }
-
-        // More aggressive Lerp to avoid infinite drift
-        float lerpSpeed = 0.1f;
-        float newHeight = (float) Mth.lerp(lerpSpeed, this.currentPlatformHeight, targetPlatformHeight);
-
-        // Final snap to avoid infinite oscillation (Threshold increased to 0.01)
-        if (Math.abs(newHeight - targetPlatformHeight) < 0.01f) {
-            this.currentPlatformHeight = targetPlatformHeight;
-        } else {
-            this.currentPlatformHeight = newHeight;
-        }
+        // Unified offset — matches the NeoForge solution. The mount-state-driven variation in
+        // legacy Forge (4.0 helm vs 4.55 idle) created a 0.55-block gap during transitions; with
+        // a single target the platform offset is invariant and the whale's own buoyancy lerp is
+        // the only source of vertical motion, keeping decks in lockstep with the body.
+        this.targetPlatformHeight = 4.55f;
+        this.currentPlatformHeight = (float) Mth.lerp(0.1f, this.currentPlatformHeight, this.targetPlatformHeight);
     }
 
 

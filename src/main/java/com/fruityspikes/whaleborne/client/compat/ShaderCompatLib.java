@@ -4,10 +4,8 @@ import com.fruityspikes.whaleborne.Whaleborne;
 import net.minecraftforge.fml.ModList;
 
 /**
- * Detects whether Oculus (Forge shader mod) is loaded.
- * When present, the Hullback renderer uses a single-pass composited texture
- * instead of the vanilla dragonExplosionAlpha + entityDecal two-pass technique,
- * which Oculus does not handle correctly.
+ * Detects whether a shader mod (Oculus/Optifine) is loaded, so the Hullback renderer
+ * can fall back to a single-pass composited texture those mods handle correctly.
  */
 public class ShaderCompatLib {
 

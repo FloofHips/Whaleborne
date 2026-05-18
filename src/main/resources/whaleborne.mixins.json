@@ -7,7 +7,8 @@
   "plugin": "com.fruityspikes.whaleborne.mixin.WhaleborneMixinPlugin",
   "mixins": [
     "NeatCompatMixin",
-    "MobCategoryMixin"
+    "MobCategoryMixin",
+    "WakesEffectRuleMixin"
   ],
   "injectors": {
     "defaultRequire": 1

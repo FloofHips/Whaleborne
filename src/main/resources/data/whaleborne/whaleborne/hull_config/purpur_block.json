@@ -1,0 +1,20 @@
+{
+  "item": "minecraft:purpur_block",
+  "planks_required": 64,
+  "resistance": 1.5,
+  "armor_model": "default",
+  "platforms": [
+    { "part": "nose", "width": 5.5, "height": 0.5, "y_offset": 4.7 },
+    { "part": "head", "width": 6.5, "height": 0.5, "y_offset": 4.7 },
+    { "part": "body", "width": 7.0, "height": 0.5, "y_offset": 4.7 }
+  ],
+  "seats": [
+    { "offset": [0.0, 5.5, 0.0],     "part_pos": "nose", "part_rot": "head" },
+    { "offset": [0.0, 5.5, -3.0],    "part_pos": "nose", "part_rot": "head" },
+    { "offset": [1.5, 5.5, 0.3],     "part_pos": "body", "part_rot": "body" },
+    { "offset": [-1.5, 5.5, 0.3],    "part_pos": "body", "part_rot": "body" },
+    { "offset": [1.5, 5.5, -1.75],   "part_pos": "body", "part_rot": "body" },
+    { "offset": [-1.5, 5.5, -1.75],  "part_pos": "body", "part_rot": "body" },
+    { "offset": [0.0, 1.6, -0.8],    "part_pos": "fluke", "part_rot": "fluke" }
+  ]
+}

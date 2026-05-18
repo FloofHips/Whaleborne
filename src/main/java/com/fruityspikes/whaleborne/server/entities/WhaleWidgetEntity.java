@@ -190,13 +190,8 @@ public abstract class WhaleWidgetEntity extends Entity {
     }
 
     /**
-     * When riding a HullbackEntity, ignore entity tracking's lerpTo() entirely.
-     * Entity.lerpTo() does an immediate snap of position AND rotation.
-     * This corrupts prevWidgetYRot/prevWidgetXRot before rotatePassengers()
-     * can capture the correct local values, causing render interpolation
-     * to jitter between the server-snapped rotation and the locally
-     * calculated rotation. Position is handled by positionRider(), and
-     * rotation is handled by rotatePassengers() — both run every tick.
+     * When riding a HullbackEntity, skip lerpTo(): its snap corrupts prevWidgetYRot/XRot
+     * and jitters interpolation; positionRider()/rotatePassengers() handle it each tick.
      */
     @Override
     public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps, boolean teleport) {
