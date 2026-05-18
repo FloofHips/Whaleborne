@@ -3,10 +3,10 @@ name: Build
 on:
   push:
     branches:
-      - main
+      - datadriven
   pull_request:
     branches:
-      - main
+      - datadriven
 
 jobs:
   build:
