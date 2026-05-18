@@ -27,10 +27,8 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     public float prevWheelRotation;
 
     /**
-     * Client-side predicted wheel rotation.  On the LOCAL client we replicate
-     * the server's {@code wheel += xxa / 10} logic so the wheel responds
-     * instantly to input without waiting for the entityData round-trip.
-     * A slow blend towards the server-synced value (entityData) prevents drift.
+     * Client-predicted wheel rotation: replicates the server's {@code wheel += xxa/10}
+     * for instant input response, then slowly blends to the synced value to avoid drift.
      */
     private float clientWheelRotation;
 
@@ -82,9 +80,7 @@ public class HelmEntity extends RideableWhaleWidgetEntity implements PlayerRidea
     }
 
     /**
-     * Returns the wheel rotation the renderer should display.
-     * On the client this is the locally-predicted value;
-     * elsewhere it falls back to the synced entityData value.
+     * Render wheel rotation: locally-predicted on the client, synced entityData elsewhere.
      */
     public float getRenderWheelRotation() {
         return this.level().isClientSide ? this.clientWheelRotation : this.getWheelRotation();

@@ -31,6 +31,9 @@ public class ClientPacketHandler {
 
                 whale.inventory.setItem(HullbackEntity.INV_SLOT_ARMOR, packet.getArmorItem());
                 whale.inventory.setItem(HullbackEntity.INV_SLOT_CROWN, packet.getCrownItem());
+                // Saddle slot must be set before updateContainerEquipment runs, otherwise it
+                // recomputes flag(4) from an empty client-side slot and clears the saddle bit.
+                whale.inventory.setItem(HullbackEntity.INV_SLOT_SADDLE, packet.getSaddleItem());
 
                 whale.getEntityData().set(HullbackEntity.DATA_ARMOR, packet.getArmorItem());
                 whale.getEntityData().set(HullbackEntity.DATA_CROWN_ID, packet.getCrownItem());
@@ -38,6 +41,18 @@ public class ClientPacketHandler {
 
                 whale.updateContainerEquipment();
             }
+        }
+    }
+
+    public static void handleSeatLayoutSync(SeatLayoutPacket packet) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null) return;
+        Entity entity = minecraft.level.getEntity(packet.getEntityId());
+        if (entity instanceof HullbackEntity whale) {
+            com.fruityspikes.whaleborne.server.entities.components.hullback.SeatLayout layout =
+                    new com.fruityspikes.whaleborne.server.entities.components.hullback.SeatLayout(
+                            packet.getSeats(), packet.getFlukeSeatIndex());
+            whale.setSeatLayout(layout);
         }
     }
 }

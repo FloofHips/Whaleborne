@@ -1,74 +1,73 @@
 package com.fruityspikes.whaleborne.server.entities;
 
-import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.entity.*;
-import net.minecraft.world.entity.decoration.HangingEntity;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityDimensions;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.AABB;
-
-import javax.annotation.Nullable;
 
 public class HullbackWalkableEntity extends Entity {
+
+    private static final EntityDataAccessor<Float> DATA_WIDTH =
+            SynchedEntityData.defineId(HullbackWalkableEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> DATA_HEIGHT =
+            SynchedEntityData.defineId(HullbackWalkableEntity.class, EntityDataSerializers.FLOAT);
 
     public HullbackWalkableEntity(EntityType<?> entityType, Level level) {
         super(entityType, level);
     }
 
-    /*
-    protected void recalculateBoundingBox() {
-        double x = this.getX();
-        double y = this.getY();
-        double z = this.getZ();
-
-        if (this.getMovementEmission().emitsAnything()) {
-            this.setBoundingBox(new AABB(x, y, z, x, y, z));
-        } else {
-            double halfWidth = 2.5;
-            this.setBoundingBox(new AABB(
-                    x - halfWidth, y, z - halfWidth,
-                    x + halfWidth, y + 1, z + halfWidth
-            ));
-        }
+    public void applyDimensions(float width, float height) {
+        this.entityData.set(DATA_WIDTH, Math.max(0.1f, width));
+        this.entityData.set(DATA_HEIGHT, Math.max(0.1f, height));
+        this.refreshDimensions();
     }
-    */
-    public void tick() {
-        super.tick();
-        if (this.tickCount % 200 == 0) {
-            if (this.level().getEntities(this, this.getBoundingBox().inflate(1F, 1F, 1F), EntitySelector.NO_CREATIVE_OR_SPECTATOR.and((entity) -> (entity instanceof HullbackPartEntity))).isEmpty())
-                this.discard();
+
+    @Override
+    public EntityDimensions getDimensions(Pose pose) {
+        if (this.entityData == null) return super.getDimensions(pose);
+        return EntityDimensions.fixed(this.entityData.get(DATA_WIDTH), this.entityData.get(DATA_HEIGHT));
+    }
+
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        super.onSyncedDataUpdated(accessor);
+        if (DATA_WIDTH.equals(accessor) || DATA_HEIGHT.equals(accessor)) {
+            this.refreshDimensions();
         }
     }
 
-    public boolean isPickable() {
-        return false;
-    }
-
-    public boolean isPushable() {
-        return false;
-    }
+    // Lifecycle owned by HullbackEntity: tiles do not self-discard.
 
     @Override
-    public boolean mayInteract(Level level, BlockPos pos) {
-        return false;
-    }
+    public boolean isPickable() { return false; }
 
     @Override
-    public boolean canBeCollidedWith() {
-        return true;// this.getMovementEmission().emitsAnything();
-    }
+    public boolean isPushable() { return false; }
+
     @Override
-    protected void defineSynchedData() {}
+    public boolean mayInteract(Level level, BlockPos pos) { return false; }
+
+    @Override
+    public boolean canBeCollidedWith() { return true; }
+
+    @Override
+    protected void defineSynchedData() {
+        this.entityData.define(DATA_WIDTH, 1.5f);
+        this.entityData.define(DATA_HEIGHT, 0.5f);
+    }
+
     @Override
     protected void readAdditionalSaveData(CompoundTag compoundTag) {}
+
     @Override
     protected void addAdditionalSaveData(CompoundTag compoundTag) {}
 
     @Override
-    public boolean shouldBeSaved() {
-        return false;
-    }
+    public boolean shouldBeSaved() { return false; }
 }

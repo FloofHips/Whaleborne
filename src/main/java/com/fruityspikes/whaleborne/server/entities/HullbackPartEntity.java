@@ -45,7 +45,7 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             return parent.interactDebug(player, hand);
         }
 
-        if (heldItem.getItem() instanceof SaddleItem || heldItem.is(WBTagRegistry.HULLBACK_EQUIPPABLE)) {
+        if (heldItem.getItem() instanceof SaddleItem || WBTagRegistry.isHullMaterial(heldItem)) {
             return parent.interactArmor(player, hand, this, topClicked);
         }
 

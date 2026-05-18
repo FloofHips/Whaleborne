@@ -72,12 +72,8 @@ public class HullbackArmorTextureManager {
                             int maskY = (int) ((y / (float) height) * maskImage.getHeight());
                             int maskColor = maskImage.getPixelRGBA(maskX, maskY);
                             
-                            // EXACT VANILLA REPLICATION:
-                            // dragonExplosionAlpha uses rendertype_entity_alpha shader.
-                            // Vertex color alpha = progress * 255 acts as the DISCARD THRESHOLD.
-                            // Mask pixels with alpha ABOVE threshold survive → entityDecal draws wood.
-                            // Mask pixels with alpha AT or BELOW threshold → discarded → transparent.
-                            // NativeImage.getPixelRGBA: bits 24-31 = Alpha.
+                            // Replicates vanilla dragonExplosionAlpha: progress*255 is the
+                            // discard threshold; mask alpha (bits 24-31) above it keeps wood.
                             int maskAlpha = (maskColor >> 24) & 0xFF;
                             int threshold = (int)(progress * 255);
                             

@@ -23,6 +23,9 @@ public class WhaleborneMixinPlugin implements IMixinConfigPlugin {
             // Check if class exists without loading it to avoid MixinTargetAlreadyLoadedException
             return this.getClass().getClassLoader().getResource("vazkii/neat/HealthBarRenderer.class") != null;
         }
+        if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesEffectRuleMixin")) {
+            return this.getClass().getClassLoader().getResource("com/leclowndu93150/wakes/utils/WakesUtils.class") != null;
+        }
         return true;
     }
 

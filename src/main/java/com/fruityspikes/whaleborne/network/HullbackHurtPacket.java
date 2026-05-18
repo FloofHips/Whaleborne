@@ -10,12 +10,14 @@ public class HullbackHurtPacket {
     private final int entityId;
     private final ItemStack armorItem;
     private final ItemStack crownItem;
+    private final ItemStack saddleItem;
     private final byte flags;
 
-    public HullbackHurtPacket(int entityId, ItemStack armorItem, ItemStack crownItem, byte flags) {
+    public HullbackHurtPacket(int entityId, ItemStack armorItem, ItemStack crownItem, ItemStack saddleItem, byte flags) {
         this.entityId = entityId;
         this.armorItem = armorItem;
         this.crownItem = crownItem;
+        this.saddleItem = saddleItem;
         this.flags = flags;
     }
 
@@ -23,12 +25,14 @@ public class HullbackHurtPacket {
         buffer.writeInt(msg.entityId);
         buffer.writeItem(msg.armorItem);
         buffer.writeItem(msg.crownItem);
+        buffer.writeItem(msg.saddleItem);
         buffer.writeByte(msg.flags);
     }
 
     public static HullbackHurtPacket decode(FriendlyByteBuf buffer) {
         return new HullbackHurtPacket(
                 buffer.readInt(),
+                buffer.readItem(),
                 buffer.readItem(),
                 buffer.readItem(),
                 buffer.readByte()
@@ -47,5 +51,6 @@ public class HullbackHurtPacket {
     public int getEntityId() { return entityId; }
     public ItemStack getArmorItem() { return armorItem; }
     public ItemStack getCrownItem() { return crownItem; }
+    public ItemStack getSaddleItem() { return saddleItem; }
     public byte getFlags() { return flags; }
 }

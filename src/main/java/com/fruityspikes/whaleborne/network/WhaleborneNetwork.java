@@ -40,6 +40,12 @@ public class WhaleborneNetwork {
                 ToggleControlPayload::encode,
                 ToggleControlPayload::decode,
                 ToggleControlPayload::handle);
+
+        INSTANCE.registerMessage(getPacketID(),
+                SeatLayoutPacket.class,
+                SeatLayoutPacket::encode,
+                SeatLayoutPacket::decode,
+                SeatLayoutPacket::handle);
     }
 
     public static int getPacketID() {

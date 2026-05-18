@@ -15,6 +15,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
@@ -97,9 +98,13 @@ public class Whaleborne
     }
 
 
+    private static final com.fruityspikes.whaleborne.server.data.HullConfigManager HULL_CONFIG_MANAGER =
+            new com.fruityspikes.whaleborne.server.data.HullConfigManager();
+
     @SubscribeEvent
     public void register(AddReloadListenerEvent event) {
         event.addListener(Whaleborne.PROXY.getHullbackDirtManager());
+        event.addListener(HULL_CONFIG_MANAGER);
     }
     // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
@@ -155,9 +160,14 @@ public class Whaleborne
             LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
         }
         @SubscribeEvent
+        public static void registerReloadListeners(RegisterClientReloadListenersEvent event) {
+            event.registerReloadListener((ResourceManagerReloadListener) resourceManager -> ArmorTextureResolver.clearCache());
+        }
+
+        @SubscribeEvent
         public static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
             event.registerLayerDefinition(WBEntityModelLayers.HULLBACK, HullbackModel::createBodyLayer);
-            event.registerLayerDefinition(WBEntityModelLayers.HULLBACK_ARMOR, HullbackArmorModel::createBodyLayer);
+            event.registerLayerDefinition(WBEntityModelLayers.HULLBACK_ARMOR, HullbackArmorModel::createDataDrivenLayer);
             event.registerLayerDefinition(WBEntityModelLayers.SAIL, SailModel::createBodyLayer);
             event.registerLayerDefinition(WBEntityModelLayers.HELM, HelmModel::createBodyLayer);
             event.registerLayerDefinition(WBEntityModelLayers.MAST, MastModel::createBodyLayer);
