@@ -82,7 +82,7 @@ public class Config {
     }
 
     static final ForgeConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
-    static final ForgeConfigSpec SERVER_SPEC = SERVER_BUILDER.build();
+    public static final ForgeConfigSpec SERVER_SPEC = SERVER_BUILDER.build();
 
     public static double hullbackSpawnChance;
     public static int hullbackSpawnCap;
