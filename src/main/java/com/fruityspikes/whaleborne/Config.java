@@ -91,7 +91,7 @@ public class Config {
     }
 
     static final ModConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
-    static final ModConfigSpec SERVER_SPEC = SERVER_BUILDER.build();
+    public static final ModConfigSpec SERVER_SPEC = SERVER_BUILDER.build();
 
     public static double hullbackSpawnChance;
     public static int hullbackSpawnCap;
