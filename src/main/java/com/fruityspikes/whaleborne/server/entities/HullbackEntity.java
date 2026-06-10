@@ -1002,11 +1002,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        // 10% chance to sing instead of the usual ambient vocalization
-        SoundEvent sound = this.random.nextInt(10) == 0
-                ? WBSoundRegistry.HULLBACK_SING.get()
-                : WBSoundRegistry.HULLBACK_AMBIENT.get();
-        playSound(sound, Config.SOUND_DISTANCE.get().floatValue(), 1);
+        playSound(getAmbientSound(), Config.SOUND_DISTANCE.get().floatValue(), 1);
     }
 
     @Override
@@ -1018,6 +1014,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @Override
     protected SoundEvent getSwimSound() {
         return WBSoundRegistry.HULLBACK_SWIM.get();
+    }
+
+    @Override
+    protected SoundEvent getAmbientSound() {
+        return this.random.nextInt(10) == 0
+                ? WBSoundRegistry.HULLBACK_SING.get()
+                : WBSoundRegistry.HULLBACK_AMBIENT.get();
     }
 
     @Nullable
@@ -3492,6 +3495,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     public float getOldPartXRot(int i) {
         return oldPartXRot[i];
+    }
+
+    public boolean arePartsInitialized() {
+        return oldPartPosition[0] != null;
+    }
+
+    public static Vec3 getRestPartOffset(int i) {
+        return PART_BASE_OFFSETS[i];
     }
 
     public void setOldPosAndRots() {
