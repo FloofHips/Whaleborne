@@ -34,11 +34,6 @@
         "name": "whaleborne:entity/hullback/ambient_5",
         "attenuation_distance": 64,
         "volume": 5
-      },
-      {
-        "name": "whaleborne:entity/hullback/ambient_6",
-        "attenuation_distance": 64,
-        "volume": 5
       }
     ],
     "subtitle": "subtitles.entity.hullback.ambient"

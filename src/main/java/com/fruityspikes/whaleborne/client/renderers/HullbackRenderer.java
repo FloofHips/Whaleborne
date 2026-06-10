@@ -202,23 +202,27 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     private void renderPart(HullbackEntity pEntity, PoseStack poseStack, MultiBufferSource buffer, float partialTicks, int packedLight, ModelPart part, ModelPart armorPart, int index, float height, float width) {
         poseStack.pushPose();
 
-        Vec3 finalPos = Vec3.ZERO;
+        boolean simulated = pEntity.arePartsInitialized();
 
-        if(pEntity.getOldPartPos(index) != null){
+        Vec3 relative;
+        if (simulated) {
             Vec3 pos = pEntity.getPartPos(index);
             Vec3 oldPos = pEntity.getOldPartPos(index);
-            finalPos = oldPos.lerp(pos, partialTicks);
+            Vec3 finalPos = oldPos.lerp(pos, partialTicks);
+            relative = finalPos.subtract(pEntity.getPosition(partialTicks));
+        } else {
+            relative = HullbackEntity.getRestPartOffset(index);
         }
 
         part.resetPose();
         part.setPos(0,0,0);
 
         poseStack.mulPose(Axis.XP.rotationDegrees(180));
-        poseStack.translate(finalPos.x - pEntity.getPosition(partialTicks).x, - (finalPos.y - pEntity.getPosition(partialTicks).y), -(finalPos.z - pEntity.getPosition(partialTicks).z));
+        poseStack.translate(relative.x, -relative.y, -relative.z);
 
         Quaternionf rotation = new Quaternionf();
 
-        if(pEntity.getOldPartPos(index) != null) {
+        if(simulated) {
             float yRot = pEntity.getPartYRot(index);
             float xRot = pEntity.getPartXRot(index);
             float oldYRot = pEntity.getOldPartYRot(index);

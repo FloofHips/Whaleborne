@@ -61,6 +61,10 @@ public class HullbackPartManager {
     };
     private static final double[] MAX_DIST = {10.0, 3.55, 4.8, 4.8, 4.1};
 
+    public static Vec3 getBaseOffset(int i) {
+        return BASE_OFFSETS[i];
+    }
+
     /** Pre-allocated working array reused every tick instead of {@code new Vec3[5]}. */
     private final Vec3[] partOffsetsScratch = new Vec3[PART_COUNT];
     // Stable-skip snapshot for updatePartPositions.
