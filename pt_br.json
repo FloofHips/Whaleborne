@@ -1,0 +1,38 @@
+{
+  "itemGroup.whaleborne.whaleborne": "Baleias-Navio",
+
+  "block.whaleborne.barnacle": "Bloco de Craca",
+  "block.whaleborne.rough_barnacle": "Bloco de Craca Áspero",
+
+  "item.whaleborne.barnacle": "Bloco de Craca",
+  "item.whaleborne.rough_barnacle": "Bloco de Craca Áspero",
+
+  "subtitles.block.barnacle.organ": "Craca canta",
+
+  "item.whaleborne.sail": "Velame",
+  "item.whaleborne.anchor": "Âncora",
+  "item.whaleborne.mast": "Mastro",
+  "item.whaleborne.helm": "Timão",
+  "item.whaleborne.cannon": "Canhão",
+
+  "entity.whaleborne.sail": "Velame",
+  "entity.whaleborne.anchor": "Âncora",
+  "entity.whaleborne.anchor_head": "Cabeça da Âncora",
+  "entity.whaleborne.mast": "Mastro",
+  "entity.whaleborne.helm": "Timão",
+  "entity.whaleborne.cannon": "Canhão",
+
+  "menu.title.whaleborne.cannon": "Canhão",
+
+  "item.whaleborne.hullback_spawn_egg": "Ovo Gerador de Baleia",
+  "entity.whaleborne.hullback": "Baleia",
+
+  "subtitles.entity.hullback.ambient": "Baleia canta",
+  "subtitles.entity.hullback.hurt": "Baleia se machuca",
+  "subtitles.entity.hullback.death": "Baleia morre",
+  "subtitles.entity.hullback.happy": "Baleia satisfeita",
+  "subtitles.entity.hullback.tame": "Baleia canta felizmente",
+  "subtitles.entity.hullback.mad": "Baleia resmunga",
+  "subtitles.entity.hullback.swim": "Baleia nada",
+  "subtitles.entity.hullback.breathe": "Baleia respira"
+}
