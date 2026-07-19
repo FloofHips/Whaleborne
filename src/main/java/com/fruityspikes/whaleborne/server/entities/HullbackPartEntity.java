@@ -32,6 +32,11 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
         super.tick();
     }
 
+    @Override
+    public boolean isPushedByFluid() {
+        return false;
+    }
+
     public EntityDimensions getSize() {
         return size;
     }

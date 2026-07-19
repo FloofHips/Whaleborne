@@ -153,8 +153,10 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
-    modImplementation "curse.maven:neat-238372:5838485"
-    modImplementation "curse.maven:wakes-reforged-1223529:7494279"
+    modCompileOnly "curse.maven:neat-238372:5838485"
+    modLocalRuntime "curse.maven:neat-238372:5838485"
+    modCompileOnly "curse.maven:wakes-reforged-1223529:7494279"
+    modLocalRuntime "curse.maven:wakes-reforged-1223529:7494279"
 }
 
 // Uncomment the lines below if you wish to configure mixin. The mixin file should be named modid.mixins.json.

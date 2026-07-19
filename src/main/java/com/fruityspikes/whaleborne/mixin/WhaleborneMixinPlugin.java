@@ -23,6 +23,13 @@ public class WhaleborneMixinPlugin implements IMixinConfigPlugin {
             // Check if class exists without loading it to avoid MixinTargetAlreadyLoadedException
             return this.getClass().getClassLoader().getResource("vazkii/neat/HealthBarRenderer.class") != null;
         }
+        if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesRenderFrustumMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesBrickRecolorMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesColorShaderSkipMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesBrickWaterColorCacheMixin")) {
+            return net.minecraftforge.fml.loading.FMLEnvironment.dist.isClient()
+                    && this.getClass().getClassLoader().getResource("com/leclowndu93150/wakes/simulation/Brick.class") != null;
+        }
         return true;
     }
 
