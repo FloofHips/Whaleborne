@@ -29,6 +29,7 @@ public class HullbackApproachPlayerGoal extends Goal {
     private Player targetPlayer;
     private boolean approachFromRight;
     private Vec3 targetPosition;
+    private Vec3 lastRepathTarget;
     private Vec3 approachDirection; // Fixed direction computed once at start
 
     public HullbackApproachPlayerGoal(HullbackEntity hullback, float speedModifier) {
@@ -91,6 +92,7 @@ public class HullbackApproachPlayerGoal extends Goal {
     public void stop() {
         this.targetPlayer = null;
         this.targetPosition = null;
+        this.lastRepathTarget = null;
         this.approachDirection = null;
         this.hullback.setTarget(null);
         this.hullback.setApproachingPlayer(false);
@@ -106,9 +108,17 @@ public class HullbackApproachPlayerGoal extends Goal {
         // Use stable offset direction computed at start — does not depend on player look
         this.targetPosition = this.targetPlayer.position().add(this.approachDirection);
 
-        // NATIVE NAVIGATION: Tries pathfinding
-        this.hullback.getNavigation().moveTo(
-                targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
+        // Throttle pathfinding: repath on this interval, or immediately when the target moves
+        // enough, instead of every tick. Rotation below still runs each tick.
+        int repathInterval = 20;
+        if (repathInterval <= 1 || this.lastRepathTarget == null
+                || this.targetPosition.distanceToSqr(this.lastRepathTarget) > 4.0
+                || this.hullback.getNavigation().isDone()
+                || this.hullback.tickCount % repathInterval == 0) {
+            this.hullback.getNavigation().moveTo(
+                    targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
+            this.lastRepathTarget = this.targetPosition;
+        }
 
         // SMOOTH ROTATION toward the player
         Vec3 toPlayer = targetPlayer.position().subtract(hullback.position());

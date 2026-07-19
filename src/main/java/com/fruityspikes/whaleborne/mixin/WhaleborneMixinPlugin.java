@@ -29,8 +29,24 @@ public class WhaleborneMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.HealthBarsVisibilityMixin")) {
             return this.getClass().getClassLoader().getResource("fuzs/healthbars/client/helper/EntityVisibilityHelper.class") != null;
         }
+        if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.HealthBarsGuiMixin")) {
+            return this.getClass().getClassLoader().getResource("fuzs/healthbars/client/handler/GuiRenderingHandler.class") != null;
+        }
+        if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.HealthBarsPickMixin")) {
+            return this.getClass().getClassLoader().getResource("fuzs/healthbars/client/handler/PickEntityHandler.class") != null;
+        }
         if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesEffectRuleMixin")) {
             return this.getClass().getClassLoader().getResource("com/leclowndu93150/wakes/utils/WakesUtils.class") != null;
+        }
+        if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesRenderFrustumMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesBrickRecolorMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesColorShaderSkipMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesBrickWaterColorCacheMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakeColorInvoker")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesBlendCacheMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesPixelColorMixin")) {
+            return net.neoforged.fml.loading.FMLLoader.getDist().isClient()
+                    && this.getClass().getClassLoader().getResource("com/leclowndu93150/wakes/simulation/Brick.class") != null;
         }
         return true;
     }

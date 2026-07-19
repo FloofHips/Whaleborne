@@ -82,6 +82,9 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
         return ARMOR_TEXTURE;
     }
 
+    private HullbackArmorModel<HullbackEntity> frameArmorModel;
+    private boolean frameArmorResolved;
+
     @Override
     public void render(HullbackEntity pEntity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         if (isRenderingInHealthbarsGui) {
@@ -164,11 +167,14 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
         // Water wake overlay — code-generated foam on the water surface
         HullbackWakeRenderer.renderWake(pEntity, partialTicks, poseStack, buffer);
 
+        this.frameArmorModel = getArmorModelForMaterial(getMaterialName(pEntity));
+        this.frameArmorResolved = true;
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getHead(), this.armorModel.getHead(), 0, 5.0F, 5.0F);
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getBody(), this.armorModel.getBody(), 2, 5.0F, 5.0F);
 
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getTail(), null, 3, 2.5F, 2.5F);
         renderPart(pEntity, poseStack, buffer, partialTicks, packedLight, this.model.getFluke(), this.armorModel.getFluke(), 4, 0.6F, 4.0F);
+        this.frameArmorResolved = false;
 
         if(entityRenderDispatcher.shouldRenderHitBoxes())
             renderDebug(pEntity, poseStack, buffer, partialTicks);
@@ -325,8 +331,9 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
 
             // Per-material model override (datapack-driven). Falls back to default armorPart
             // when no override is defined or the override has no geometry for this index.
-            String material = getMaterialName(pEntity);
-            HullbackArmorModel<HullbackEntity> materialModel = getArmorModelForMaterial(material);
+            HullbackArmorModel<HullbackEntity> materialModel = this.frameArmorResolved
+                    ? this.frameArmorModel
+                    : getArmorModelForMaterial(getMaterialName(pEntity));
             ModelPart effectivePart = armorPart;
             if (materialModel != null && materialModel != armorModel) {
                 switch (index) {
@@ -472,14 +479,16 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     private void renderTopDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight, HullbackEntity parent, int index) {
         boolean flag = parent.hurtTime > 0;
         BlockState[][] array = parent.getWhaleDirt().getDirtArray(index, false);
+        if (array == null) return;
 
-        if(array!=null){
-            for (int x = 0; x < array.length; x++) {
-                for (int y = 0; y < array[x].length; y++) {
-                    poseStack.translate(y, 0, x);
-                    Minecraft.getInstance().getBlockRenderer().renderSingleBlock(array[x][y], poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
-                    poseStack.translate(-y, 0, -x);
-                }
+        var blockRenderer = Minecraft.getInstance().getBlockRenderer();
+        for (int x = 0; x < array.length; x++) {
+            for (int y = 0; y < array[x].length; y++) {
+                BlockState state = array[x][y];
+                if (state == null || state.isAir()) continue;
+                poseStack.translate(y, 0, x);
+                blockRenderer.renderSingleBlock(state, poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+                poseStack.translate(-y, 0, -x);
             }
         }
     }
@@ -487,24 +496,26 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
     public void renderBottomDirt(PoseStack poseStack, MultiBufferSource buffer, int packedLight, HullbackEntity parent, int index) {
         boolean flag = parent.hurtTime > 0;
         BlockState[][] array = parent.getWhaleDirt().getDirtArray(index, true);
+        if (array == null) return;
 
-        if(array!=null){
-            for (int x = 0; x < array.length; x++) {
-                for (int y = 0; y < array[x].length; y++) {
-                    poseStack.translate(y, 0, x);
-                    Minecraft.getInstance().getBlockRenderer().renderSingleBlock(array[x][y], poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
-                    if(array[x][y].is(Blocks.TALL_SEAGRASS)) {
-                        poseStack.translate(0, 1, 0);
-                        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(array[x][y].setValue(TallSeagrassBlock.HALF, DoubleBlockHalf.UPPER), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
-                        poseStack.translate(0, -1, 0);
-                    }
-                    if(array[x][y].is(Blocks.KELP_PLANT)) {
-                        poseStack.translate(0, 1, 0);
-                        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
-                        poseStack.translate(0, -1, 0);
-                    }
-                    poseStack.translate(-y, 0, -x);
+        var blockRenderer = Minecraft.getInstance().getBlockRenderer();
+        for (int x = 0; x < array.length; x++) {
+            for (int y = 0; y < array[x].length; y++) {
+                BlockState state = array[x][y];
+                if (state == null || state.isAir()) continue;
+                poseStack.translate(y, 0, x);
+                blockRenderer.renderSingleBlock(state, poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+                if(state.is(Blocks.TALL_SEAGRASS)) {
+                    poseStack.translate(0, 1, 0);
+                    blockRenderer.renderSingleBlock(state.setValue(TallSeagrassBlock.HALF, DoubleBlockHalf.UPPER), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+                    poseStack.translate(0, -1, 0);
                 }
+                if(state.is(Blocks.KELP_PLANT)) {
+                    poseStack.translate(0, 1, 0);
+                    blockRenderer.renderSingleBlock(Blocks.KELP.defaultBlockState(), poseStack, buffer, packedLight, OverlayTexture.pack(0.0F, flag));
+                    poseStack.translate(0, -1, 0);
+                }
+                poseStack.translate(-y, 0, -x);
             }
         }
     }
@@ -531,11 +542,12 @@ public class HullbackRenderer<T extends HullbackEntity> extends MobRenderer<Hull
         } else if (hullbackEntity.noCulling) {
             return true;
         } else {
-            ArrayList<AABB> list = new ArrayList<>(List.of());
             for (HullbackPartEntity entity : hullbackEntity.getSubEntities()) {
-                list.add(entity.getBoundingBoxForCulling().inflate(0.5F));
+                if (frustum.isVisible(entity.getBoundingBoxForCulling().inflate(0.5F))) {
+                    return true;
+                }
             }
-            return list.stream().anyMatch(frustum::isVisible);
+            return false;
         }
     }
 }

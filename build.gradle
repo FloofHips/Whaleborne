@@ -93,13 +93,15 @@ configurations {
 }
 
 dependencies {
-    // Neat dependency
-    implementation "curse.maven:neat-238372:5635938"
-    // Health Bars dependency
-    implementation "curse.maven:health-bars-1367734:7122333"
-    // Puzzles Lib dependency
-    implementation "curse.maven:puzzles-lib-495476:5838627"
-    implementation "curse.maven:wakes-reforged-1223529:7562282"
+    // Soft dependencies: compiled against for their gated compat mixins, loaded only if present.
+    compileOnly "curse.maven:neat-238372:5635938"
+    localRuntime "curse.maven:neat-238372:5635938"
+    compileOnly "curse.maven:health-bars-1367734:7122333"
+    localRuntime "curse.maven:health-bars-1367734:7122333"
+    compileOnly "curse.maven:puzzles-lib-495476:5838627"
+    localRuntime "curse.maven:puzzles-lib-495476:5838627"
+    compileOnly "curse.maven:wakes-reforged-1223529:7562282"
+    localRuntime "curse.maven:wakes-reforged-1223529:7562282"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

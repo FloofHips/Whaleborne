@@ -113,6 +113,12 @@ public final class WakesCompat {
         if (!level.isClientSide) return;
         if (hullback.wakeIntensity < 0.01f && hullback.flukeSplashIntensity < 0.01f) return;
         if (!hullback.isInLiquid()) return; // isInLiquid covers isInWater
+        if (hullback.getY() < level.getSeaLevel() - 8.0) return;
+        if (com.fruityspikes.whaleborne.Config.hullbackWakeMaxDistanceSq > 0.0) {
+            Vec3 camPos = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+            if (hullback.distanceToSqr(camPos.x, camPos.y, camPos.z)
+                    > com.fruityspikes.whaleborne.Config.hullbackWakeMaxDistanceSq) return;
+        }
         int tick = hullback.tickCount;
         refreshConfigIfNeeded(tick);
         if (cachedDisabled) return;
@@ -198,7 +204,8 @@ public final class WakesCompat {
                     Set<WakeNode> nodes = WakeNode.Factory.thickNodeTrail(
                             px, pz, cx, cz, floorY,
                             cachedHullStrength * sMult,
-                            Math.sqrt(vSq), widths[i]);
+                            Math.sqrt(vSq),
+                            (float) (widths[i] * com.fruityspikes.whaleborne.Config.hullbackWakeWidthScale));
                     for (WakeNode node : nodes) {
                         handler.insert(node);
                     }
@@ -329,7 +336,7 @@ public final class WakesCompat {
                         prev[0], prev[1], cx, cz, floorY,
                         cachedWidgetStrength * sMult,
                         Math.sqrt(vSq),
-                        entity.getBbWidth());
+                        (float) (entity.getBbWidth() * com.fruityspikes.whaleborne.Config.hullbackWakeWidthScale));
                 for (WakeNode node : nodes) {
                     handler.insert(node);
                 }
