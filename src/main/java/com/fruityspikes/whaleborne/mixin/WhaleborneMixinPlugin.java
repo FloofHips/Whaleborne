@@ -26,6 +26,13 @@ public class WhaleborneMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesEffectRuleMixin")) {
             return this.getClass().getClassLoader().getResource("com/leclowndu93150/wakes/utils/WakesUtils.class") != null;
         }
+        if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesRenderFrustumMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesBrickRecolorMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesColorShaderSkipMixin")
+                || mixinClassName.equals("com.fruityspikes.whaleborne.mixin.WakesBrickWaterColorCacheMixin")) {
+            return net.minecraftforge.fml.loading.FMLEnvironment.dist.isClient()
+                    && this.getClass().getClassLoader().getResource("com/leclowndu93150/wakes/simulation/Brick.class") != null;
+        }
         return true;
     }
 

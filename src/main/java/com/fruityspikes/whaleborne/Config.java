@@ -69,9 +69,41 @@ public class Config {
             .comment("Built-in procedural Hullback wake rendering (foam, bow splash); independent from the Wakes mod's own integration.")
             .define("hullbackWakeRendering", false);
 
+    public static final ForgeConfigSpec.BooleanValue WAKES_RECOLOR_FRUSTUM_CULLING;
+    public static final ForgeConfigSpec.BooleanValue WAKES_RECOLOR_TEMPORAL_LOD;
+    public static final ForgeConfigSpec.DoubleValue HULLBACK_WAKE_MAX_DISTANCE;
+    public static final ForgeConfigSpec.DoubleValue HULLBACK_WAKE_WIDTH_SCALE;
+
     public static final ForgeConfigSpec.DoubleValue NEAT_OFFSET;
 
     static {
+        if (net.minecraftforge.fml.ModList.get().isLoaded("wakes")) {
+            WAKES_RECOLOR_FRUSTUM_CULLING = CLIENT_BUILDER
+                    .comment("Performance: only recolor wake bricks that are on screen.",
+                             "Wakes recolors every wake every tick regardless of the camera. Gating that to the view",
+                             "frustum removes wasted work with no gameplay effect. Off-screen wakes are repopulated",
+                             "before they scroll into view. Disable if a shader pack shows missing distant foam.")
+                    .define("wakesRecolorFrustumCulling", true);
+            WAKES_RECOLOR_TEMPORAL_LOD = CLIENT_BUILDER
+                    .comment("Performance: refresh distant on-screen wake bricks every few ticks instead of every",
+                             "tick (near bricks stay every tick). New and growing wakes are never delayed, only far,",
+                             "already-drawn foam animates a little less often. No change to wake size or coverage.")
+                    .define("wakesRecolorTemporalLod", true);
+            HULLBACK_WAKE_MAX_DISTANCE = CLIENT_BUILDER
+                    .comment("Performance: skip feeding wakes to the Wakes mod for whales farther than this many blocks",
+                             "from the camera. 0 = unlimited (original behavior).")
+                    .defineInRange("hullbackWakeMaxDistance", 0.0, 0.0, 512.0);
+            HULLBACK_WAKE_WIDTH_SCALE = CLIENT_BUILDER
+                    .comment("Performance/visual: scale the width of the whale's wake trails fed to the Wakes mod.",
+                             "Lower is cheaper but thinner. 1.0 = original width.")
+                    .defineInRange("hullbackWakeWidthScale", 1.0, 0.1, 1.0);
+        } else {
+            WAKES_RECOLOR_FRUSTUM_CULLING = null;
+            WAKES_RECOLOR_TEMPORAL_LOD = null;
+            HULLBACK_WAKE_MAX_DISTANCE = null;
+            HULLBACK_WAKE_WIDTH_SCALE = null;
+        }
+
         if (ModList.get().isLoaded("neat")) {
             NEAT_OFFSET = CLIENT_BUILDER
                     .comment("Height offset for the Neat health bar on the Hullback entity. Increase to move it higher.")
@@ -97,6 +129,11 @@ public class Config {
     public static boolean armorProgress;
     public static double soundDistance;
     public static boolean wakeRendering;
+    public static boolean wakesRecolorFrustumCulling = true;
+    public static boolean wakesRecolorTemporalLod = true;
+    public static double hullbackWakeMaxDistance = 0.0;
+    public static double hullbackWakeMaxDistanceSq = 0.0;
+    public static double hullbackWakeWidthScale = 1.0;
     public static double neatOffset;
 
     @SubscribeEvent
@@ -110,6 +147,13 @@ public class Config {
             armorProgress = ARMOR_PROGRESS.get();
             soundDistance = SOUND_DISTANCE.get();
             wakeRendering = WAKE_RENDERING.get();
+            if (WAKES_RECOLOR_FRUSTUM_CULLING != null) wakesRecolorFrustumCulling = WAKES_RECOLOR_FRUSTUM_CULLING.get();
+            if (WAKES_RECOLOR_TEMPORAL_LOD != null) wakesRecolorTemporalLod = WAKES_RECOLOR_TEMPORAL_LOD.get();
+            if (HULLBACK_WAKE_MAX_DISTANCE != null) {
+                hullbackWakeMaxDistance = HULLBACK_WAKE_MAX_DISTANCE.get();
+                hullbackWakeMaxDistanceSq = hullbackWakeMaxDistance * hullbackWakeMaxDistance;
+            }
+            if (HULLBACK_WAKE_WIDTH_SCALE != null) hullbackWakeWidthScale = HULLBACK_WAKE_WIDTH_SCALE.get();
             if (NEAT_OFFSET != null) neatOffset = NEAT_OFFSET.get();
         }
 

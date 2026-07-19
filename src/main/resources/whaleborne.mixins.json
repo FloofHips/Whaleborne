@@ -8,7 +8,11 @@
   "mixins": [
     "NeatCompatMixin",
     "MobCategoryMixin",
-    "WakesEffectRuleMixin"
+    "WakesEffectRuleMixin",
+    "WakesRenderFrustumMixin",
+    "WakesBrickRecolorMixin",
+    "WakesColorShaderSkipMixin",
+    "WakesBrickWaterColorCacheMixin"
   ],
   "injectors": {
     "defaultRequire": 1

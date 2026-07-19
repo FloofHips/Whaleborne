@@ -391,26 +391,23 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             return false;
         }
 
-        if (!hasSpawnSpace(level, pos)) {
-            return false;
-        }
-
-        if (hasReachedSpawnCap(level, pos)) {
-            return false;
-        }
-
+        // Cheap probabilistic gate first: the spawn rate is unchanged (all conditions are ANDed
+        // and independent) but the two heavy world scans below only run on the rare passing roll.
         double spawnChance;
         try {
             spawnChance = Config.HULLBACK_SPAWN_CHANCE.get();
         } catch (Exception e) {
             spawnChance = 0.001;
         }
-
         if (random.nextDouble() >= spawnChance) {
             return false;
         }
 
-        return true;
+        if (!hasSpawnSpace(level, pos)) {
+            return false;
+        }
+
+        return !hasReachedSpawnCap(level, pos);
     }
 
     @Override
