@@ -55,12 +55,12 @@ public class HullConfigManager extends SimpleJsonResourceReloadListener {
                     // Parse optional sub-objects from the raw JSON (alongside the codec-driven fields).
                     if (json.isJsonObject()) {
                         JsonObject obj = json.getAsJsonObject();
-                        if (obj.has("seats")) {
-                            SeatLayout layout = parseSeatLayout(obj.getAsJsonArray("seats"), id);
-                            if (layout != null) {
-                                SEAT_LAYOUTS.put(item, layout);
-                            }
-                        }
+//                        if (obj.has("seats")) {
+//                            SeatLayout layout = parseSeatLayout(obj.getAsJsonArray("seats"), id);
+//                            if (layout != null) {
+//                                SEAT_LAYOUTS.put(item, layout);
+//                            }
+//                        }
                         if (obj.has("platforms")) {
                             PlatformLayout layout = parsePlatformLayout(obj.getAsJsonArray("platforms"), id);
                             if (layout != null) {
