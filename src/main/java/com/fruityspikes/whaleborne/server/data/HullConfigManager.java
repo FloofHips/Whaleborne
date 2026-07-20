@@ -58,10 +58,10 @@ public class HullConfigManager extends SimpleJsonResourceReloadListener {
                             PlatformLayout layout = parsePlatformLayout(obj.getAsJsonArray("platforms"), id);
                             if (layout != null) PLATFORM_LAYOUTS.put(item, layout);
                         }
-                        if (obj.has("seats")) {
-                            SeatLayout layout = parseSeatLayout(obj.getAsJsonArray("seats"), id);
-                            if (layout != null) SEAT_LAYOUTS.put(item, layout);
-                        }
+//                        if (obj.has("seats")) {
+//                            SeatLayout layout = parseSeatLayout(obj.getAsJsonArray("seats"), id);
+//                            if (layout != null) SEAT_LAYOUTS.put(item, layout);
+//                        }
                     }
                 } else {
                     Whaleborne.LOGGER.warn("Hull config {} references unknown item: {}", id, config.item());
