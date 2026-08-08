@@ -1,10 +1,13 @@
 package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.client.menus.CannonMenu;
+import com.fruityspikes.whaleborne.compat.SupplementariesCannonCompat;
 import com.fruityspikes.whaleborne.network.CannonFirePayload;
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBParticleRegistry;
 import com.fruityspikes.whaleborne.server.registries.WBSoundRegistry;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
@@ -154,18 +157,20 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
             Entity passenger = this.getFirstPassenger();
             if (passenger == null) return;
 
-            gunpowder.shrink(1);
-            ItemStack ammo = inventory.getItem(0).copy().split(1);
+            ItemStack ammo = inventory.getItem(0).copyWithCount(1);
 
             if (ammo.isEmpty()) {
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
                         WBSoundRegistry.CANNON_SHOOT_FAIL.get(), SoundSource.NEUTRAL, 1.0F, 1.0F);
                 return;
-            } else {
-                inventory.getItem(0).shrink(1);
             }
 
+            gunpowder.shrink(1);
+            inventory.getItem(0).shrink(1);
+
             Vec3 lookAngle = passenger.getLookAngle();
+            Vec3 muzzle = this.position().add(0, 1, 0).add(lookAngle.scale(2.0));
+            LivingEntity shooter = passenger instanceof LivingEntity living ? living : null;
             Entity projectile = null;
 
             if(ammo.is(Items.ENDER_PEARL)){
@@ -213,7 +218,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                 return;
             }
             else if(ammo.getItem().asItem() instanceof BoatItem boatItem){
-                String[] boatName = ammo.getItem().asItem().toString().split("_");
+                String[] boatName = BuiltInRegistries.ITEM.getKey(ammo.getItem()).getPath().split("_");
                 StringBuilder boatTypeBuilder = new StringBuilder();
                 boolean hasChest = false;
                 for (int i = 0; i < boatName.length - 1; i++) {
@@ -242,25 +247,40 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
             }
             else if(ammo.getItem() instanceof SpawnEggItem spawnEggItem){
                 projectile = spawnEggItem.getType(ammo).create(this.level());
+                if (projectile == null) {
+                    projectile = new ItemEntity(this.level(), this.getX(), this.getY(), this.getZ(), ammo);
+                    ((ItemEntity) projectile).setPickUpDelay(10);
+                }
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);
             }
             else if(ammo.is(Items.TNT)){
-                LivingEntity tntOwner = this.getVehicle() instanceof LivingEntity living ? living : null;
                 projectile = new PrimedTnt(
                         this.level(), this.getX(), this.getY(), this.getZ(),
-                        tntOwner);
+                        shooter);
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);
             }
             else if(ammo.is(Items.ARROW)){
-                LivingEntity arrowOwner = this.getVehicle() instanceof LivingEntity living ? living : null;
                 projectile = new Arrow(
-                        this.level(), arrowOwner, new ItemStack(Items.ARROW), new ItemStack(Items.BOW));
+                        this.level(), shooter, new ItemStack(Items.ARROW), new ItemStack(Items.BOW));
                 level().playSound(null, this.getX(), this.getY(), this.getZ(),
                         WBSoundRegistry.CANNON_SHOOT_ARROW.get(), SoundSource.BLOCKS, 1.0F,
+                        (float) power / 50);
+            }
+            else if(SupplementariesCannonCompat.fire(this.level(), ammo, muzzle, lookAngle, power, shooter)){
+                level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
+                        (float) power / 50);
+            }
+            else if(ammo.getItem() instanceof ProjectileItem projectileItem){
+                Projectile launched = projectileItem.asProjectile(this.level(), muzzle, ammo, Direction.getNearest(lookAngle));
+                launched.setOwner(shooter);
+                projectile = launched;
+                level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F,
                         (float) power / 50);
             }
             else {
@@ -274,7 +294,7 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
             }
 
             if (projectile != null) {
-                projectile.setPos(this.position().add(0, 1, 0));
+                projectile.setPos(muzzle);
                 projectile.setDeltaMovement(
                         lookAngle.x * ((double) power / 50),
                         lookAngle.y * ((double) power / 50),
