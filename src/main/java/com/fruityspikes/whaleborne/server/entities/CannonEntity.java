@@ -1,6 +1,8 @@
 package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.client.menus.CannonMenu;
+import com.fruityspikes.whaleborne.compat.DispenserProjectileCompat;
+import com.fruityspikes.whaleborne.compat.SupplementariesCannonCompat;
 import com.fruityspikes.whaleborne.network.CannonFirePacket;
 import com.fruityspikes.whaleborne.network.WhaleborneNetwork;
 import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
@@ -161,17 +163,18 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                 return;
             }
 
-            gunpowder.shrink(1);
             ItemStack ammo = inventory.getItem(0).copy().split(1);
 
             if (ammo.isEmpty()) {
                 level().playSound(null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.CANNON_SHOOT_FAIL.get(), SoundSource.BLOCKS, 1.0F, 1);
                 return;
-            } else {
-                inventory.getItem(0).shrink(1);
             }
 
+            gunpowder.shrink(1);
+            inventory.getItem(0).shrink(1);
+
             Vec3 lookAngle = this.getFirstPassenger().getLookAngle();
+            Vec3 muzzle = this.position().add(0, 1, 0).add(lookAngle.scale(2.0));
             Entity projectile = null;
 
             if (ammo.is(Items.ENDER_PEARL)) {
@@ -214,6 +217,10 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
             }
             else if(ammo.getItem() instanceof SpawnEggItem spawnEggItem){
                 projectile = spawnEggItem.getType(ammo.getTag()).create(this.level());
+                if (projectile == null) {
+                    projectile = new ItemEntity(this.level(), this.getX(), this.getY(), this.getZ(), ammo);
+                    ((ItemEntity) projectile).setPickUpDelay(10);
+                }
             }
             else if(ammo.is(Items.TNT)){
                 projectile = new PrimedTnt(this.level(), this.getX(), this.getY(), this.getZ(), (LivingEntity) this.getVehicle());
@@ -223,13 +230,19 @@ public class CannonEntity extends RideableWhaleWidgetEntity implements Container
                 projectile = new Arrow(this.level(), (LivingEntity) this.getVehicle());
                 level().playSound(null, this.getX(), this.getY(), this.getZ(), WBSoundRegistry.CANNON_SHOOT_ARROW.get(), SoundSource.BLOCKS, 1.0F, (float) power / 50);
             }
+            else if(SupplementariesCannonCompat.fire(this.level(), ammo, muzzle, lookAngle, power, this.getFirstPassenger())){
+                level().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F, (float) power / 50);
+            }
+            else if((projectile = DispenserProjectileCompat.create(this.level(), ammo, muzzle, this.getFirstPassenger())) != null){
+                level().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0F, (float) power / 50);
+            }
             else {
                 projectile = new ItemEntity(this.level(), this.getX(), this.getY(), this.getZ(), ammo);
                 ((ItemEntity) projectile).setPickUpDelay(10);
             }
 
             if (projectile != null) {
-                projectile.setPos(this.position().add(0, 1, 0));
+                projectile.setPos(muzzle);
                 projectile.setDeltaMovement(lookAngle.x * ((double) power / 50), lookAngle.y * ((double) power / 50), lookAngle.z * ((double) power / 50));
                 projectile.hurtMarked = true;
 

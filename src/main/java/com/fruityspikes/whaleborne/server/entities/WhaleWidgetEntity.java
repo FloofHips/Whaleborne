@@ -21,6 +21,7 @@ import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
@@ -34,6 +35,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 public abstract class WhaleWidgetEntity extends Entity {
     private static final EntityDataAccessor<Integer> DATA_ID_HURT = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.INT);
@@ -121,6 +123,15 @@ public abstract class WhaleWidgetEntity extends Entity {
         }
         if(!this.getPersistent() && this.tickCount > 100 && !this.isPassenger()){
             destroy(null);
+        } else if (!this.isPassenger() && !this.isRemoved()) {
+            if (this.getXRot() != 0.0F) {
+                this.setXRot(0.0F);
+            }
+            if (!this.isNoGravity()) {
+                this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.04, 0.0));
+            }
+            this.move(MoverType.SELF, this.getDeltaMovement());
+            this.setDeltaMovement(this.onGround() ? Vec3.ZERO : this.getDeltaMovement().scale(0.98));
         }
 
         // Snapshot current rotation at end of tick for next tick's prev values.
@@ -141,6 +152,19 @@ public abstract class WhaleWidgetEntity extends Entity {
     public boolean canBeCollidedWith() {
         return false;
     }
+    @Override
+    public void onAboveBubbleCol(boolean downwards) {
+    }
+
+    @Override
+    public void onInsideBubbleColumn(boolean downwards) {
+    }
+
+    @Override
+    public boolean isPushedByFluid() {
+        return false;
+    }
+
     public void animateHurt(float yaw) {
         this.setHurtDir(-this.getHurtDir());
         this.setHurtTime(10);
@@ -198,7 +222,7 @@ public abstract class WhaleWidgetEntity extends Entity {
         if (this.getVehicle() instanceof HullbackEntity) {
             return;
         }
-        super.lerpTo(x, y, z, yRot, xRot, steps, teleport);
+        super.lerpTo(x, y, z, this.isPassenger() ? yRot : this.getYRot(), xRot, steps, teleport);
     }
 
     @Override

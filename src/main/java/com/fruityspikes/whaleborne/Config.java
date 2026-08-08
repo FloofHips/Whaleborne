@@ -117,7 +117,7 @@ public class Config {
     static final ForgeConfigSpec SERVER_SPEC = SERVER_BUILDER.build();
 
     public static double hullbackSpawnChance;
-    public static int hullbackSpawnCap;
+    public static int hullbackSpawnCap = 1;
     public static int hullbackDespawnTimeTicks;
     public static int hullbackDespawnTimeMultiplier;
     public static int hullbackDespawnGraceRadius;
