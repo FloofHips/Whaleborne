@@ -10,15 +10,7 @@
         "HealthBarsVisibilityMixin",
         "HealthBarsGuiMixin",
         "HealthBarsPickMixin",
-        "MobCategoryMixin",
-        "WakesEffectRuleMixin",
-        "WakesRenderFrustumMixin",
-        "WakesBrickRecolorMixin",
-        "WakesColorShaderSkipMixin",
-        "WakesBrickWaterColorCacheMixin",
-        "WakeColorInvoker",
-        "WakesBlendCacheMixin",
-        "WakesPixelColorMixin"
+        "MobCategoryMixin"
     ],
   "injectors": {
     "defaultRequire": 1

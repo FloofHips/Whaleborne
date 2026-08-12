@@ -2,7 +2,6 @@ package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.Whaleborne;
 import com.fruityspikes.whaleborne.Config;
-import com.fruityspikes.whaleborne.client.compat.WakesCompat;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import com.fruityspikes.whaleborne.client.renderers.HullbackWakeRenderer;
 import com.fruityspikes.whaleborne.network.HullbackHurtPayload;
@@ -1100,10 +1099,6 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         // (synced by vanilla entity tracking — visible to all clients)
         if (this.level().isClientSide) {
             updateWakeState();
-            // When the Wakes mod is present, generate per-part wave simulation nodes
-            if (HullbackWakeRenderer.isWakesModLoaded()) {
-                WakesCompat.generatePartWakes(this);
-            }
         }
     }
 
