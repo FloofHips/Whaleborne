@@ -2,7 +2,6 @@ package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.Config;
 import com.fruityspikes.whaleborne.Whaleborne;
-import com.fruityspikes.whaleborne.client.compat.WakesCompat;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import com.fruityspikes.whaleborne.client.renderers.HullbackWakeRenderer;
 import com.fruityspikes.whaleborne.network.HullbackHurtPacket;
@@ -1903,9 +1902,6 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         // tracking, so all observing clients see the same wake automatically.
         if (this.level().isClientSide) {
             updateWakeState();
-            if (HullbackWakeRenderer.isWakesModLoaded()) {
-                WakesCompat.generatePartWakes(this);
-            }
         }
     }
 

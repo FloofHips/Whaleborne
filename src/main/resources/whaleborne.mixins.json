@@ -7,12 +7,7 @@
   "plugin": "com.fruityspikes.whaleborne.mixin.WhaleborneMixinPlugin",
   "mixins": [
     "NeatCompatMixin",
-    "MobCategoryMixin",
-    "WakesEffectRuleMixin",
-    "WakesRenderFrustumMixin",
-    "WakesBrickRecolorMixin",
-    "WakesColorShaderSkipMixin",
-    "WakesBrickWaterColorCacheMixin"
+    "MobCategoryMixin"
   ],
   "injectors": {
     "defaultRequire": 1
