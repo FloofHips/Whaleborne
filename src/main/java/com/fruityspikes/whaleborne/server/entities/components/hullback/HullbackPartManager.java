@@ -314,6 +314,7 @@ public class HullbackPartManager {
     /** Parallel to {@link #partTiles}: {bodyLocalX, bodyLocalZ, bodyLocalY, rotateWithYaw?1:0, anchorIndex} per tile. */
     @SuppressWarnings("unchecked")
     private final List<float[]>[] partTileLocals = new List[PlatformLayout.MAX_PARTS];
+    private final boolean[] deckWanted = new boolean[PlatformLayout.MAX_PARTS];
 
     /** Pivot cache: pre-computed per anchor slot (0..4 = parts, 5 = whale center). */
     private final double[] pivotX = new double[6];
@@ -329,6 +330,9 @@ public class HullbackPartManager {
     private double lastDeltaSq = Double.NaN;
     private boolean snapshotValid = false;
     private static final double STABILITY_EPSILON = 1e-4;
+    private static final double LIFT_PROBE_DEPTH = 2.5;
+    private static final double LIFT_JOIN_DEPTH = 16.0;
+    private static final int LIFT_JOIN_TICKS = 200;
 
     {
         for (int p = 0; p < PlatformLayout.MAX_PARTS; p++) {
@@ -339,14 +343,60 @@ public class HullbackPartManager {
 
     public List<HullbackWalkableEntity> tilesFor(int part) {
         if (part < 0 || part >= PlatformLayout.MAX_PARTS) return List.of();
-        return partTiles[part];
+        return List.copyOf(partTiles[part]);
     }
 
     public boolean hasPlatform(int part) {
-        return part >= 0 && part < PlatformLayout.MAX_PARTS && !partTiles[part].isEmpty();
+        if (part < 0 || part >= PlatformLayout.MAX_PARTS) return false;
+        purgeRemovedTiles(part);
+        return !partTiles[part].isEmpty();
+    }
+
+    public boolean ownsTile(HullbackWalkableEntity tile) {
+        for (int p = 0; p < PlatformLayout.MAX_PARTS; p++) {
+            if (partTiles[p] != null && partTiles[p].contains(tile)) return true;
+        }
+        return false;
+    }
+
+    private void liftPlayersOntoTile(HullbackWalkableEntity tile) {
+        net.minecraft.world.phys.AABB box = tile.getBoundingBox();
+        double top = box.maxY;
+        net.minecraft.world.phys.AABB probe = new net.minecraft.world.phys.AABB(
+                box.minX, top - LIFT_PROBE_DEPTH, box.minZ, box.maxX, top, box.maxZ);
+        net.minecraft.world.phys.AABB wide = new net.minecraft.world.phys.AABB(
+                box.minX, top - LIFT_JOIN_DEPTH, box.minZ, box.maxX, top, box.maxZ);
+        for (net.minecraft.world.entity.player.Player p : hullback.level().getEntitiesOfClass(
+                net.minecraft.world.entity.player.Player.class, wide)) {
+            if (p.getY() >= top || p.isPassenger()) continue;
+            boolean justJoined = p.tickCount < LIFT_JOIN_TICKS;
+            if (!justJoined && !p.getBoundingBox().intersects(probe)) {
+                continue;
+            }
+            p.teleportTo(p.getX(), top, p.getZ());
+        }
+    }
+
+    private void purgeRemovedTiles(int part) {
+        List<HullbackWalkableEntity> tiles = partTiles[part];
+        if (tiles.isEmpty()) return;
+        for (int i = tiles.size() - 1; i >= 0; i--) {
+            if (tiles.get(i).isRemoved()) {
+                for (HullbackWalkableEntity t : tiles) t.discard();
+                tiles.clear();
+                partTileLocals[part].clear();
+                return;
+            }
+        }
     }
 
     /** Tile centers so outermost edges land on ±width/2 and step ≤ tile size × {@link #TILE_STEP_RATIO}. */
+    private static int anchorSlot(int anchorIdx, int part) {
+        if (anchorIdx == PlatformLayout.ANCHOR_WHALE) return 5;
+        if (anchorIdx == PlatformLayout.ANCHOR_SELF) return part;
+        return (anchorIdx >= 0 && anchorIdx < 5) ? anchorIdx : part;
+    }
+
     private static int tileCount(float width, float tileSize) {
         if (width <= tileSize) return 1;
         return (int) Math.ceil((width - tileSize) / (tileSize * TILE_STEP_RATIO)) + 1;
@@ -356,6 +406,7 @@ public class HullbackPartManager {
         for (int p = 0; p < PlatformLayout.MAX_PARTS; p++) {
             for (HullbackWalkableEntity t : partTiles[p]) t.discard();
             partTiles[p].clear();
+            deckWanted[p] = false;
             partTileLocals[p].clear();
         }
     }
@@ -380,7 +431,9 @@ public class HullbackPartManager {
             HullbackWalkableEntity tile = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), hullback.level());
             tile.applyDimensions(def.width(), height);
             tile.setPos(cx + def.xOffset(), cy, cz + def.zOffset());
+            tile.setOwner(hullback);
             if (hullback.level().addFreshEntity(tile)) {
+                liftPlayersOntoTile(tile);
                 tiles.add(tile);
                 locals.add(new float[] { def.xOffset(), def.zOffset(), 0f, /* rotate */ 0f, PlatformLayout.ANCHOR_SELF });
             }
@@ -425,13 +478,16 @@ public class HullbackPartManager {
                     HullbackWalkableEntity tile = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), hullback.level());
                     tile.applyDimensions(tileSize, height);
                     tile.setPos(cx, cy + s.dy(), cz);
+                    tile.setOwner(hullback);
                     if (hullback.level().addFreshEntity(tile)) {
+                        liftPlayersOntoTile(tile);
                         tiles.add(tile);
                         locals.add(new float[] { lx, lz, s.dy(), rotFlag, s.anchorPart() });
                     }
                 }
             }
         }
+        deckWanted[index] = !tiles.isEmpty();
         return !tiles.isEmpty();
     }
 
@@ -474,6 +530,11 @@ public class HullbackPartManager {
         lastCenterYBase = centerYBase;
         lastDeltaSq = deltaSq;
         snapshotValid = true;
+
+        for (int part = 0; part < PlatformLayout.MAX_PARTS; part++) {
+            purgeRemovedTiles(part);
+            if (deckWanted[part] && partTiles[part].isEmpty()) spawnPlatform(part);
+        }
         if (stable) return;
 
         for (int part = 0; part < PlatformLayout.MAX_PARTS; part++) {
@@ -489,10 +550,7 @@ public class HullbackPartManager {
                 float lx = L[0], lz = L[1], ly = L[2];
                 boolean rotates = L[3] > 0.5f;
                 int anchorIdx = (int) L[4];
-                int slot;
-                if (anchorIdx == PlatformLayout.ANCHOR_WHALE) slot = 5;
-                else if (anchorIdx == PlatformLayout.ANCHOR_SELF) slot = part;
-                else slot = (anchorIdx >= 0 && anchorIdx < 5) ? anchorIdx : part;
+                int slot = anchorSlot(anchorIdx, part);
 
                 double worldDx, worldDz;
                 if (rotates) {

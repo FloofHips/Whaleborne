@@ -88,6 +88,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private static final int STATIONARY_TICKS_PLAYER_ABOVE = 60;
     private static final int STATIONARY_TICKS_DISMOUNT = 200;
     private static final int STATIONARY_TICKS_INITIAL = 60;
+    private static final int DECK_LOAD_GRACE_TICKS = 5;
     private static final int STATIONARY_MINIMUM_THRESHOLD = 30;
     private static final int PLAYER_ABOVE_COOLDOWN_TICKS = 20;
     private static final int DIRT_INITIAL_SYNC_TICK = 10;
@@ -113,6 +114,8 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private static final ResourceLocation HULL_SWIM_SPEED_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "hull_swim_speed_modifier");
 
     /** Hard cap on total seats to prevent abuse. Configurable per-material via HullConfig. */
+    private int lastDismountSeat = -1;
+    private UUID lastDismountUuid;
     public static final int MAX_TOTAL_SEATS = 16;
 
     // ─── Synched Entity Data ─────────────────────────────────────
@@ -485,6 +488,13 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         builder.define(DATA_STATIONARY_TICKS, 0);
     }
 
+    private boolean hasRiderPassengers() {
+        for (net.minecraft.world.entity.Entity p : this.getIndirectPassengers()) {
+            if (!(p instanceof WhaleWidgetEntity)) return true;
+        }
+        return false;
+    }
+
     public int getStationaryTicks() {
         return this.entityData.get(DATA_STATIONARY_TICKS);
     }
@@ -676,11 +686,13 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         return false;
     }
 
+    public boolean ownsPlatform(HullbackWalkableEntity tile) {
+        return partManager != null && partManager.ownsTile(tile);
+    }
+
     public HullbackPartManager getPartManager() {
         return this.partManager;
     }
-
-
 
     public boolean isMultipartEntity() {
         return true;
@@ -838,20 +850,18 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     }
 
     @Override
-    public void remove(net.minecraft.world.entity.Entity.RemovalReason reason) {
-        // Tiles must be released for every removal path, not just tickDeath: /kill, creative
-        // discard, chunk unload, dimension change and despawn all bypass tickDeath and would
-        // otherwise leave platform entities orphaned in the world.
-        if (this.level() != null && !this.level().isClientSide) {
+    public void onRemovedFromLevel() {
+        if (this.level() != null && !this.level().isClientSide && this.isRemoved()) {
             discardAllPlatforms();
         }
-        super.remove(reason);
+        super.onRemovedFromLevel();
     }
 
     @Override
     protected void tickDeath() {
         discardAllPlatforms();
-        List<HullbackWalkableEntity> list = level().getEntitiesOfClass(HullbackWalkableEntity.class, this.getBoundingBox().inflate(6));
+        List<HullbackWalkableEntity> list = level().getEntitiesOfClass(HullbackWalkableEntity.class, this.getBoundingBox().inflate(6),
+                e -> this.getUUID().equals(e.getOwnerUuid()));
         for (HullbackWalkableEntity entity : list) entity.discard();
 
         super.tickDeath();
@@ -998,6 +1008,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
             }
         }
         super.tick();
+        holdAnchorPosition();
         if (pauseAir) {
             this.setAirSupply(savedAir);
         }
@@ -1223,10 +1234,10 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         // Discard only when truly idle: no anchor, no one on the deck, and no passengers
         // riding (helm pilot, seated mobs, etc.). Bypasses the scan cooldown via
         // checkPlayerOnDeck so a stale cooldown can't trigger a one-tick discard.
-        if (stationaryTicks == 0 && platformsStable
+        if (stationaryTicks == 0
                 && !this.hasAnchorDown()
                 && !checkPlayerOnDeck()
-                && this.getPassengers().isEmpty()) {
+                && !hasRiderPassengers()) {
             discardAllPlatforms();
         } else if (stationaryTicks > STATIONARY_MINIMUM_THRESHOLD && !platformsStable) {
             if (stationaryTicks < (STATIONARY_TICKS_DISMOUNT - STATIONARY_MINIMUM_THRESHOLD)) {
@@ -1489,17 +1500,32 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         }
     }
 
+    private Vec3 anchoredPos = null;
+
+    private void holdAnchorPosition() {
+        if (this.level().isClientSide) return;
+        if (!hasAnchorDown()) {
+            anchoredPos = null;
+            return;
+        }
+        if (anchoredPos == null) {
+            anchoredPos = this.position();
+            return;
+        }
+        if (this.getX() != anchoredPos.x || this.getZ() != anchoredPos.z) {
+            this.setPos(anchoredPos.x, this.getY(), anchoredPos.z);
+        }
+        this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
+    }
+
     public boolean hasAnchorDown() {
         for (Entity passenger : getPassengers()) {
             if (passenger instanceof AnchorEntity anchor) {
                 if (anchor.isDown()) return true;
-                break;
             }
         }
         return false;
     }
-
-
 
     /** Discards all walkable platform entities and nullifies references. */
     private void discardAllPlatforms() {
@@ -1510,7 +1536,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         this.getNavigation().stop();
 
         // Create platforms only if truly stable
-        if (platformsStable) {
+        if (!this.level().isClientSide && (platformsStable || this.tickCount < DECK_LOAD_GRACE_TICKS)) {
             for (int p = 0; p < 3; p++) {
                 if (!this.partManager.hasPlatform(p)) this.partManager.spawnPlatform(p);
             }
@@ -1727,33 +1753,41 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     protected void removePassenger(Entity passenger) {
         if(passenger instanceof Player && !this.isBreaching())
             stationaryTicks = STATIONARY_TICKS_DISMOUNT;
-        if(passenger.isRemoved())
+        int dismountSeat = getSeatByEntity(passenger);
+        if (dismountSeat != -1) {
+            lastDismountSeat = dismountSeat;
+            lastDismountUuid = passenger.getUUID();
+        }
+        if (!this.level().isClientSide) {
             for (int i = 0; i < hullbackSeatManager.getActiveSeatCount(); i++) {
                 Optional<UUID> occupant = hullbackSeatManager.getSeatData(i);
                 if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
                     hullbackSeatManager.setSeatData(i, Optional.empty());
                 }
             }
+        }
         super.removePassenger(passenger);
     }
 
     @Override
     public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
         int seatIndex = getSeatByEntity(passenger);
-        if (seatIndex != -1) {
-            for (int i = 0; i < hullbackSeatManager.getActiveSeatCount(); i++) {
-                Optional<UUID> occupant = hullbackSeatManager.getSeatData(i);
-                if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
-                    hullbackSeatManager.setSeatData(i, Optional.empty());
-                }
-            }
-
-            if (seatIndex >= 0 && seatIndex < partManager.seats.length) {
-                Vec3 seatPos = partManager.seats[seatIndex];
-                return new Vec3(seatPos.x, seatPos.y, seatPos.z);
-            }
+        if (seatIndex == -1 && passenger.getUUID().equals(lastDismountUuid)
+                && lastDismountSeat >= 0 && lastDismountSeat < hullbackSeatManager.getActiveSeatCount()) {
+            seatIndex = lastDismountSeat;
         }
-        return super.getDismountLocationForPassenger(passenger);
+        lastDismountSeat = -1;
+        lastDismountUuid = null;
+        if (seatIndex < 0) {
+            return super.getDismountLocationForPassenger(passenger);
+        }
+
+        Vec3 seatPos = seatIndex < partManager.seats.length ? partManager.seats[seatIndex] : null;
+        if (seatPos == null) {
+            return super.getDismountLocationForPassenger(passenger);
+        }
+
+        return seatPos;
     }
 
     @Nullable

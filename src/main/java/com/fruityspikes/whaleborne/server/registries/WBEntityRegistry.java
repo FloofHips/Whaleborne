@@ -39,7 +39,8 @@ public class WBEntityRegistry {
                             // to actually walk on them. 64 blocks covers approach distance well
                             // and roughly halves position-packet traffic vs the previous 128.
                             .clientTrackingRange(64)
-                            .setShouldReceiveVelocityUpdates(true)
+                            .updateInterval(2)
+                            .noSave()
                             .build(ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "hullback_platform").toString())
     );
     public static final DeferredHolder<EntityType<?>, EntityType<SailEntity>> SAIL = ENTITY_TYPES.register(

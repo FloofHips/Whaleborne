@@ -23,6 +23,10 @@ import java.util.stream.Collectors;
  */
 public class HullbackSeatManager {
     private static final int BASE_SEAT_COUNT = 7; // seats 0-6 with individual accessors
+    private static final int RECOVERY_GRACE_TICKS = 1200;
+    private static final double RECOVERY_MAX_DIST_SQ = 32.0 * 32.0;
+
+    private long graceUntilGameTime = -1L;
 
     private final HullbackEntity whale;
     private final EntityDataAccessor<Optional<UUID>>[] baseAccessors; // seats 0-6
@@ -55,14 +59,36 @@ public class HullbackSeatManager {
     public SeatLayout getSeatLayout() { return seatLayout; }
 
     public void setSeatLayout(SeatLayout layout) {
+        int previousCount = this.activeSeatCount;
         this.seatLayout = layout;
         this.activeSeatCount = Math.min(layout.getActiveSeatCount(), HullbackEntity.MAX_TOTAL_SEATS);
+        if (this.activeSeatCount < previousCount) {
+            reseatAbove(previousCount);
+        }
+    }
+
+    private void reseatAbove(int previousCount) {
+        if (whale.level().isClientSide) return;
+        int upper = Math.min(previousCount, HullbackEntity.MAX_TOTAL_SEATS);
+        for (int i = this.activeSeatCount; i < upper; i++) {
+            Optional<UUID> occupant = getSeatData(i);
+            setSeatData(i, Optional.empty());
+            if (occupant.isEmpty()) continue;
+            Entity passenger = whale.getEntityByUUID(occupant.get());
+            if (passenger == null) continue;
+            int free = findFreeSeat();
+            if (free >= 0) {
+                setSeatData(free, Optional.of(passenger.getUUID()));
+            } else {
+                passenger.stopRiding();
+            }
+        }
     }
 
     // ─── Seat Data Access (hybrid: accessor for 0-6, CompoundTag for 7+) ───
 
     public Optional<UUID> getSeatData(int index) {
-        if (index < 0 || index >= activeSeatCount) return Optional.empty();
+        if (index < 0 || index >= HullbackEntity.MAX_TOTAL_SEATS) return Optional.empty();
 
         if (index < BASE_SEAT_COUNT) {
             // Base seats: individual EntityDataAccessor
@@ -114,50 +140,59 @@ public class HullbackSeatManager {
     public void validateAssignments() {
         if (whale.level().isClientSide) return;
 
+        if (graceUntilGameTime < 0L) {
+            graceUntilGameTime = whale.level().getGameTime() + RECOVERY_GRACE_TICKS;
+        }
+
         Set<UUID> currentPassengerUUIDs = whale.getPassengers().stream()
                 .map(Entity::getUUID)
                 .collect(Collectors.toSet());
 
-        for (int seatIndex = 0; seatIndex < activeSeatCount; seatIndex++) {
+        for (int seatIndex = 0; seatIndex < HullbackEntity.MAX_TOTAL_SEATS; seatIndex++) {
             Optional<UUID> assignedUUID = getSeatData(seatIndex);
+            if (seatIndex >= activeSeatCount) {
+                if (assignedUUID.isPresent()) setSeatData(seatIndex, Optional.empty());
+                continue;
+            }
+            if (assignedUUID.isEmpty()) continue;
+            UUID uuid = assignedUUID.get();
 
-            if (assignedUUID.isPresent()) {
-                UUID uuid = assignedUUID.get();
-
-                if (!currentPassengerUUIDs.contains(uuid)) {
-                    boolean shouldClear = true;
-
-                    // "Smart" Check & Active Recovery
-                    if (whale.level() instanceof ServerLevel serverLevel) {
-                        Entity passengerEntity = serverLevel.getEntity(uuid);
-
-                        if (passengerEntity == null) {
-                            // Entity still loading or dead. Wait up to 60s.
-                            if (whale.tickCount < 1200) {
-                                shouldClear = false;
-                            }
-                        } else {
-                            // Entity found but detached. RECOVERY: teleport + force mount
-                            if (passengerEntity.isAlive()) {
-                                Vec3 seatPos = seatIndex < seats.length ? seats[seatIndex] : null;
-                                if (seatPos != null) {
-                                    passengerEntity.teleportTo(seatPos.x, seatPos.y, seatPos.z);
-                                }
-                                passengerEntity.startRiding(whale, true);
-                                shouldClear = false;
-                            }
-                        }
-                    }
-
-                    if (shouldClear) {
-                        setSeatData(seatIndex, Optional.empty());
-                    }
-                } else {
-                    Entity passenger = whale.getEntityByUUID(uuid);
-                    if (passenger != null && getSeatByEntity(passenger) != seatIndex) {
-                        setSeatData(seatIndex, Optional.empty());
-                    }
+            if (currentPassengerUUIDs.contains(uuid)) {
+                Entity passenger = whale.getEntityByUUID(uuid);
+                if (passenger != null && getSeatByEntity(passenger) != seatIndex) {
+                    setSeatData(seatIndex, Optional.empty());
                 }
+                continue;
+            }
+
+            if (!(whale.level() instanceof ServerLevel serverLevel)) {
+                setSeatData(seatIndex, Optional.empty());
+                continue;
+            }
+
+            Entity occupant = serverLevel.getEntity(uuid);
+
+            if (occupant == null) {
+                if (whale.level().getGameTime() >= graceUntilGameTime) {
+                    setSeatData(seatIndex, Optional.empty());
+                }
+                continue;
+            }
+
+            if (occupant instanceof Player
+                    || !occupant.isAlive()
+                    || (occupant.getVehicle() != null && occupant.getVehicle() != whale)
+                    || occupant.distanceToSqr(whale) > RECOVERY_MAX_DIST_SQ) {
+                setSeatData(seatIndex, Optional.empty());
+                continue;
+            }
+
+            Vec3 seatPos = seatIndex < seats.length ? seats[seatIndex] : null;
+            if (seatPos != null) {
+                occupant.teleportTo(seatPos.x, seatPos.y, seatPos.z);
+            }
+            if (!occupant.startRiding(whale, true)) {
+                setSeatData(seatIndex, Optional.empty());
             }
         }
     }
