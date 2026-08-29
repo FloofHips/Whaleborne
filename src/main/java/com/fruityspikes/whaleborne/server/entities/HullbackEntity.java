@@ -144,6 +144,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public static final EntityDataAccessor<CompoundTag> DATA_OVERFLOW_SEATS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.COMPOUND_TAG);
     /** Hard cap on total seats to prevent abuse. Configurable per-material via HullConfig. */
     public static final int MAX_TOTAL_SEATS = 16;
+    private int lastDismountSeat = -1;
+    private UUID lastDismountUuid;
+    private static final int RECOVERY_GRACE_TICKS = 1200;
+    private static final double RECOVERY_MAX_DIST_SQ = 32.0 * 32.0;
+    private long graceUntilGameTime = -1L;
     private static final int BASE_SEAT_COUNT = 7;
     private SeatLayout seatLayout =
             SeatLayout.defaultLayout();
@@ -169,6 +174,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     @SuppressWarnings("unchecked")
     private final java.util.List<float[]>[] partTileLocals =
             (java.util.List<float[]>[]) new java.util.List[PlatformLayout.MAX_PARTS];
+    private final boolean[] deckWanted = new boolean[PlatformLayout.MAX_PARTS];
+    private boolean purgedThisTick = false;
+    private static final double LIFT_PROBE_DEPTH = 2.5;
+    private static final double LIFT_JOIN_DEPTH = 16.0;
+    private static final int LIFT_JOIN_TICKS = 200;
     {
         for (int p = 0; p < PlatformLayout.MAX_PARTS; p++) {
             partTiles[p] = new java.util.ArrayList<>();
@@ -297,7 +307,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     };
 
     public Vec3[] seats = new Vec3[MAX_TOTAL_SEATS];
-    public Vec3[] oldSeats = new Vec3[7];
+    public Vec3[] oldSeats = new Vec3[MAX_TOTAL_SEATS];
     private Vec3 smoothedSeat6 = null;
     private Vec3 rawSeat6Pos = null;
     private static final float SEAT6_SMOOTH_FACTOR = 0.35f;
@@ -363,6 +373,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F);
 
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
+        this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
 
         Arrays.fill(partPosition, Vec3.ZERO);
         this.currentTarget = this.position();
@@ -874,6 +885,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
     }
 
+    private boolean hasRiderPassengers() {
+        for (net.minecraft.world.entity.Entity p : this.getIndirectPassengers()) {
+            if (!(p instanceof WhaleWidgetEntity)) return true;
+        }
+        return false;
+    }
+
     public int getStationaryTicks() {
         return this.entityData.get(DATA_STATIONARY_TICKS);
     }
@@ -894,7 +912,31 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
     // ─── Dynamic seat API (PocketCompat port) ─────
     public SeatLayout getSeatLayout() { return seatLayout; }
-    public void setSeatLayout(SeatLayout layout) { this.seatLayout = layout; }
+    public void setSeatLayout(SeatLayout layout) {
+        int previousCount = Math.min(seatLayout.getActiveSeatCount(), MAX_TOTAL_SEATS);
+        this.seatLayout = layout;
+        int newCount = Math.min(layout.getActiveSeatCount(), MAX_TOTAL_SEATS);
+        if (newCount < previousCount) {
+            reseatAbove(newCount, previousCount);
+        }
+    }
+
+    private void reseatAbove(int newCount, int previousCount) {
+        if (this.level().isClientSide) return;
+        for (int i = newCount; i < previousCount; i++) {
+            Optional<UUID> occupant = getSeatData(i);
+            setSeatData(i, Optional.empty());
+            if (occupant.isEmpty()) continue;
+            Entity passenger = getEntityByUUID(occupant.get());
+            if (passenger == null) continue;
+            int free = findFreeSeat();
+            if (free >= 0) {
+                setSeatData(free, Optional.of(passenger.getUUID()));
+            } else {
+                passenger.stopRiding();
+            }
+        }
+    }
     public int getActiveSeatCount() { return seatLayout.getActiveSeatCount(); }
     /** Total seat slots including overflow (16 max), not just the layout's active count. */
     public int getSeatCount() { return MAX_TOTAL_SEATS; }
@@ -932,7 +974,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         HullConfig config = HullConfigManager.getConfig(armorItem);
         SeatLayout layout =
                 HullConfigManager.getSeatLayout(armorItem);
-        this.seatLayout = layout;
+        setSeatLayout(layout);
 
         AttributeInstance speed =
                 this.getAttribute(Attributes.MOVEMENT_SPEED);
@@ -964,7 +1006,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         SeatLayout def =
                 SeatLayout.defaultLayout();
-        this.seatLayout = def;
+        setSeatLayout(def);
         if (this.level() instanceof ServerLevel) {
             WhaleborneNetwork.INSTANCE.send(
                     PacketDistributor.TRACKING_ENTITY.with(() -> this),
@@ -1616,21 +1658,19 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     @Override
-    public void remove(net.minecraft.world.entity.Entity.RemovalReason reason) {
-        // Tiles must be released for every removal path, not just tickDeath: /kill, creative
-        // discard, chunk unload, dimension change and despawn all bypass tickDeath and would
-        // otherwise leave platform entities orphaned in the world.
-        if (this.level() != null && !this.level().isClientSide) {
+    public void onRemovedFromWorld() {
+        if (this.level() != null && !this.level().isClientSide && this.isRemoved()) {
             discardAllPlatforms();
         }
-        super.remove(reason);
+        super.onRemovedFromWorld();
     }
 
     @Override
     protected void tickDeath() {
         discardAllPlatforms();
         // Sweep nearby strays just in case (chunk unload races, etc.).
-        List<HullbackWalkableEntity> list = level().getEntitiesOfClass(HullbackWalkableEntity.class, this.getBoundingBox().inflate(6));
+        List<HullbackWalkableEntity> list = level().getEntitiesOfClass(HullbackWalkableEntity.class, this.getBoundingBox().inflate(6),
+                e -> this.getUUID().equals(e.getOwnerUuid()));
         if (!list.isEmpty()) for (HullbackWalkableEntity entity : list) entity.discard();
 
         super.tickDeath();
@@ -1713,6 +1753,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
         // Core entity tick (ONLY ONCE)
         super.tick();
+        holdAnchorPosition();
         if (pauseAir) {
             this.setAirSupply(savedAir);
         }
@@ -1729,16 +1770,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         applyEnhancedPitchControl(snapshot, isBreachingAction);
 
-
-
         // Discard only when fully idle: not stationary, not approaching, no anchor, deck empty,
         // and no passengers riding the whale (helm pilot, seated mobs, etc.).
         if (stationaryTicks == 0 && !isApproachingPlayer()
+                && !this.purgedThisTick
                 && !this.hasAnchorDown()
                 && !scanPlayerAbove()
-                && this.getPassengers().isEmpty()) {
+                && !hasRiderPassengers()) {
             discardAllPlatforms();
         }
+        this.purgedThisTick = false;
 
         if (!this.isEyeInFluidType(Fluids.WATER.getFluidType()))
             mouthTarget = 1;
@@ -1894,7 +1935,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         // Platform appearance depends only on stationaryTicks > 0, which is set in
         // handleStationaryState when the whale actually stops or gets close.
-        if (this.getStationaryTicks() > 0) {
+        if (!this.level().isClientSide) {
             updateWalkablePlatforms();
         }
 
@@ -2208,48 +2249,57 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     private void validateAssignments() {
+        if (this.level().isClientSide) return;
+
+        if (graceUntilGameTime < 0L) {
+            graceUntilGameTime = this.level().getGameTime() + RECOVERY_GRACE_TICKS;
+        }
+
         Set<UUID> currentPassengerUUIDs = this.getPassengers().stream()
                 .map(Entity::getUUID)
                 .collect(Collectors.toSet());
 
         for (int seatIndex = 0; seatIndex < MAX_TOTAL_SEATS; seatIndex++) {
             Optional<UUID> assignedUUID = getSeatData(seatIndex);
+            if (assignedUUID.isEmpty()) continue;
+            UUID uuid = assignedUUID.get();
 
-            if (assignedUUID.isPresent()) {
-                UUID uuid = assignedUUID.get();
-
-                if (!currentPassengerUUIDs.contains(uuid)) {
-                    boolean shouldClear = true;
-
-                    if (this.level() instanceof ServerLevel serverLevel) {
-                        Entity passengerEntity = serverLevel.getEntity(uuid);
-
-                        if (passengerEntity == null) {
-                            if (this.tickCount < 1200) {
-                                shouldClear = false;
-                            }
-                        } else {
-                            if (passengerEntity.isAlive()) {
-                                Vec3 seatPos = seatIndex < seats.length ? seats[seatIndex] : null;
-                                if (seatPos != null) {
-                                    passengerEntity.teleportTo(seatPos.x, seatPos.y, seatPos.z);
-                                }
-
-                                passengerEntity.startRiding(this, true);
-                                shouldClear = false;
-                            }
-                        }
-                    }
-
-                    if (shouldClear) {
-                        setSeatData(seatIndex, Optional.empty());
-                    }
-                } else {
-                    Entity passenger = getEntityByUUID(uuid);
-                    if (passenger != null && getSeatByEntity(passenger) != seatIndex) {
-                        setSeatData(seatIndex, Optional.empty());
-                    }
+            if (currentPassengerUUIDs.contains(uuid)) {
+                Entity passenger = getEntityByUUID(uuid);
+                if (passenger != null && getSeatByEntity(passenger) != seatIndex) {
+                    setSeatData(seatIndex, Optional.empty());
                 }
+                continue;
+            }
+
+            if (!(this.level() instanceof ServerLevel serverLevel)) {
+                setSeatData(seatIndex, Optional.empty());
+                continue;
+            }
+
+            Entity occupant = serverLevel.getEntity(uuid);
+
+            if (occupant == null) {
+                if (this.level().getGameTime() >= graceUntilGameTime) {
+                    setSeatData(seatIndex, Optional.empty());
+                }
+                continue;
+            }
+
+            if (occupant instanceof Player
+                    || !occupant.isAlive()
+                    || (occupant.getVehicle() != null && occupant.getVehicle() != this)
+                    || occupant.distanceToSqr(this) > RECOVERY_MAX_DIST_SQ) {
+                setSeatData(seatIndex, Optional.empty());
+                continue;
+            }
+
+            Vec3 seatPos = seatIndex < seats.length ? seats[seatIndex] : null;
+            if (seatPos != null) {
+                occupant.teleportTo(seatPos.x, seatPos.y, seatPos.z);
+            }
+            if (!occupant.startRiding(this, true)) {
+                setSeatData(seatIndex, Optional.empty());
             }
         }
     }
@@ -2307,33 +2357,41 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected void removePassenger(Entity passenger) {
         if (passenger instanceof Player && !this.isBreaching())
             stationaryTicks = 100;
-        if (passenger.isRemoved())
+        int dismountSeat = getSeatByEntity(passenger);
+        if (dismountSeat != -1) {
+            lastDismountSeat = dismountSeat;
+            lastDismountUuid = passenger.getUUID();
+        }
+        if (!this.level().isClientSide) {
             for (int i = 0; i < MAX_TOTAL_SEATS; i++) {
                 Optional<UUID> occupant = getSeatData(i);
                 if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
                     setSeatData(i, Optional.empty());
                 }
             }
+        }
         super.removePassenger(passenger);
     }
 
     @Override
     public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
         int seatIndex = getSeatByEntity(passenger);
-        if (seatIndex != -1) {
-            for (int i = 0; i < MAX_TOTAL_SEATS; i++) {
-                Optional<UUID> occupant = getSeatData(i);
-                if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
-                    setSeatData(i, Optional.empty());
-                }
-            }
-
-            if (seatIndex >= 0 && seatIndex < seats.length) {
-                Vec3 seatPos = seats[seatIndex];
-                return new Vec3(seatPos.x, seatPos.y, seatPos.z);
-            }
+        if (seatIndex == -1 && passenger.getUUID().equals(lastDismountUuid)
+                && lastDismountSeat >= 0 && lastDismountSeat < seatLayout.getActiveSeatCount()) {
+            seatIndex = lastDismountSeat;
         }
-        return super.getDismountLocationForPassenger(passenger);
+        lastDismountSeat = -1;
+        lastDismountUuid = null;
+        if (seatIndex < 0) {
+            return super.getDismountLocationForPassenger(passenger);
+        }
+
+        Vec3 seatPos = seatIndex < seats.length ? seats[seatIndex] : null;
+        if (seatPos == null) {
+            return super.getDismountLocationForPassenger(passenger);
+        }
+
+        return seatPos;
     }
 
     public void rotatePassengers() {
@@ -3840,31 +3898,96 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return -(float) (Mth.atan2(dy, horizontalDistance) * (180F / Math.PI));
     }
 
+    private Vec3 anchoredPos = null;
+
+    private void holdAnchorPosition() {
+        if (this.level().isClientSide) return;
+        if (!hasAnchorDown()) {
+            anchoredPos = null;
+            return;
+        }
+        if (anchoredPos == null) {
+            anchoredPos = this.position();
+            return;
+        }
+        if (this.getX() != anchoredPos.x || this.getZ() != anchoredPos.z) {
+            this.setPos(anchoredPos.x, this.getY(), anchoredPos.z);
+        }
+        this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
+    }
+
     public boolean hasAnchorDown() {
         for (Entity passenger : getPassengers()) {
             if (passenger instanceof AnchorEntity anchor) {
                 if (anchor.isDown()) return true;
-                break;
             }
         }
         return false;
     }
 
     public boolean hasPlatform(int part) {
-        return part >= 0 && part < PlatformLayout.MAX_PARTS && !partTiles[part].isEmpty();
+        if (part < 0 || part >= PlatformLayout.MAX_PARTS) return false;
+        purgeRemovedTiles(part);
+        return !partTiles[part].isEmpty();
     }
 
     public java.util.List<HullbackWalkableEntity> tilesFor(int part) {
         if (part < 0 || part >= PlatformLayout.MAX_PARTS) return java.util.List.of();
-        return partTiles[part];
+        return java.util.List.copyOf(partTiles[part]);
+    }
+
+    public boolean ownsPlatform(HullbackWalkableEntity tile) {
+        for (int p = 0; p < PlatformLayout.MAX_PARTS; p++) {
+            if (partTiles[p] != null && partTiles[p].contains(tile)) return true;
+        }
+        return false;
+    }
+
+    private void liftPlayersOntoTile(HullbackWalkableEntity tile) {
+        net.minecraft.world.phys.AABB box = tile.getBoundingBox();
+        double top = box.maxY;
+        net.minecraft.world.phys.AABB probe = new net.minecraft.world.phys.AABB(
+                box.minX, top - LIFT_PROBE_DEPTH, box.minZ, box.maxX, top, box.maxZ);
+        net.minecraft.world.phys.AABB wide = new net.minecraft.world.phys.AABB(
+                box.minX, top - LIFT_JOIN_DEPTH, box.minZ, box.maxX, top, box.maxZ);
+        for (net.minecraft.world.entity.player.Player p : this.level().getEntitiesOfClass(
+                net.minecraft.world.entity.player.Player.class, wide)) {
+            if (p.getY() >= top || p.isPassenger()) continue;
+            boolean justJoined = p.tickCount < LIFT_JOIN_TICKS;
+            if (!justJoined && !p.getBoundingBox().intersects(probe)) {
+                continue;
+            }
+            p.teleportTo(p.getX(), top, p.getZ());
+        }
+    }
+
+    private void purgeRemovedTiles(int part) {
+        List<HullbackWalkableEntity> tiles = partTiles[part];
+        if (tiles.isEmpty()) return;
+        for (int i = tiles.size() - 1; i >= 0; i--) {
+            if (tiles.get(i).isRemoved()) {
+                this.purgedThisTick = true;
+                for (HullbackWalkableEntity t : tiles) t.discard();
+                tiles.clear();
+                partTileLocals[part].clear();
+                return;
+            }
+        }
     }
 
     public void discardAllPlatforms() {
         for (int p = 0; p < PlatformLayout.MAX_PARTS; p++) {
             for (HullbackWalkableEntity t : partTiles[p]) t.discard();
             partTiles[p].clear();
+            deckWanted[p] = false;
             partTileLocals[p].clear();
         }
+    }
+
+    private static int anchorSlot(int anchorIdx, int part) {
+        if (anchorIdx == PlatformLayout.ANCHOR_WHALE) return 5;
+        if (anchorIdx == PlatformLayout.ANCHOR_SELF) return part;
+        return (anchorIdx >= 0 && anchorIdx < 5) ? anchorIdx : part;
     }
 
     private static int tileCount(float width, float tileSize) {
@@ -3892,7 +4015,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             HullbackWalkableEntity tile = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), this.level());
             tile.applyDimensions(def.width(), height);
             tile.setPos(cx + def.xOffset(), cy, cz + def.zOffset());
+            tile.setOwner(this);
             if (this.level().addFreshEntity(tile)) {
+                liftPlayersOntoTile(tile);
                 tiles.add(tile);
                 locals.add(new float[] { def.xOffset(), def.zOffset(), 0f, 0f, PlatformLayout.ANCHOR_SELF });
             }
@@ -3935,13 +4060,16 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                     HullbackWalkableEntity tile = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), this.level());
                     tile.applyDimensions(tileSize, height);
                     tile.setPos(cx, cy + s.dy(), cz);
+                    tile.setOwner(this);
                     if (this.level().addFreshEntity(tile)) {
+                        liftPlayersOntoTile(tile);
                         tiles.add(tile);
                         locals.add(new float[] { lx, lz, s.dy(), rotFlag, s.anchorPart() });
                     }
                 }
             }
         }
+        deckWanted[index] = !tiles.isEmpty();
         return !tiles.isEmpty();
     }
 
@@ -4012,8 +4140,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         tileSnapshotValid = true;
 
         for (int part = 0; part < PlatformLayout.MAX_PARTS; part++) {
+            purgeRemovedTiles(part);
             if (partTiles[part].isEmpty()) {
-                spawnPlatform(part);
+                if (deckWanted[part] || this.getStationaryTicks() > 0) spawnPlatform(part);
                 continue;
             }
             if (stable) continue;
@@ -4028,10 +4157,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
                 float lx = L[0], lz = L[1], ly = L[2];
                 boolean rotates = L[3] > 0.5f;
                 int anchorIdx = (int) L[4];
-                int slot;
-                if (anchorIdx == PlatformLayout.ANCHOR_WHALE) slot = 5;
-                else if (anchorIdx == PlatformLayout.ANCHOR_SELF) slot = part;
-                else slot = (anchorIdx >= 0 && anchorIdx < 5) ? anchorIdx : part;
+                int slot = anchorSlot(anchorIdx, part);
 
                 double worldDx, worldDz;
                 if (rotates) {
@@ -4050,36 +4176,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
 
     private void updatePlatformHeight() {
-        boolean isMounted = this.getControllingPassenger() != null;
-        float target = isMounted ? 4.0f : 4.55f;
-
-        // Detects state change
-        if (wasMounted != isMounted) {
-            platformHeightCooldown = 40; // 2 seconds
-        }
-        wasMounted = isMounted;
-
-        this.targetPlatformHeight = target;
-
-        // Waits for cooldown to finish before adjusting
-        if (platformHeightCooldown > 0) {
-            platformHeightCooldown--;
-            if (platformHeightCooldown > 20) return; // Waits 1 full second before starting
-        }
-
-        // More aggressive Lerp to avoid infinite drift
-        float lerpSpeed = 0.1f;
-        float newHeight = (float) Mth.lerp(lerpSpeed, this.currentPlatformHeight, targetPlatformHeight);
-
-        // Final snap to avoid infinite oscillation (Threshold increased to 0.01)
-        if (Math.abs(newHeight - targetPlatformHeight) < 0.01f) {
-            this.currentPlatformHeight = targetPlatformHeight;
-        } else {
-            this.currentPlatformHeight = newHeight;
-        }
+        this.targetPlatformHeight = 4.55f;
+        this.currentPlatformHeight = (float) Mth.lerp(0.1f, this.currentPlatformHeight, this.targetPlatformHeight);
     }
-
-
 
     private void updatePlayerStability() {
         Player nearestPlayer = this.level().getNearestPlayer(this, 10);

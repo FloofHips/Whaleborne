@@ -32,7 +32,8 @@ public class WBEntityRegistry {
                             // Tiles are invisible; 64 blocks covers approach distance while
                             // keeping position-packet traffic low.
                             .clientTrackingRange(64)
-                            .setShouldReceiveVelocityUpdates(true)
+                            .updateInterval(2)
+                            .noSave()
                             .build(new ResourceLocation(Whaleborne.MODID, "hullback_platform").toString())
     );
     public static final RegistryObject<EntityType<SailEntity>> SAIL = ENTITY_TYPES.register(
