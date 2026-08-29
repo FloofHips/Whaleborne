@@ -4,6 +4,7 @@ import com.fruityspikes.whaleborne.server.registries.WBItemRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.decoration.HangingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -13,6 +14,13 @@ import net.minecraft.world.phys.AABB;
 import javax.annotation.Nullable;
 
 public class HullbackWalkableEntity extends Entity {
+
+    private static final int OWNER_CHECK_INTERVAL = 32;
+    private static final int OWNER_CHECK_GRACE_TICKS = 20;
+    private static final double OWNER_MAX_DIST_SQ = 24.0 * 24.0;
+
+    private java.util.UUID ownerUuid;
+
 
     public HullbackWalkableEntity(EntityType<?> entityType, Level level) {
         super(entityType, level);
@@ -35,11 +43,28 @@ public class HullbackWalkableEntity extends Entity {
         }
     }
     */
+    public void setOwner(Entity owner) {
+        this.ownerUuid = owner == null ? null : owner.getUUID();
+    }
+
+    public java.util.UUID getOwnerUuid() {
+        return this.ownerUuid;
+    }
+
     public void tick() {
         super.tick();
-        if (this.tickCount % 200 == 0) {
-            if (this.level().getEntities(this, this.getBoundingBox().inflate(1F, 1F, 1F), EntitySelector.NO_CREATIVE_OR_SPECTATOR.and((entity) -> (entity instanceof HullbackPartEntity))).isEmpty())
-                this.discard();
+        if (this.level().isClientSide || this.isRemoved()) return;
+        if (this.tickCount < OWNER_CHECK_GRACE_TICKS || this.tickCount % OWNER_CHECK_INTERVAL != 0) return;
+        if (this.ownerUuid == null) {
+            this.discard();
+            return;
+        }
+        Entity owner = ((ServerLevel) this.level()).getEntity(this.ownerUuid);
+        if (!(owner instanceof HullbackEntity whale)
+                || whale.isRemoved()
+                || !whale.ownsPlatform(this)
+                || whale.distanceToSqr(this) > OWNER_MAX_DIST_SQ) {
+            this.discard();
         }
     }
 
@@ -62,13 +87,10 @@ public class HullbackWalkableEntity extends Entity {
     }
     @Override
     protected void defineSynchedData() {}
+
     @Override
     protected void readAdditionalSaveData(CompoundTag compoundTag) {}
     @Override
     protected void addAdditionalSaveData(CompoundTag compoundTag) {}
 
-    @Override
-    public boolean shouldBeSaved() {
-        return false;
-    }
 }

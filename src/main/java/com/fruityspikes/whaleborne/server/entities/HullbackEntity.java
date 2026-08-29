@@ -140,6 +140,14 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     public final HullbackPartEntity tail;
     public final HullbackPartEntity fluke;
 
+    private int lastDismountSeat = -1;
+    private UUID lastDismountUuid;
+    private static final double LIFT_PROBE_DEPTH = 2.5;
+    private static final double LIFT_JOIN_DEPTH = 16.0;
+    private static final int LIFT_JOIN_TICKS = 200;
+    private static final int RECOVERY_GRACE_TICKS = 1200;
+    private static final double RECOVERY_MAX_DIST_SQ = 32.0 * 32.0;
+    private long graceUntilGameTime = -1L;
     public HullbackWalkableEntity moving_head = null;
     public HullbackWalkableEntity moving_nose = null;
     public HullbackWalkableEntity moving_body = null;
@@ -319,6 +327,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         this.fluke = new HullbackPartEntity(this, "fluke", 4.0F, 0.6F);
 
         this.subEntities = new HullbackPartEntity[]{this.nose, this.head, this.body, this.tail, this.fluke};
+        this.setId(ENTITY_COUNTER.getAndAdd(this.subEntities.length + 1) + 1);
 
         Arrays.fill(partPosition, Vec3.ZERO);
         this.currentTarget = this.position();
@@ -813,6 +822,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         if (DATA_STATIONARY_TICKS.equals(key)) {
             this.stationaryTicks = this.entityData.get(DATA_STATIONARY_TICKS);
         }
+    }
+
+    private boolean hasRiderPassengers() {
+        for (net.minecraft.world.entity.Entity p : this.getIndirectPassengers()) {
+            if (!(p instanceof WhaleWidgetEntity)) return true;
+        }
+        return false;
     }
 
     public int getStationaryTicks() {
@@ -1479,16 +1495,13 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     @Override
-    public void remove(net.minecraft.world.entity.Entity.RemovalReason reason) {
-        // Platforms must be released for every removal path, not just tickDeath: /kill, creative
-        // discard, chunk unload, dimension change and despawn all bypass tickDeath and would
-        // otherwise leave moving_nose/head/body orphaned in the world.
-        if (this.level() != null && !this.level().isClientSide) {
+    public void onRemovedFromWorld() {
+        if (this.level() != null && !this.level().isClientSide && this.isRemoved()) {
             if (this.moving_nose != null) { this.moving_nose.discard(); this.moving_nose = null; }
             if (this.moving_head != null) { this.moving_head.discard(); this.moving_head = null; }
             if (this.moving_body != null) { this.moving_body.discard(); this.moving_body = null; }
         }
-        super.remove(reason);
+        super.onRemovedFromWorld();
     }
 
     @Override
@@ -1505,7 +1518,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             this.moving_body.discard();
             this.moving_body = null;
         }
-        List<HullbackWalkableEntity> list = level().getEntitiesOfClass(HullbackWalkableEntity.class, this.getBoundingBox().inflate(6));
+        List<HullbackWalkableEntity> list = level().getEntitiesOfClass(HullbackWalkableEntity.class, this.getBoundingBox().inflate(6),
+                e -> this.getUUID().equals(e.getOwnerUuid()));
         if (!list.isEmpty()) for (HullbackWalkableEntity entity : list) entity.discard();
 
         super.tickDeath();
@@ -1587,6 +1601,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         }
         // Core entity tick (ONLY ONCE)
         super.tick();
+        holdAnchorPosition();
         if (pauseAir) {
             this.setAirSupply(savedAir);
         }
@@ -1603,12 +1618,11 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
 
         applyEnhancedPitchControl(snapshot, isBreachingAction);
 
-
-
         // Discard logic: Only if NOT stationary, not approaching, AND no passengers riding the
         // whale (helm pilot, seated mobs, etc. — platforms should persist while anyone is on).
         if (stationaryTicks == 0 && !scanPlayerAbove() && !isApproachingPlayer()
-                && this.getPassengers().isEmpty()) {
+                && !this.hasAnchorDown()
+                && !hasRiderPassengers()) {
             if (this.moving_nose != null) { this.moving_nose.discard(); this.moving_nose = null; }
             if (this.moving_head != null) { this.moving_head.discard(); this.moving_head = null; }
             if (this.moving_body != null) { this.moving_body.discard(); this.moving_body = null; }
@@ -1757,7 +1771,7 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         // FINAL FIX: Removed the "12 blocks" check within tick().
         // Platform appearance now depends EXCLUSIVELY on stationaryTicks being > 0.
         // The stationaryTicks, in turn, is only set in handleStationaryState if the whale ACTUALLY stops or gets close.
-        if (this.getStationaryTicks() > 0) {
+        if (!this.level().isClientSide) {
             updateWalkablePlatforms();
         }
 
@@ -2061,6 +2075,12 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     }
 
     private void validateAssignments() {
+        if (this.level().isClientSide) return;
+
+        if (graceUntilGameTime < 0L) {
+            graceUntilGameTime = this.level().getGameTime() + RECOVERY_GRACE_TICKS;
+        }
+
         Set<UUID> currentPassengerUUIDs = this.getPassengers().stream()
                 .map(Entity::getUUID)
                 .collect(Collectors.toSet());
@@ -2068,51 +2088,45 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         for (int seatIndex = 0; seatIndex < 7; seatIndex++) {
             EntityDataAccessor<Optional<UUID>> seatAccessor = getSeatAccessor(seatIndex);
             Optional<UUID> assignedUUID = this.entityData.get(seatAccessor);
+            if (assignedUUID.isEmpty()) continue;
+            UUID uuid = assignedUUID.get();
 
-            if (assignedUUID.isPresent()) {
-                UUID uuid = assignedUUID.get();
-
-                if (!currentPassengerUUIDs.contains(uuid)) {
-                    boolean shouldClear = true;
-
-                    // "Smart" Check & Active Recovery
-                    if (this.level() instanceof ServerLevel serverLevel) {
-                        Entity passengerEntity = serverLevel.getEntity(uuid);
-
-                        if (passengerEntity == null) {
-                            // Entity still loading or dead. Wait up to 60s.
-                            if (this.tickCount < 1200) {
-                                shouldClear = false;
-                            }
-                        } else {
-                            if (passengerEntity.isAlive()) {
-                                Vec3 seatPos = seats[seatIndex]; // Current seat position
-                                // Teleport to sync position before mounting to avoid weird interpolation
-                                if (seatPos != null) {
-                                    passengerEntity.teleportTo(seatPos.x, seatPos.y, seatPos.z);
-                                }
-
-                                // Force re-mount
-                                passengerEntity.startRiding(this, true);
-
-                                // Do NOT clear the seat, we just fixed it.
-                                shouldClear = false;
-                            }
-                        }
-                    }
-
-                    if (shouldClear) {
-                        //Whaleborne.LOGGER.debug("Clearing seat assignment: seat {} for {}", seatIndex, uuid);
-                        this.entityData.set(seatAccessor, Optional.empty());
-                    }
-                } else {
-                    Entity passenger = getEntityByUUID(uuid);
-                    if (passenger != null && getSeatByEntity(passenger) != seatIndex) {
-                        //Whaleborne.LOGGER.debug("Correcting mismatched seat assignment: {} was in seat {} but belongs in {}",
-                        //passenger, seatIndex, getSeatByEntity(passenger));
-                        this.entityData.set(seatAccessor, Optional.empty());
-                    }
+            if (currentPassengerUUIDs.contains(uuid)) {
+                Entity passenger = getEntityByUUID(uuid);
+                if (passenger != null && getSeatByEntity(passenger) != seatIndex) {
+                    this.entityData.set(seatAccessor, Optional.empty());
                 }
+                continue;
+            }
+
+            if (!(this.level() instanceof ServerLevel serverLevel)) {
+                this.entityData.set(seatAccessor, Optional.empty());
+                continue;
+            }
+
+            Entity occupant = serverLevel.getEntity(uuid);
+
+            if (occupant == null) {
+                if (this.level().getGameTime() >= graceUntilGameTime) {
+                    this.entityData.set(seatAccessor, Optional.empty());
+                }
+                continue;
+            }
+
+            if (occupant instanceof Player
+                    || !occupant.isAlive()
+                    || (occupant.getVehicle() != null && occupant.getVehicle() != this)
+                    || occupant.distanceToSqr(this) > RECOVERY_MAX_DIST_SQ) {
+                this.entityData.set(seatAccessor, Optional.empty());
+                continue;
+            }
+
+            Vec3 seatPos = seatIndex < seats.length ? seats[seatIndex] : null;
+            if (seatPos != null) {
+                occupant.teleportTo(seatPos.x, seatPos.y, seatPos.z);
+            }
+            if (!occupant.startRiding(this, true)) {
+                this.entityData.set(seatAccessor, Optional.empty());
             }
         }
     }
@@ -2170,33 +2184,41 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
     protected void removePassenger(Entity passenger) {
         if (passenger instanceof Player && !this.isBreaching())
             stationaryTicks = 100;
-        if (passenger.isRemoved())
+        int dismountSeat = getSeatByEntity(passenger);
+        if (dismountSeat != -1) {
+            lastDismountSeat = dismountSeat;
+            lastDismountUuid = passenger.getUUID();
+        }
+        if (!this.level().isClientSide) {
             for (int i = 0; i < 7; i++) {
                 Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
                 if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
                     this.entityData.set(getSeatAccessor(i), Optional.empty());
                 }
             }
+        }
         super.removePassenger(passenger);
     }
 
     @Override
     public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
         int seatIndex = getSeatByEntity(passenger);
-        if (seatIndex != -1) {
-            for (int i = 0; i < 7; i++) {
-                Optional<UUID> occupant = this.entityData.get(getSeatAccessor(i));
-                if (occupant.isPresent() && occupant.get().equals(passenger.getUUID())) {
-                    this.entityData.set(getSeatAccessor(i), Optional.empty());
-                }
-            }
-
-            if (seatIndex >= 0 && seatIndex < seats.length) {
-                Vec3 seatPos = seats[seatIndex];
-                return new Vec3(seatPos.x, seatPos.y, seatPos.z);
-            }
+        if (seatIndex == -1 && passenger.getUUID().equals(lastDismountUuid)
+                && lastDismountSeat >= 0 && lastDismountSeat < 7) {
+            seatIndex = lastDismountSeat;
         }
-        return super.getDismountLocationForPassenger(passenger);
+        lastDismountSeat = -1;
+        lastDismountUuid = null;
+        if (seatIndex < 0) {
+            return super.getDismountLocationForPassenger(passenger);
+        }
+
+        Vec3 seatPos = seatIndex < seats.length ? seats[seatIndex] : null;
+        if (seatPos == null) {
+            return super.getDismountLocationForPassenger(passenger);
+        }
+
+        return seatPos;
     }
 
     public void rotatePassengers() {
@@ -3702,21 +3724,62 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         return -(float) (Mth.atan2(dy, horizontalDistance) * (180F / Math.PI));
     }
 
+    private Vec3 anchoredPos = null;
+
+    private void holdAnchorPosition() {
+        if (this.level().isClientSide) return;
+        if (!hasAnchorDown()) {
+            anchoredPos = null;
+            return;
+        }
+        if (anchoredPos == null) {
+            anchoredPos = this.position();
+            return;
+        }
+        if (this.getX() != anchoredPos.x || this.getZ() != anchoredPos.z) {
+            this.setPos(anchoredPos.x, this.getY(), anchoredPos.z);
+        }
+        this.setDeltaMovement(0, this.getDeltaMovement().y, 0);
+    }
+
     public boolean hasAnchorDown() {
         for (Entity passenger : getPassengers()) {
             if (passenger instanceof AnchorEntity anchor) {
                 if (anchor.isDown()) return true;
-                break;
             }
         }
         return false;
+    }
+
+    public boolean ownsPlatform(HullbackWalkableEntity tile) {
+        return tile == this.moving_nose || tile == this.moving_head || tile == this.moving_body;
+    }
+
+    private void liftPlayersOntoTile(HullbackWalkableEntity tile) {
+        net.minecraft.world.phys.AABB box = tile.getBoundingBox();
+        double top = box.maxY;
+        net.minecraft.world.phys.AABB probe = new net.minecraft.world.phys.AABB(
+                box.minX, top - LIFT_PROBE_DEPTH, box.minZ, box.maxX, top, box.maxZ);
+        net.minecraft.world.phys.AABB wide = new net.minecraft.world.phys.AABB(
+                box.minX, top - LIFT_JOIN_DEPTH, box.minZ, box.maxX, top, box.maxZ);
+        for (net.minecraft.world.entity.player.Player p : this.level().getEntitiesOfClass(
+                net.minecraft.world.entity.player.Player.class, wide)) {
+            if (p.getY() >= top || p.isPassenger()) continue;
+            boolean justJoined = p.tickCount < LIFT_JOIN_TICKS;
+            if (!justJoined && !p.getBoundingBox().intersects(probe)) {
+                continue;
+            }
+            p.teleportTo(p.getX(), top, p.getZ());
+        }
     }
 
     public HullbackWalkableEntity spawnPlatform(int index) {
         if (!this.isDeadOrDying()) {
             HullbackWalkableEntity part = new HullbackWalkableEntity(WBEntityRegistry.HULLBACK_PLATFORM.get(), this.level());
             part.setPos(this.getSubEntities()[index].getX(), this.position().y + currentPlatformHeight, this.getSubEntities()[index].getZ());
+            part.setOwner(this);
             if (this.level().addFreshEntity(part)) {
+                liftPlayersOntoTile(part);
                 return part;
             }
         }
@@ -3746,8 +3809,9 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
         // Uses fixed and stable height
         double platformY = this.getY() + currentPlatformHeight;
 
-        if (this.moving_nose == null) {
-            this.moving_nose = spawnPlatform(0);
+
+        if (this.moving_nose == null || this.moving_nose.isRemoved()) {
+            if (this.moving_nose != null || this.getStationaryTicks() > 0) this.moving_nose = spawnPlatform(0);
         } else {
             this.moving_nose.moveTo(this.nose.getX(), platformY, this.nose.getZ());
             this.moving_nose.setYRot(this.nose.getYRot());
@@ -3760,8 +3824,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        if (this.moving_head == null) {
-            this.moving_head = spawnPlatform(1);
+        if (this.moving_head == null || this.moving_head.isRemoved()) {
+            if (this.moving_head != null || this.getStationaryTicks() > 0) this.moving_head = spawnPlatform(1);
         } else {
             this.moving_head.moveTo(this.head.getX(), platformY, this.head.getZ());
             this.moving_head.setYRot(this.head.getYRot());
@@ -3773,8 +3837,8 @@ public class HullbackEntity extends WaterAnimal implements ContainerListener, Ha
             }
         }
 
-        if (this.moving_body == null) {
-            this.moving_body = spawnPlatform(2);
+        if (this.moving_body == null || this.moving_body.isRemoved()) {
+            if (this.moving_body != null || this.getStationaryTicks() > 0) this.moving_body = spawnPlatform(2);
         } else {
             this.moving_body.moveTo(this.body.getX(), platformY, this.body.getZ());
             this.moving_body.setYRot(this.body.getYRot());

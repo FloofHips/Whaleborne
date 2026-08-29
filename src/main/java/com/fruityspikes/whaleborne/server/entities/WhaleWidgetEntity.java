@@ -121,7 +121,7 @@ public abstract class WhaleWidgetEntity extends Entity {
         if (this.getDamage() > 0.0F) {
             this.setDamage(this.getDamage() - 1.0F);
         }
-        if(!this.getPersistent() && this.tickCount > 100 && !this.isPassenger()){
+        if(!this.level().isClientSide && !this.getPersistent() && this.tickCount > 100 && !this.isPassenger()){
             destroy(null);
         } else if (!this.isPassenger() && !this.isRemoved()) {
             if (this.getXRot() != 0.0F) {

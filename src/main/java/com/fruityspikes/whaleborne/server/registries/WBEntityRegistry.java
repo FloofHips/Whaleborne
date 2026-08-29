@@ -28,7 +28,8 @@ public class WBEntityRegistry {
                     EntityType.Builder.of(HullbackWalkableEntity::new, MobCategory.MISC)
                             .sized(5.5F, 0.5F)
                             .clientTrackingRange(128)
-                            .setShouldReceiveVelocityUpdates(true)
+                            .updateInterval(2)
+                            .noSave()
                             .build(new ResourceLocation(Whaleborne.MODID, "hullback_platform").toString())
     );
     public static final RegistryObject<EntityType<SailEntity>> SAIL = ENTITY_TYPES.register(
