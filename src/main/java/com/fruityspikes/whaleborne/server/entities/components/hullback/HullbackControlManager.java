@@ -36,7 +36,12 @@ public class HullbackControlManager {
     private static final float AI_MAX_PITCH = 20f;
 
     // Cache for third person mod check
-    private static Boolean IS_THIRD_PERSON_MOD_LOADED = null;
+    private static Boolean LEAWIND_LOADED = null;
+    private static Boolean SS_LOADED = null;
+    private static java.lang.reflect.Method SS_INSTANCE = null;
+    private static java.lang.reflect.Method SS_ACTIVE = null;
+    private static java.lang.reflect.Method SS_DECOUPLED = null;
+    private static boolean SS_FAILED = false;
 
     public HullbackControlManager(HullbackEntity whale) {
         this.whale = whale;
@@ -61,17 +66,10 @@ public class HullbackControlManager {
 
         if (controller instanceof Player player && player == net.minecraft.client.Minecraft.getInstance().player) {
             
-            // Check mod presence only once and cache it
-            if (IS_THIRD_PERSON_MOD_LOADED == null) {
-                IS_THIRD_PERSON_MOD_LOADED = ModList.get().isLoaded("leawind_third_person");
-            }
-
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc.options == null) return;
 
-            boolean isFirstPerson = mc.options.getCameraType().isFirstPerson();
-            // Logic: Enable vector if mod is present AND NOT in first person
-            boolean shouldVector = IS_THIRD_PERSON_MOD_LOADED && !isFirstPerson;
+            boolean shouldVector = isCameraRelativeSteering();
             
             boolean currentVectorState = whale.getEntityData().get(HullbackEntity.DATA_VECTOR_CONTROL);
 
@@ -103,15 +101,46 @@ public class HullbackControlManager {
             // If I am not piloting, trust visual entityData
             return whale.getEntityData().get(HullbackEntity.DATA_VECTOR_CONTROL);
         }
+        return isCameraRelativeSteering();
+    }
 
-        // Cache mod check (safety)
-        if (IS_THIRD_PERSON_MOD_LOADED == null) {
-            IS_THIRD_PERSON_MOD_LOADED = ModList.get().isLoaded("leawind_third_person");
+    private static boolean isCameraRelativeSteering() {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc.options == null) {
+            return false;
         }
+        if (LEAWIND_LOADED == null) {
+            LEAWIND_LOADED = ModList.get().isLoaded("leawind_third_person");
+        }
+        if (LEAWIND_LOADED && !mc.options.getCameraType().isFirstPerson()) {
+            return true;
+        }
+        return isShoulderSurfingDecoupled();
+    }
 
-        // Absolute priority for current camera
-        boolean isFirstPerson = mc.options.getCameraType().isFirstPerson();
-        return IS_THIRD_PERSON_MOD_LOADED && !isFirstPerson;
+    private static boolean isShoulderSurfingDecoupled() {
+        if (SS_LOADED == null) {
+            SS_LOADED = ModList.get().isLoaded("shouldersurfing");
+        }
+        if (!SS_LOADED || SS_FAILED) {
+            return false;
+        }
+        try {
+            if (SS_INSTANCE == null) {
+                Class<?> api = Class.forName("com.github.exopandora.shouldersurfing.api.client.IShoulderSurfing");
+                SS_INSTANCE = api.getMethod("getInstance");
+                SS_ACTIVE = api.getMethod("isShoulderSurfing");
+                SS_DECOUPLED = api.getMethod("isCameraDecoupled");
+            }
+            Object api = SS_INSTANCE.invoke(null);
+            return api != null
+                    && (Boolean) SS_ACTIVE.invoke(api)
+                    && (Boolean) SS_DECOUPLED.invoke(api);
+        } catch (Throwable t) {
+            SS_FAILED = true;
+            com.fruityspikes.whaleborne.Whaleborne.LOGGER.warn("Shoulder Surfing detected but its API could not be reached, steering falls back to tank mode", t);
+            return false;
+        }
     }
 
     public Vec3 getRiddenInput(Player player, Vec3 travelVector) {
