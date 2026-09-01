@@ -1,6 +1,7 @@
 package com.fruityspikes.whaleborne.server.entities;
 
 import com.fruityspikes.whaleborne.Whaleborne;
+import com.fruityspikes.whaleborne.WhaleborneDebug;
 import com.fruityspikes.whaleborne.Config;
 import com.fruityspikes.whaleborne.client.menus.HullbackMenu;
 import com.fruityspikes.whaleborne.client.renderers.HullbackWakeRenderer;
@@ -81,8 +82,8 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private static final float MOUTH_OPEN_SPEED = 0.8f;
     private static final float SPEED_THRESHOLD_MOUTH_OPEN = 0.3f;
     private static final float ARMOR_EJECT_THRESHOLD = 0.45f;
-    private static final float PLATFORM_HEIGHT_HELM = 4.5F; 
-    private static final float PLATFORM_HEIGHT_STATIONARY = 4.5F;
+    private static final float PLATFORM_HEIGHT_HELM = 4.7F;
+    private static final float PLATFORM_HEIGHT_STATIONARY = 4.7F;
     private static final float PLATFORM_HEIGHT_LERP_SPEED = 0.1F;
     private static final int POST_LOAD_VALIDATION_DELAY_TICKS = 5;
     private static final int STATIONARY_TICKS_PLAYER_ABOVE = 60;
@@ -91,6 +92,8 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private static final int DECK_LOAD_GRACE_TICKS = 5;
     private static final int STATIONARY_MINIMUM_THRESHOLD = 30;
     private static final int PLAYER_ABOVE_COOLDOWN_TICKS = 20;
+    private static final int DECK_OCCUPANCY_INTERVAL = 10;
+    private static final int DECK_EMPTY_DISCARD_TICKS = 20;
     private static final int DIRT_INITIAL_SYNC_TICK = 10;
     private static final int EARLY_TICK_THRESHOLD = 20;
     private static final double SPEED_THRESHOLD_MOUTH_OPEN_SQR = SPEED_THRESHOLD_MOUTH_OPEN * SPEED_THRESHOLD_MOUTH_OPEN;
@@ -135,6 +138,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
             SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.COMPOUND_TAG);
     public static final EntityDataAccessor<Boolean> DATA_VECTOR_CONTROL = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> DATA_STATIONARY_TICKS = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Boolean> DATA_DECK_OCCUPIED = SynchedEntityData.defineId(HullbackEntity.class, EntityDataSerializers.BOOLEAN);
 
     // ─── Inventory Slots ────────────────────────────────────────
     public static final int INV_SLOT_CROWN = 0;
@@ -200,10 +204,14 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     // ─── State: Movement & Breaching ─────────────────────────────
     private boolean isBreaching;
     private boolean pitchLocked = false;
+    private int deckEmptyTicks;
+    private boolean discardLogged;
     private boolean wasPilotControlled = false;
 
     // ─── State: Platform & Player Detection ──────────────────────
     private int playerAboveCooldown = 0;
+    private boolean pilotStallLogged = false;
+    private final HullbackRiderCarry riderCarry = new HullbackRiderCarry(this);
     private boolean platformsStable = false;
     private boolean isApproachingPlayer = false;
     private float targetPlatformHeight;
@@ -486,6 +494,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         builder.define(DATA_MOUTH_PROGRESS, 0f);
         builder.define(DATA_VECTOR_CONTROL, false);
         builder.define(DATA_STATIONARY_TICKS, 0);
+        builder.define(DATA_DECK_OCCUPIED, false);
     }
 
     private boolean hasRiderPassengers() {
@@ -497,6 +506,14 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
     public int getStationaryTicks() {
         return this.entityData.get(DATA_STATIONARY_TICKS);
+    }
+
+    public double swimOffset() {
+        return partManager.swimOffset();
+    }
+
+    public boolean isDeckOccupied() {
+        return this.entityData.get(DATA_DECK_OCCUPIED);
     }
 
     public void setStationaryTicks(int ticks) {
@@ -710,6 +727,10 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     /** Direct deck scan with no cooldown gating. Used both by the periodic detector
      *  (via {@link #scanPlayerAbove()}) and by the platform-discard guard. */
     private boolean checkPlayerOnDeck() {
+        return deckHolds(entity -> entity instanceof Player);
+    }
+
+    private boolean deckHolds(java.util.function.Predicate<Entity> wanted) {
         HullbackPartEntity[] parts = getSubEntities();
         PlatformLayout layout = partManager.getPlatformLayout();
         for (int i = 0; i < parts.length; i++) {
@@ -740,10 +761,18 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
                 topSurface = new AABB(box.minX, box.maxY, box.minZ, box.maxX, box.maxY + heightCheck, box.maxZ).inflate(1.5, 0.0, 1.5);
             }
             List<Entity> entities = level().getEntitiesOfClass(Entity.class, topSurface,
-                    entity -> entity instanceof Player && !entity.isSpectator() && !entity.isPassenger());
+                    entity -> wanted.test(entity) && !entity.isSpectator() && !entity.isPassenger());
             if (!entities.isEmpty()) return true;
         }
         return false;
+    }
+
+    private boolean deckHasRiders() {
+        return deckHolds(entity -> entity instanceof LivingEntity
+                && !(entity instanceof HullbackEntity)
+                && !(entity instanceof HullbackPartEntity)
+                && !(entity instanceof HullbackWalkableEntity)
+                && !(entity instanceof WhaleWidgetEntity));
     }
 
     @Override
@@ -1029,6 +1058,10 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
         // 7. Handle various passive behaviors and entity logic
         managePassiveBehaviors();
+
+        if (!this.level().isClientSide) {
+            riderCarry.serverTick();
+        }
     }
 
     /** Helper record to store rotation data for the Hard Lock. */
@@ -1213,7 +1246,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         // Player above detection - with cooldown and hysteresis
         // Skip detection while breaching, out of water, or air-critical so the breath goal
         // isn't gated out by player-above stationaryTicks while the whale is suffocating.
-        if (playerAboveCooldown == 0 && !this.isBreaching && this.isInWater()
+        if (currentPilot == null && playerAboveCooldown == 0 && !this.isBreaching && this.isInWater()
                 && this.getAirSupply() > this.getMaxAirSupply() * 0.2) {
             if (scanPlayerAbove()) {
                 // Only stabilizes if horizontal speed is negligible
@@ -1229,19 +1262,41 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
         if (!this.level().isClientSide) {
             this.entityData.set(DATA_STATIONARY_TICKS, stationaryTicks);
+            if (this.tickCount % DECK_OCCUPANCY_INTERVAL == 0) {
+                this.entityData.set(DATA_DECK_OCCUPIED, checkPlayerOnDeck());
+            }
         }
 
         // Discard only when truly idle: no anchor, no one on the deck, and no passengers
-        // riding (helm pilot, seated mobs, etc.). Bypasses the scan cooldown via
-        // checkPlayerOnDeck so a stale cooldown can't trigger a one-tick discard.
-        if (stationaryTicks == 0
-                && !this.hasAnchorDown()
-                && !checkPlayerOnDeck()
-                && !hasRiderPassengers()) {
+        boolean deckWanted = this.hasAnchorDown() || deckHasRiders() || hasRiderPassengers();
+        boolean deckIdle = stationaryTicks == 0 && !deckWanted;
+        deckEmptyTicks = deckIdle ? deckEmptyTicks + 1 : 0;
+        if (deckEmptyTicks >= DECK_EMPTY_DISCARD_TICKS) {
+            if (!this.level().isClientSide && !discardLogged) {
+                discardLogged = true;
+                WhaleborneDebug.log("deckdiscard id=%d tick=%d empty=%d",
+                        this.getId(), this.tickCount, deckEmptyTicks);
+            }
             discardAllPlatforms();
-        } else if (stationaryTicks > STATIONARY_MINIMUM_THRESHOLD && !platformsStable) {
+        }
+        if (!deckIdle) {
+            discardLogged = false;
+        }
+        if (deckWanted) {
+            ensurePlatforms();
+        }
+        if (!deckIdle && stationaryTicks > STATIONARY_MINIMUM_THRESHOLD && !platformsStable) {
             if (stationaryTicks < (STATIONARY_TICKS_DISMOUNT - STATIONARY_MINIMUM_THRESHOLD)) {
                 platformsStable = true;
+            }
+        }
+
+        boolean pilotStalled = currentPilot != null && stationaryTicks > 0;
+        if (pilotStalled != pilotStallLogged) {
+            pilotStallLogged = pilotStalled;
+            if (pilotStalled) {
+                WhaleborneDebug.log("pilotstall id=%d ticks=%d deck=%s",
+                        this.getId(), stationaryTicks, scanPlayerAbove());
             }
         }
     }
@@ -1528,6 +1583,17 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     }
 
     /** Discards all walkable platform entities and nullifies references. */
+    private void ensurePlatforms() {
+        if (this.level().isClientSide) {
+            return;
+        }
+        for (int p = 0; p < 3; p++) {
+            if (!this.partManager.hasPlatform(p)) {
+                this.partManager.spawnPlatform(p);
+            }
+        }
+    }
+
     private void discardAllPlatforms() {
         partManager.discardAllPlatforms();
     }
@@ -1583,6 +1649,41 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         }
         return smoothedAnimSpeed;
     }
+
+
+    public float getPlatformHeight() {
+        return this.currentPlatformHeight;
+    }
+
+    public Vec3 deckTilePos(int slot, float localX, float localY, float localZ, boolean rotates) {
+        HullbackPartEntity[] parts = getSubEntities();
+        double px, py, pz;
+        float yaw;
+        if (slot < 0 || slot >= parts.length) {
+            px = getX(); py = getY(); pz = getZ(); yaw = getYRot();
+        } else {
+            px = parts[slot].getX(); py = parts[slot].getY(); pz = parts[slot].getZ();
+            yaw = getPartYRot(slot);
+        }
+        double dx = localX, dz = localZ;
+        if (rotates) {
+            double rad = Math.toRadians(yaw);
+            double cos = Math.cos(rad), sin = Math.sin(rad);
+            dx = localX * cos - localZ * sin;
+            dz = localX * sin + localZ * cos;
+        }
+        return new Vec3(px + dx, py + getPlatformHeight() + localY, pz + dz);
+    }
+
+
+    public void carryDeckRiders(java.util.List<? extends Player> players) {
+        this.riderCarry.clientTick(players);
+    }
+
+    public Vec3 deckMotionAt(Entity rider) {
+        return this.riderCarry.contactMotion(rider);
+    }
+
 
     public Vec3 getPartPos(int i){
         if (i < 0 || i >= partManager.partPosition.length || partManager.partPosition[i] == null) return this.position();

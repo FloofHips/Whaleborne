@@ -29,8 +29,22 @@ base {
 // NeoForge 1.21.1 requires Java 21
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+sourceSets {
+    main {
+        java {
+            exclude 'vazkii/neat/mixin/**'
+        }
+    }
+    gametest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
 neoForge {
     version = project.neo_version
+
+    addModdingDependenciesTo sourceSets.gametest
 
     parchment {
         mappingsVersion = project.parchment_mappings_version
@@ -69,14 +83,7 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet(sourceSets.main)
-        }
-    }
-}
-
-sourceSets {
-    main {
-        java {
-            exclude 'vazkii/neat/mixin/**'
+            sourceSet(sourceSets.gametest)
         }
     }
 }

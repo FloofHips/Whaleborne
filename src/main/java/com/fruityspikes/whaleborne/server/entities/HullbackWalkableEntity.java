@@ -11,6 +11,7 @@ import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.UUID;
 
@@ -19,6 +20,19 @@ public class HullbackWalkableEntity extends Entity {
     private static final int OWNER_CHECK_INTERVAL = 32;
     private static final int OWNER_CHECK_GRACE_TICKS = 20;
     private static final double OWNER_MAX_DIST_SQ = 24.0 * 24.0;
+
+    private static final EntityDataAccessor<Integer> DATA_OWNER_ID =
+            SynchedEntityData.defineId(HullbackWalkableEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> DATA_ANCHOR =
+            SynchedEntityData.defineId(HullbackWalkableEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> DATA_LOCAL_X =
+            SynchedEntityData.defineId(HullbackWalkableEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> DATA_LOCAL_Y =
+            SynchedEntityData.defineId(HullbackWalkableEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> DATA_LOCAL_Z =
+            SynchedEntityData.defineId(HullbackWalkableEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Boolean> DATA_ROTATES =
+            SynchedEntityData.defineId(HullbackWalkableEntity.class, EntityDataSerializers.BOOLEAN);
 
     private UUID ownerUuid;
 
@@ -53,6 +67,27 @@ public class HullbackWalkableEntity extends Entity {
 
     public void setOwner(Entity owner) {
         this.ownerUuid = owner == null ? null : owner.getUUID();
+        this.entityData.set(DATA_OWNER_ID, owner == null ? -1 : owner.getId());
+    }
+
+    public int getOwnerId() {
+        return this.entityData.get(DATA_OWNER_ID);
+    }
+
+    public int getAnchor() {
+        return this.entityData.get(DATA_ANCHOR);
+    }
+
+    public void setAnchor(int slot, float localX, float localY, float localZ, boolean rotates) {
+        this.entityData.set(DATA_ANCHOR, slot);
+        this.entityData.set(DATA_LOCAL_X, localX);
+        this.entityData.set(DATA_LOCAL_Y, localY);
+        this.entityData.set(DATA_LOCAL_Z, localZ);
+        this.entityData.set(DATA_ROTATES, rotates);
+    }
+
+    public boolean rotatesWithPart() {
+        return this.entityData.get(DATA_ROTATES);
     }
 
     public UUID getOwnerUuid() {
@@ -62,7 +97,11 @@ public class HullbackWalkableEntity extends Entity {
     @Override
     public void tick() {
         super.tick();
-        if (this.level().isClientSide || this.isRemoved()) return;
+        if (this.level().isClientSide) {
+            followOwner();
+            return;
+        }
+        if (this.isRemoved()) return;
         if (this.tickCount < OWNER_CHECK_GRACE_TICKS || this.tickCount % OWNER_CHECK_INTERVAL != 0) return;
         if (this.ownerUuid == null) {
             this.discard();
@@ -75,6 +114,30 @@ public class HullbackWalkableEntity extends Entity {
                 || whale.distanceToSqr(this) > OWNER_MAX_DIST_SQ) {
             this.discard();
         }
+    }
+
+    private boolean followOwner() {
+        int anchor = this.entityData.get(DATA_ANCHOR);
+        if (anchor < 0) return false;
+        if (!(this.level().getEntity(this.entityData.get(DATA_OWNER_ID)) instanceof HullbackEntity whale)) return false;
+        if (!whale.arePartsInitialized()) return false;
+        Vec3 pos = whale.deckTilePos(anchor,
+                this.entityData.get(DATA_LOCAL_X),
+                this.entityData.get(DATA_LOCAL_Y),
+                this.entityData.get(DATA_LOCAL_Z),
+                this.entityData.get(DATA_ROTATES));
+        this.setPos(pos.x, pos.y, pos.z);
+        return true;
+    }
+
+    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps) {
+        if (followOwner()) return;
+        this.setPos(x, y, z);
+        this.setRot(yRot, xRot);
+    }
+
+    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps, boolean teleport) {
+        this.lerpTo(x, y, z, yRot, xRot, steps);
     }
 
     @Override
@@ -91,10 +154,15 @@ public class HullbackWalkableEntity extends Entity {
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
-        builder.define(DATA_WIDTH, 1.5f);
-        builder.define(DATA_HEIGHT, 0.5f);
+        builder.define(DATA_OWNER_ID, -1);
+        builder.define(DATA_ANCHOR, -1);
+        builder.define(DATA_LOCAL_X, 0f);
+        builder.define(DATA_LOCAL_Y, 0f);
+        builder.define(DATA_LOCAL_Z, 0f);
+        builder.define(DATA_ROTATES, false);
+        builder.define(DATA_WIDTH, this.getBbWidth());
+        builder.define(DATA_HEIGHT, this.getBbHeight());
     }
-
 
     @Override
     protected void readAdditionalSaveData(CompoundTag compoundTag) {}

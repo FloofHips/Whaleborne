@@ -45,5 +45,17 @@ public class WhaleborneNetwork {
                 SeatLayoutPayload.STREAM_CODEC,
                 SeatLayoutPayload::handle
         );
+
+        registrar.playToClient(
+                DeckRiderSyncPayload.TYPE,
+                DeckRiderSyncPayload.STREAM_CODEC,
+                DeckRiderSyncPayload::handle
+        );
+
+        registrar.playToServer(
+                DeckRiderClaimPayload.TYPE,
+                DeckRiderClaimPayload.STREAM_CODEC,
+                DeckRiderClaimPayload::handle
+        );
     }
 }

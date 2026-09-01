@@ -23,6 +23,8 @@ public class HullbackPartManager {
     private SeatLayout seatLayout = SeatLayout.defaultLayout();
     private PlatformLayout platformLayout = PlatformLayout.defaultLayout();
     private static final float SWIM_CYCLE_TICK_MULTIPLIER = 0.1f;
+    private static final float SWIM_CYCLE_BOARDED_MULTIPLIER = 0.05f;
+    private static final float SWIM_CYCLE_BOARDED_DAMPING = 0.3f;
     private static final float HEAD_BODY_SWIM_AMPLITUDE = 2f;
     private static final float TAIL_SWIM_AMPLITUDE = 8f;
     private static final float TAIL_PITCH_SCALE = 1.5f;
@@ -71,6 +73,8 @@ public class HullbackPartManager {
     private double lastWhaleX = Double.NaN, lastWhaleY = Double.NaN, lastWhaleZ = Double.NaN;
     private float lastWhaleYaw = Float.NaN, lastWhalePitch = Float.NaN;
     private boolean partsConverged = false;
+    private double lastSwimOffset;
+    private Vec3 lastHullPos;
     private boolean partSnapshotValid = false;
     private static final double PART_STABILITY_EPSILON_SQ = 1.0e-8;
 
@@ -128,11 +132,18 @@ public class HullbackPartManager {
         if (hullback.isPitchLocked() || hullback.getStationaryTicks() > 0) {
              swimCycle = 0f;
         } else {
-             // MODIFICATION: swimCycle based on horizontal speed only when free
-             swimCycle = Mth.sin((float) hullback.level().getGameTime() * SWIM_CYCLE_TICK_MULTIPLIER) * horizontalSpeed;
+             swimCycle = hullback.isDeckOccupied()
+                     ? Mth.sin((float) hullback.level().getGameTime() * SWIM_CYCLE_BOARDED_MULTIPLIER)
+                             * horizontalSpeed * SWIM_CYCLE_BOARDED_DAMPING
+                     : Mth.sin((float) hullback.level().getGameTime() * SWIM_CYCLE_TICK_MULTIPLIER) * horizontalSpeed;
         }
+        lastSwimOffset = swimCycle * HEAD_BODY_SWIM_AMPLITUDE;
         float yawRad = -hullback.getYRot() * Mth.DEG_TO_RAD;
         float pitchRad = hullback.getXRot() * Mth.DEG_TO_RAD;
+        Vec3 hullPos = hullback.position();
+        if (lastHullPos == null) {
+            lastHullPos = hullPos;
+        }
 
         for (int i = 0; i < offsets.length; i++) {
             offsets[i] = offsets[i]
@@ -231,9 +242,14 @@ public class HullbackPartManager {
             if (sq > maxDeltaSq) maxDeltaSq = sq;
         }
         partsConverged = maxDeltaSq <= PART_STABILITY_EPSILON_SQ;
+        lastHullPos = hullPos;
     }
 
     // ─── Seat layout (dynamic, loaded from SeatLayout) ─────────
+
+    public double swimOffset() {
+        return lastSwimOffset;
+    }
 
     public SeatLayout getSeatLayout() { return seatLayout; }
     public void setSeatLayout(SeatLayout layout) { this.seatLayout = layout; }
@@ -318,11 +334,13 @@ public class HullbackPartManager {
 
     /** Pivot cache: pre-computed per anchor slot (0..4 = parts, 5 = whale center). */
     private final double[] pivotX = new double[6];
+    private final double[] pivotY = new double[6];
     private final double[] pivotZ = new double[6];
     private final double[] pivotCos = new double[6];
     private final double[] pivotSin = new double[6];
     /** Snapshot of the previous tick's pivot cache for the no-op skip check. */
     private final double[] lastPivotX = new double[6];
+    private final double[] lastPivotY = new double[6];
     private final double[] lastPivotZ = new double[6];
     private final double[] lastPivotCos = new double[6];
     private final double[] lastPivotSin = new double[6];
@@ -421,8 +439,9 @@ public class HullbackPartManager {
 
         PlatformLayout.PlatformDef def = platformLayout.getPlatform(index);
         float height = def.height();
+        float yDelta = def.yOffset() - PlatformLayout.DEFAULT_Y_OFFSET;
         double cx = subEntities[index].getX();
-        double cy = hullback.position().y + def.yOffset();
+        double cy = subEntities[index].getY() + def.yOffset();
         double cz = subEntities[index].getZ();
 
         // Legacy AABB: spawned either implicitly (wild Hullback / part with no shapes & no length)
@@ -432,6 +451,7 @@ public class HullbackPartManager {
             tile.applyDimensions(def.width(), height);
             tile.setPos(cx + def.xOffset(), cy, cz + def.zOffset());
             tile.setOwner(hullback);
+            tile.setAnchor(index, def.xOffset(), yDelta, def.zOffset(), false);
             if (hullback.level().addFreshEntity(tile)) {
                 liftPlayersOntoTile(tile);
                 tiles.add(tile);
@@ -479,6 +499,8 @@ public class HullbackPartManager {
                     tile.applyDimensions(tileSize, height);
                     tile.setPos(cx, cy + s.dy(), cz);
                     tile.setOwner(hullback);
+                    tile.setAnchor(anchorSlot(s.anchorPart(), index), lx, s.dy() + yDelta, lz,
+                            s.rotateWithYaw());
                     if (hullback.level().addFreshEntity(tile)) {
                         liftPlayersOntoTile(tile);
                         tiles.add(tile);
@@ -496,27 +518,30 @@ public class HullbackPartManager {
         // nose/head/body/tail/fluke. Slot 5 = whale center. Per-tile cost drops to a slot lookup.
         for (int i = 0; i < 5 && i < subEntities.length; i++) {
             pivotX[i] = subEntities[i].getX();
+            pivotY[i] = subEntities[i].getY();
             pivotZ[i] = subEntities[i].getZ();
             double yawRad = Math.toRadians(partYRot != null && i < partYRot.length ? partYRot[i] : 0f);
             pivotCos[i] = Math.cos(yawRad);
             pivotSin[i] = Math.sin(yawRad);
         }
         pivotX[5] = hullback.getX();
+        pivotY[5] = hullback.getY();
         pivotZ[5] = hullback.getZ();
         double whaleYawRad = Math.toRadians(hullback.getYRot());
         pivotCos[5] = Math.cos(whaleYawRad);
         pivotSin[5] = Math.sin(whaleYawRad);
-        double centerYBase = hullback.getY() + currentPlatformHeight;
+        double platformOffset = currentPlatformHeight;
         double deltaSq = deltaMovement.x * deltaMovement.x + deltaMovement.z * deltaMovement.z;
 
         // Stable-skip: if every pivot, centerY base, and delta are within epsilon of the previous
         // tick, every tile would land on the exact same world position it already occupies — the
         // moveTo + setDeltaMovement loop is a no-op. Skip it.
         boolean stable = snapshotValid
-                && Math.abs(centerYBase - lastCenterYBase) <= STABILITY_EPSILON
+                && Math.abs(platformOffset - lastCenterYBase) <= STABILITY_EPSILON
                 && Math.abs(deltaSq - lastDeltaSq) <= STABILITY_EPSILON;
         for (int i = 0; i < 6 && stable; i++) {
             if (Math.abs(pivotX[i] - lastPivotX[i]) > STABILITY_EPSILON
+                    || Math.abs(pivotY[i] - lastPivotY[i]) > STABILITY_EPSILON
                     || Math.abs(pivotZ[i] - lastPivotZ[i]) > STABILITY_EPSILON
                     || Math.abs(pivotCos[i] - lastPivotCos[i]) > STABILITY_EPSILON
                     || Math.abs(pivotSin[i] - lastPivotSin[i]) > STABILITY_EPSILON) {
@@ -524,10 +549,11 @@ public class HullbackPartManager {
             }
         }
         System.arraycopy(pivotX, 0, lastPivotX, 0, 6);
+        System.arraycopy(pivotY, 0, lastPivotY, 0, 6);
         System.arraycopy(pivotZ, 0, lastPivotZ, 0, 6);
         System.arraycopy(pivotCos, 0, lastPivotCos, 0, 6);
         System.arraycopy(pivotSin, 0, lastPivotSin, 0, 6);
-        lastCenterYBase = centerYBase;
+        lastCenterYBase = platformOffset;
         lastDeltaSq = deltaSq;
         snapshotValid = true;
 
@@ -542,7 +568,6 @@ public class HullbackPartManager {
             if (tiles.isEmpty()) continue;
             List<float[]> locals = partTileLocals[part];
             PlatformLayout.PlatformDef d = platformLayout.getPlatform(part);
-            double centerY = centerYBase + (d.yOffset() - PlatformLayout.DEFAULT_Y_OFFSET);
 
             for (int i = 0; i < tiles.size(); i++) {
                 HullbackWalkableEntity tile = tiles.get(i);
@@ -552,16 +577,9 @@ public class HullbackPartManager {
                 int anchorIdx = (int) L[4];
                 int slot = anchorSlot(anchorIdx, part);
 
-                double worldDx, worldDz;
-                if (rotates) {
-                    double cos = pivotCos[slot], sin = pivotSin[slot];
-                    worldDx = lx * cos - lz * sin;
-                    worldDz = lx * sin + lz * cos;
-                } else {
-                    worldDx = lx;
-                    worldDz = lz;
-                }
-                tile.moveTo(pivotX[slot] + worldDx, centerY + ly, pivotZ[slot] + worldDz);
+                Vec3 seat = hullback.deckTilePos(slot, lx,
+                        ly + (d.yOffset() - PlatformLayout.DEFAULT_Y_OFFSET), lz, rotates);
+                tile.moveTo(seat.x, seat.y, seat.z);
                 tile.setDeltaMovement(deltaMovement);
             }
         }

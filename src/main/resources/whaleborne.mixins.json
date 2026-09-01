@@ -10,7 +10,11 @@
         "HealthBarsVisibilityMixin",
         "HealthBarsGuiMixin",
         "HealthBarsPickMixin",
-        "MobCategoryMixin"
+        "MobCategoryMixin",
+    "FloatingPlayerAccessor",
+    "LocalPlayerDeckClaimMixin",
+    "HullPassMixin",
+    "DeckRiderMoveCheckMixin"
     ],
   "injectors": {
     "defaultRequire": 1

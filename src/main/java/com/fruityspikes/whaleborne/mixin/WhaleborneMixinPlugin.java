@@ -19,6 +19,9 @@ public class WhaleborneMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.LocalPlayerDeckClaimMixin")) {
+            return net.neoforged.fml.loading.FMLLoader.getDist().isClient();
+        }
         if (mixinClassName.equals("com.fruityspikes.whaleborne.mixin.NeatCompatMixin")) {
             // Check if class exists without loading it to avoid MixinTargetAlreadyLoadedException
             return this.getClass().getClassLoader().getResource("vazkii/neat/HealthBarRenderer.class") != null;
