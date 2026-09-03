@@ -8,7 +8,6 @@ import com.fruityspikes.whaleborne.server.entities.HullbackWalkableEntity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
@@ -52,6 +51,11 @@ public final class DeckRiderSync {
         rider.stamp = level.getGameTime();
     }
 
+    public static boolean holds(int riderId, long gameTime) {
+        Rider state = RIDERS.get(riderId);
+        return state != null && Math.abs(gameTime - state.stamp) <= STALE_TICKS;
+    }
+
     public static void clear() {
         RIDERS.clear();
     }
@@ -78,9 +82,8 @@ public final class DeckRiderSync {
     }
 
     private static String place(ClientLevel level, Minecraft minecraft, int riderId, Rider state) {
-        Entity entity = level.getEntity(riderId);
-        if (!(entity instanceof LivingEntity rider) || rider == minecraft.player
-                || rider.isControlledByLocalInstance()) {
+        Entity rider = level.getEntity(riderId);
+        if (rider == null || rider == minecraft.player || rider.isControlledByLocalInstance()) {
             return "notremote";
         }
         if (rider.isPassenger() || rider.isSpectator() || !rider.isAlive()) {

@@ -4,18 +4,21 @@
   "package": "com.fruityspikes.whaleborne.mixin",
   "compatibilityLevel": "JAVA_21",
   "plugin": "com.fruityspikes.whaleborne.mixin.WhaleborneMixinPlugin",
-    "mixins": [
-        "NeatCompatMixin",
-        "HealthBarsCompatMixin",
-        "HealthBarsVisibilityMixin",
-        "HealthBarsGuiMixin",
-        "HealthBarsPickMixin",
-        "MobCategoryMixin",
+  "mixins": [
+    "NeatCompatMixin",
+    "HealthBarsCompatMixin",
+    "HealthBarsVisibilityMixin",
+    "HealthBarsGuiMixin",
+    "HealthBarsPickMixin",
+    "MobCategoryMixin",
     "FloatingPlayerAccessor",
     "LocalPlayerDeckClaimMixin",
     "HullPassMixin",
     "DeckRiderMoveCheckMixin"
-    ],
+  ],
+  "client": [
+    "DeckRiderLerpMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

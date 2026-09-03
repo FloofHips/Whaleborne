@@ -1,6 +1,6 @@
 package com.fruityspikes.whaleborne.server.entities;
 
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -19,10 +19,10 @@ public final class DeckRiderAnchors {
     private DeckRiderAnchors() {
     }
 
-    public record Anchor(LivingEntity rider, HullbackEntity whale, HullbackWalkableEntity tile, long stamp) {
+    public record Anchor(Entity rider, HullbackEntity whale, HullbackWalkableEntity tile, long stamp) {
     }
 
-    public static void set(LivingEntity rider, HullbackEntity whale, HullbackWalkableEntity tile) {
+    public static void set(Entity rider, HullbackEntity whale, HullbackWalkableEntity tile) {
         if (tile == null) {
             clear(rider);
             return;
@@ -32,7 +32,7 @@ public final class DeckRiderAnchors {
         ANCHORS.put(rider.getId(), new Anchor(rider, whale, tile, now));
     }
 
-    public static void clear(LivingEntity rider) {
+    public static void clear(Entity rider) {
         ANCHORS.remove(rider.getId());
     }
 
@@ -41,7 +41,7 @@ public final class DeckRiderAnchors {
         return new ArrayList<>(ANCHORS.values());
     }
 
-    public static Anchor current(LivingEntity rider, long gameTime) {
+    public static Anchor current(Entity rider, long gameTime) {
         Anchor anchor = ANCHORS.get(rider.getId());
         if (anchor == null || anchor.rider() != rider || anchor.whale().level() != rider.level()) {
             return null;

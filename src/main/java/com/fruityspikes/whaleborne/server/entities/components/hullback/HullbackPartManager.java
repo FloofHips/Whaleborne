@@ -153,10 +153,12 @@ public class HullbackPartManager {
             offsets[i] = offsets[i].add(hullback.getX(), hullback.getY(), hullback.getZ());
 
             if (i > 0) {
+                Vec3 wasLocal = prevPartPositions[i].subtract(lastHullPos);
+                Vec3 wantLocal = offsets[i].subtract(hullPos);
                 offsets[i] = new Vec3(
-                        Mth.lerp(PART_DRAG_FACTORS[i], prevPartPositions[i].x, offsets[i].x),
+                        hullPos.x + Mth.lerp(PART_DRAG_FACTORS[i], wasLocal.x, wantLocal.x),
                         Mth.lerp(PART_DRAG_FACTORS[i], prevPartPositions[i].y, offsets[i].y),
-                        Mth.lerp(PART_DRAG_FACTORS[i], prevPartPositions[i].z, offsets[i].z)
+                        hullPos.z + Mth.lerp(PART_DRAG_FACTORS[i], wasLocal.z, wantLocal.z)
                 );
 
                 Vec3 parentPos = prevPartPositions[i-1];
@@ -384,10 +386,15 @@ public class HullbackPartManager {
                 box.minX, top - LIFT_PROBE_DEPTH, box.minZ, box.maxX, top, box.maxZ);
         net.minecraft.world.phys.AABB wide = new net.minecraft.world.phys.AABB(
                 box.minX, top - LIFT_JOIN_DEPTH, box.minZ, box.maxX, top, box.maxZ);
-        for (net.minecraft.world.entity.player.Player p : hullback.level().getEntitiesOfClass(
-                net.minecraft.world.entity.player.Player.class, wide)) {
+        for (net.minecraft.world.entity.Entity p : hullback.level().getEntitiesOfClass(
+                net.minecraft.world.entity.Entity.class, wide,
+                e -> (e instanceof net.minecraft.world.entity.player.Player
+                        || e instanceof net.minecraft.world.entity.item.ItemEntity
+                        || e instanceof net.minecraft.world.entity.Mob)
+                        && !(e instanceof HullbackEntity))) {
             if (p.getY() >= top || p.isPassenger()) continue;
-            boolean justJoined = p.tickCount < LIFT_JOIN_TICKS;
+            boolean justJoined = p instanceof net.minecraft.world.entity.player.Player
+                    && p.tickCount < LIFT_JOIN_TICKS;
             if (!justJoined && !p.getBoundingBox().intersects(probe)) {
                 continue;
             }

@@ -9,6 +9,7 @@ import net.minecraft.world.entity.MoverType;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -34,6 +35,8 @@ public final class HullbackRiderCarry {
     private static final double PROBE_PAD_MIN = 0.35;
     private static final double PROBE_PAD_PER_SPEED = 2.0;
     private static final double LIFT_LIMIT = 0.2;
+    private static final double FOOTING_LIFT = 0.012;
+    private static final double BOB_PROBE_DEPTH = 0.1;
     private static final double RESEAT_LIMIT = 1.0;
     private static final double DEPTH_TIE = 1.0E-4;
     private static final int HOLD_TICKS = 6;
@@ -49,6 +52,9 @@ public final class HullbackRiderCarry {
     private final Map<Integer, Integer> held = new HashMap<>();
     private final Map<Integer, Integer> footing = new HashMap<>();
     private final Set<Integer> flight = new HashSet<>();
+    private final Map<Integer, Vec3> flightCarry = new HashMap<>();
+    private final Map<Integer, Double> lastY = new HashMap<>();
+    private final Map<Integer, Boolean> lastGround = new HashMap<>();
     private boolean launched;
     private final Map<Integer, HullSample> lastHull = new HashMap<>();
     private final Map<Integer, String> lastGate = new HashMap<>();
@@ -81,6 +87,7 @@ public final class HullbackRiderCarry {
     private int probeHullGap;
     private HullbackWalkableEntity probeTile;
     private Vec3 probeCarry = Vec3.ZERO;
+    private AABB probeFrom;
 
     HullbackRiderCarry(HullbackEntity whale) {
         this.whale = whale;
@@ -205,6 +212,9 @@ public final class HullbackRiderCarry {
         double biggest = 0.0;
         String gate = "ok";
         for (Entity rider : riders) {
+            if (client && rider instanceof Player walker) {
+                bobReport(walker, deck);
+            }
             probeWant = Double.NaN;
             probeGot = Double.NaN;
             probeHull = Double.NaN;
@@ -239,7 +249,13 @@ public final class HullbackRiderCarry {
             boolean onDeck = false;
             if (flying) {
                 double leaving = launched ? deckStepOf(support) : 0.0;
-                carry = new Vec3(carry.x, leaving, carry.z);
+                if (launched) {
+                    flightCarry.put(rider.getId(), new Vec3(carry.x, 0.0, carry.z));
+                }
+                Vec3 inherited = flightCarry.get(rider.getId());
+                carry = inherited == null
+                        ? new Vec3(carry.x, leaving, carry.z)
+                        : new Vec3(inherited.x, leaving, inherited.z);
                 appliedUp = leaving;
                 gate = "flying";
                 held.put(rider.getId(), whale.tickCount);
@@ -263,7 +279,7 @@ public final class HullbackRiderCarry {
                     if (probeTile != null) {
                         footing.put(rider.getId(), probeTile.getId());
                     }
-                    double gap = top - (box.minY + carry.y);
+                    double gap = (top + FOOTING_LIFT) - (box.minY + carry.y);
                     double settle = Math.max(LIFT_LIMIT, deckJump);
                     carry = carry.add(0.0, Mth.clamp(gap, -settle, settle), 0.0);
                     seated++;
@@ -277,6 +293,7 @@ public final class HullbackRiderCarry {
             double fromX = rider.getX();
             double fromZ = rider.getZ();
             probeCarry = carry;
+            probeFrom = rider.getBoundingBox();
             rider.move(MoverType.SELF, carry);
             probeWant = Math.hypot(carry.x, carry.z);
             probeGot = Math.hypot(rider.getX() - fromX, rider.getZ() - fromZ);
@@ -287,15 +304,18 @@ public final class HullbackRiderCarry {
                     ? hullLocal.subtract(previous.local()).horizontalDistance() : Double.NaN;
             if (onDeck) {
                 Vec3 velocity = rider.getDeltaMovement();
-                if (velocity.y < 0.0) {
+                if (support != null && deckStepOf(support) > 0.0 && velocity.y < 0.0) {
                     rider.setDeltaMovement(velocity.x, 0.0, velocity.z);
                 }
                 rider.setOnGround(true);
                 rider.fallDistance = 0.0F;
-                if (!client && support != null && rider instanceof LivingEntity living
-                        && !(rider instanceof Player)) {
-                    DeckRiderAnchors.set(living, whale, support);
-                }
+            } else if (flying && support != null
+                    && rider.getBoundingBox().minY - support.getBoundingBox().maxY <= LIFT_LIMIT) {
+                rider.setOnGround(true);
+                rider.fallDistance = 0.0F;
+            }
+            if ((onDeck || flying) && !client && support != null && !(rider instanceof Player)) {
+                DeckRiderAnchors.set(rider, whale, support);
             }
             if ((onDeck || flying) && client && support != null) {
                 float deckYaw = whale.getYRot();
@@ -303,6 +323,9 @@ public final class HullbackRiderCarry {
                         DeckRiderAnchors.toDeckLocal(
                                 rider.position().subtract(support.position()), deckYaw),
                         whale.level().getGameTime());
+            }
+            if (client && rider instanceof Player && WhaleborneDebug.on()) {
+                lastY.put(rider.getId(), rider.getY());
             }
             if (!client) {
                 rider.hurtMarked = true;
@@ -420,15 +443,32 @@ public final class HullbackRiderCarry {
         double top = flightTopUnder(deck, box, PROBE_PAD_MIN);
         double settle = Math.max(LIFT_LIMIT, deckJump);
         launched = false;
+        boolean stillUp = !Double.isNaN(top)
+                && (box.minY - top > LIFT_LIMIT || rider.getDeltaMovement().y > 0.0);
         if (!Double.isNaN(top) && box.minY > top
-                && (flight.contains(id) || box.minY - top > settle
+                && ((flight.contains(id) && stillUp) || box.minY - top > settle
                         || rider.getDeltaMovement().y > settle)) {
-            launched = flight.add(id);
+            launched = flight.add(id) && rider.getDeltaMovement().y > 0.0;
             return true;
         }
-        if (flight.remove(id) && Double.isNaN(top)) {
-            held.remove(id);
-            footing.remove(id);
+        if (!Double.isNaN(top) && probeTile != null) {
+            double drop = -deckStepOf(probeTile);
+            double reach = Math.max(0.0, -rider.getDeltaMovement().y) + rider.getGravity();
+            if (drop - reach > LIFT_LIMIT) {
+                flight.add(id);
+                return true;
+            }
+        }
+        if (flight.remove(id)) {
+            Vec3 kept = flightCarry.remove(id);
+            if (Double.isNaN(top)) {
+                if (kept != null) {
+                    Vec3 own = rider.getDeltaMovement();
+                    rider.setDeltaMovement(own.x + kept.x, own.y, own.z + kept.z);
+                }
+                held.remove(id);
+                footing.remove(id);
+            }
         }
         return false;
     }
@@ -578,6 +618,9 @@ public final class HullbackRiderCarry {
         flight.retainAll(held.keySet());
         lastHull.entrySet().removeIf(entry -> whale.tickCount - entry.getValue().tick() > HOLD_TICKS);
         lastGate.keySet().retainAll(lastHull.keySet());
+        flightCarry.keySet().retainAll(flight);
+        lastY.keySet().retainAll(held.keySet());
+        lastGround.keySet().retainAll(held.keySet());
     }
 
     private void report(int seated, double carry, String gate) {
@@ -606,6 +649,37 @@ public final class HullbackRiderCarry {
                 "deckalive side=%s id=%d tick=%d lastSeated=%d lastGate=%s",
                 whale.level().isClientSide ? "C" : "S", whale.getId(), whale.tickCount,
                 reportedSeated, reportedGate);
+    }
+
+    private void bobReport(Player walker, List<HullbackWalkableEntity> deck) {
+        if (!WhaleborneDebug.on()) {
+            return;
+        }
+        Boolean was = lastGround.put(walker.getId(), walker.onGround());
+        if (was != null && was == walker.onGround() && whale.tickCount % PROBE_HEARTBEAT != 0) {
+            return;
+        }
+        AABB self = walker.getBoundingBox();
+        List<VoxelShape> found = walker.level().getEntityCollisions(
+                walker, self.expandTowards(0.0, -BOB_PROBE_DEPTH, 0.0));
+        double bestTop = Double.NEGATIVE_INFINITY;
+        for (VoxelShape shape : found) {
+            if (!shape.isEmpty()) {
+                bestTop = Math.max(bestTop, shape.bounds().maxY);
+            }
+        }
+        HullbackWalkableEntity near = deck.isEmpty() ? null : deck.get(0);
+        Double before = lastY.get(walker.getId());
+        WhaleborneDebug.log(
+                "deckbob t=%d ground=%s vcol=%s vy=%.4f fell=%.4f hspeed=%.4f bob=%.4f"
+                        + " shapes=%d insideBy=%.4f canHit=%s tiles=%d water=%s",
+                whale.tickCount, walker.onGround(), walker.verticalCollision,
+                walker.getDeltaMovement().y,
+                before == null ? Double.NaN : walker.getY() - before,
+                walker.getDeltaMovement().horizontalDistance(), walker.bob, found.size(),
+                bestTop == Double.NEGATIVE_INFINITY ? Double.NaN : bestTop - self.minY,
+                near == null ? "n/a" : String.valueOf(walker.canCollideWith(near)),
+                deck.size(), walker.isInWater());
     }
 
     private void probeReport(Entity rider, int part, List<HullbackWalkableEntity> deck, Vec3 travel, double top, String gate) {
@@ -652,13 +726,22 @@ public final class HullbackRiderCarry {
     }
 
     private String blockers(Entity rider) {
-        AABB swept = rider.getBoundingBox().expandTowards(probeCarry.x, probeCarry.y, probeCarry.z);
+        if (probeFrom == null) {
+            return "n/a";
+        }
+        AABB swept = probeFrom.expandTowards(probeCarry.x, probeCarry.y, probeCarry.z);
         Map<String, Integer> hits = new TreeMap<>();
         for (Entity other : rider.level().getEntities(rider, swept, rider::canCollideWith)) {
+            if (other.getBoundingBox().intersects(probeFrom)) {
+                continue;
+            }
             hits.merge(other.getClass().getSimpleName(), 1, Integer::sum);
         }
-        if (rider.level().getBlockCollisions(rider, swept).iterator().hasNext()) {
-            hits.merge("block", 1, Integer::sum);
+        for (VoxelShape shape : rider.level().getBlockCollisions(rider, swept)) {
+            if (!shape.isEmpty() && !shape.bounds().intersects(probeFrom)) {
+                hits.merge("block", 1, Integer::sum);
+                break;
+            }
         }
         return hits.isEmpty() ? "none" : hits.toString();
     }

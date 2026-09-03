@@ -82,8 +82,8 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private static final float MOUTH_OPEN_SPEED = 0.8f;
     private static final float SPEED_THRESHOLD_MOUTH_OPEN = 0.3f;
     private static final float ARMOR_EJECT_THRESHOLD = 0.45f;
-    private static final float PLATFORM_HEIGHT_HELM = 4.7F;
-    private static final float PLATFORM_HEIGHT_STATIONARY = 4.7F;
+    private static final float PLATFORM_HEIGHT_HELM = 4.55F;
+    private static final float PLATFORM_HEIGHT_STATIONARY = 4.55F;
     private static final float PLATFORM_HEIGHT_LERP_SPEED = 0.1F;
     private static final int POST_LOAD_VALIDATION_DELAY_TICKS = 5;
     private static final int STATIONARY_TICKS_PLAYER_ABOVE = 60;

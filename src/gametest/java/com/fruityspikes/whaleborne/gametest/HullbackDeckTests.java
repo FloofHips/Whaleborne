@@ -16,6 +16,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
@@ -85,8 +86,20 @@ public final class HullbackDeckTests {
     private static final int IDLE_WATCH_TICKS = 45;
     private static final int DECK_EMPTY_DISCARD_WATCH = 25;
     private static final int DECK_DISCARD_WAIT = 60;
+    private static final int STILL_WATCH_TICKS = 60;
+    private static final int GROUND_DIVE_TICKS = 10;
+    private static final double GROUND_DIVE_RATE = 0.20;
+    private static final int GROUND_DIVE_MIN = 3;
+    private static final int BRAKE_WINDOW = 40;
+    private static final int BRAKE_LEAP = 18;
+    private static final int BRAKE_AT = 21;
+    private static final int BRAKE_MIN_AIR = 4;
+    private static final double BRAKE_KEEP = 0.75;
+    private static final double BRAKE_STILL = 0.01;
     private static final double FAST_CRUISE = 0.95;
     private static final double FAST_SINK = 0.12;
+    private static final double CARGO_TOLERANCE = 0.05;
+    private static final double CARGO_LAG_TICKS = 2.0;
     private static final double FAST_STRIDE = 0.10;
     private static final int FAST_TICKS = 40;
     private static final double TURN_ARM = 2.5;
@@ -1986,6 +1999,411 @@ public final class HullbackDeckTests {
                         helper.fail(String.format(Locale.ROOT,
                                 "the deck never came back with someone aboard and the hull pinned"
                                         + " moving, after %d ticks", IDLE_WATCH_TICKS));
+                        return;
+                    }
+                    helper.succeed();
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(template = "hullback_deck", timeoutTicks = 300)
+    public static void itemKeepsItsDeckSpotWhileTheHullSinks(final GameTestHelper helper) {
+        floor(helper);
+        HullbackEntity whale = whale(helper);
+        ItemEntity[] cargo = new ItemEntity[1];
+        HullbackWalkableEntity[] seat = new HullbackWalkableEntity[1];
+        double[] anchor = new double[2];
+        double[] worst = {0.0};
+        double[] hold = new double[3];
+        int[] tick = {0};
+        int[] carried = {0};
+        double[] lastX = {0.0};
+        double[] gapMax = {0.0};
+        int[] anchored = {0};
+        boolean[] ready = {false};
+
+        helper.startSequence()
+                .thenIdle(SETTLE_TICKS)
+                .thenExecute(() -> {
+                    List<HullbackWalkableEntity> owned = tiles(helper, whale);
+                    HullbackPartEntity body = whale.getSubEntities()[2];
+                    double top = deckTopOver(owned, body);
+                    if (Double.isNaN(top)) {
+                        helper.fail("no deck over the body part, nothing to rest on");
+                        return;
+                    }
+                    ItemEntity drop = new ItemEntity(helper.getLevel(), body.getX(), top, body.getZ(),
+                            new ItemStack(Items.STONE));
+                    drop.setPickUpDelay(Short.MAX_VALUE);
+                    drop.setDeltaMovement(Vec3.ZERO);
+                    helper.getLevel().addFreshEntity(drop);
+                    cargo[0] = drop;
+                    seat[0] = nearestTileOverBox(owned, drop);
+                    if (seat[0] == null) {
+                        helper.fail("the drop is over no tile at all");
+                        return;
+                    }
+                    anchor[0] = drop.getX() - seat[0].getX();
+                    anchor[1] = drop.getZ() - seat[0].getZ();
+                    hold[0] = whale.getX();
+                    hold[1] = whale.getY();
+                    hold[2] = whale.getZ();
+                    ready[0] = true;
+                })
+                .thenExecuteFor(FAST_TICKS, () -> {
+                    if (!ready[0] || seat[0].isRemoved() || cargo[0].isRemoved()) {
+                        return;
+                    }
+                    whale.stationaryTicks = 200;
+                    whale.setYRot(0.0F);
+                    whale.yRotO = 0.0F;
+                    whale.setYBodyRot(0.0F);
+                    Vec3 drift = whale.getDeltaMovement();
+                    whale.setDeltaMovement(drift.x, 0.0, drift.z);
+                    int at = tick[0]++;
+                    if (at > 0 && Math.abs(cargo[0].getX() - lastX[0]) > 1.0E-4) {
+                        carried[0]++;
+                    }
+                    lastX[0] = cargo[0].getX();
+                    whale.setPos(hold[0] + CRUISE * (at + 1), hold[1] - FAST_SINK * (at + 1), hold[2]);
+                    gapMax[0] = Math.max(gapMax[0],
+                            cargo[0].getBoundingBox().minY - seat[0].getBoundingBox().maxY);
+                    if (DeckRiderAnchors.current(cargo[0], whale.level().getGameTime()) != null) {
+                        anchored[0]++;
+                    }
+                    double dx = (cargo[0].getX() - seat[0].getX()) - anchor[0];
+                    double dz = (cargo[0].getZ() - seat[0].getZ()) - anchor[1];
+                    worst[0] = Math.max(worst[0], Math.sqrt(dx * dx + dz * dz));
+                })
+                .thenExecute(() -> {
+                    if (!ready[0]) {
+                        return;
+                    }
+                    if (cargo[0].isRemoved()) {
+                        helper.fail("the drop vanished, so nothing was measured");
+                        return;
+                    }
+                    String shape = String.format(Locale.ROOT,
+                            "deck ran %.2f/tick sinking %.2f/tick for %d ticks, moved on %d of them,"
+                                    + " drift %.4f, lifted %.4f off the tile",
+                            CRUISE, FAST_SINK, FAST_TICKS, carried[0], worst[0], gapMax[0]);
+                    if (anchored[0] < FAST_TICKS / 2) {
+                        helper.fail("the drop was anchored on only %d of %d ticks, so other clients get"
+                                .formatted(anchored[0], FAST_TICKS)
+                                + " no deck-relative position for it and will see it teleport | " + shape);
+                        return;
+                    }
+                    if (carried[0] < FAST_TICKS / 2) {
+                        helper.fail("the drop was barely carried at all, so the deck never moved it"
+                                + " and this test proves nothing | " + shape);
+                        return;
+                    }
+                    if (worst[0] > CARGO_TOLERANCE) {
+                        helper.fail("a dropped item, which the hull grants no passage, lost its spot"
+                                + " on a sinking deck: " + shape);
+                        return;
+                    }
+                    if (gapMax[0] > FAST_SINK * CARGO_LAG_TICKS) {
+                        helper.fail("a dropped item floated more than %.2f above the deck, so it is not"
+                                .formatted(FAST_SINK * CARGO_LAG_TICKS)
+                                + " catching the deck back up after it outran the item's own fall: " + shape);
+                        return;
+                    }
+                    helper.succeed();
+                })
+                .thenSucceed();
+    }
+
+    private static HullbackWalkableEntity nearestTileOverBox(final List<HullbackWalkableEntity> tiles,
+                                                             final Entity rider) {
+        HullbackWalkableEntity best = null;
+        double top = Double.NEGATIVE_INFINITY;
+        AABB box = rider.getBoundingBox();
+        for (HullbackWalkableEntity tile : tiles) {
+            AABB surface = tile.getBoundingBox();
+            if (surface.maxX <= box.minX || surface.minX >= box.maxX
+                    || surface.maxZ <= box.minZ || surface.minZ >= box.maxZ) {
+                continue;
+            }
+            if (surface.maxY > top) {
+                top = surface.maxY;
+                best = tile;
+            }
+        }
+        return best;
+    }
+
+    @GameTest(template = "hullback_deck", timeoutTicks = 300)
+    public static void riderOnAStillDeckIsNeverTreatedAsAirborne(final GameTestHelper helper) {
+        floor(helper);
+        HullbackEntity whale = whale(helper);
+        Player[] rider = new Player[1];
+        double[] hold = new double[3];
+        int[] tick = {0};
+        int[] afloat = {0};
+        int[] seen = {0};
+        boolean[] ready = {false};
+
+        helper.startSequence()
+                .thenIdle(SETTLE_TICKS)
+                .thenExecute(() -> {
+                    List<HullbackWalkableEntity> owned = tiles(helper, whale);
+                    HullbackPartEntity body = whale.getSubEntities()[2];
+                    double top = deckTopOver(owned, body);
+                    if (Double.isNaN(top)) {
+                        helper.fail("no deck over the body part, nothing to stand on");
+                        return;
+                    }
+                    Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+                    player.setPos(body.getX(), top, body.getZ());
+                    double under = deckTopUnderRider(owned, player);
+                    if (Double.isNaN(under)) {
+                        helper.fail("the seat is over no tile at all");
+                        return;
+                    }
+                    player.setPos(player.getX(), under, player.getZ());
+                    player.setDeltaMovement(Vec3.ZERO);
+                    helper.getLevel().addFreshEntity(player);
+                    rider[0] = player;
+                    hold[0] = whale.getX();
+                    hold[1] = whale.getY();
+                    hold[2] = whale.getZ();
+                    ready[0] = true;
+                })
+                .thenExecuteFor(STILL_WATCH_TICKS, () -> {
+                    if (!ready[0]) {
+                        return;
+                    }
+                    whale.stationaryTicks = 200;
+                    whale.setYRot(0.0F);
+                    whale.yRotO = 0.0F;
+                    whale.setYBodyRot(0.0F);
+                    whale.setDeltaMovement(Vec3.ZERO);
+                    whale.setPos(hold[0], hold[1], hold[2]);
+                    int at = tick[0]++;
+                    if (at == 4) {
+                        leap(rider[0], 0.0, 0.0);
+                    }
+                    if (at == 5) {
+                        rider[0].setJumping(false);
+                    }
+                    whale.carryDeckRiders(List.of(rider[0]));
+                    if (at > 30) {
+                        seen[0]++;
+                        if (!rider[0].onGround()) {
+                            afloat[0]++;
+                        }
+                    }
+                })
+                .thenExecute(() -> {
+                    if (!ready[0]) {
+                        return;
+                    }
+                    String shape = String.format(Locale.ROOT,
+                            "long after landing back on a motionless deck the rider still counted as"
+                                    + " airborne on %d of %d ticks",
+                            afloat[0], seen[0]);
+                    if (seen[0] < 20) {
+                        helper.fail("too few ticks sampled to mean anything | " + shape);
+                        return;
+                    }
+                    if (afloat[0] > 0) {
+                        helper.fail("the flight state never let go, which costs the walk bob, the step"
+                                + " sounds and the fall bookkeeping: " + shape);
+                        return;
+                    }
+                    helper.succeed();
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(template = "hullback_deck", timeoutTicks = 300)
+    public static void riderStaysGroundedOnADeckThatOutrunsGravity(final GameTestHelper helper) {
+        floor(helper);
+        HullbackEntity whale = whale(helper);
+        Player[] rider = new Player[1];
+        HullbackWalkableEntity[] seat = new HullbackWalkableEntity[1];
+        double[] hold = new double[3];
+        double[] lastTop = {Double.NaN};
+        int[] tick = {0};
+        int[] afloat = {0};
+        int[] seen = {0};
+        int[] outran = {0};
+        double[] gapMax2 = {0.0};
+        boolean[] ready = {false};
+
+        helper.startSequence()
+                .thenIdle(SETTLE_TICKS)
+                .thenExecute(() -> {
+                    List<HullbackWalkableEntity> owned = tiles(helper, whale);
+                    HullbackPartEntity body = whale.getSubEntities()[2];
+                    double top = deckTopOver(owned, body);
+                    if (Double.isNaN(top)) {
+                        helper.fail("no deck over the body part, nothing to stand on");
+                        return;
+                    }
+                    Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+                    player.setPos(body.getX(), top, body.getZ());
+                    double under = deckTopUnderRider(owned, player);
+                    if (Double.isNaN(under)) {
+                        helper.fail("the seat is over no tile at all");
+                        return;
+                    }
+                    player.setPos(player.getX(), under, player.getZ());
+                    player.setDeltaMovement(Vec3.ZERO);
+                    helper.getLevel().addFreshEntity(player);
+                    rider[0] = player;
+                    seat[0] = seatTile(owned, player);
+                    if (seat[0] == null) {
+                        helper.fail("the rider is under no tile at all");
+                        return;
+                    }
+                    hold[0] = whale.getX();
+                    hold[1] = whale.getY();
+                    hold[2] = whale.getZ();
+                    ready[0] = true;
+                })
+                .thenExecuteFor(GROUND_DIVE_TICKS, () -> {
+                    if (!ready[0] || seat[0].isRemoved()) {
+                        return;
+                    }
+                    whale.stationaryTicks = 200;
+                    whale.setYRot(0.0F);
+                    whale.yRotO = 0.0F;
+                    whale.setYBodyRot(0.0F);
+                    Vec3 drift = whale.getDeltaMovement();
+                    whale.setDeltaMovement(drift.x, 0.0, drift.z);
+                    int at = tick[0]++;
+                    whale.setPos(hold[0] + CRUISE * (at + 1),
+                            hold[1] - GROUND_DIVE_RATE * (at + 1), hold[2]);
+                    whale.carryDeckRiders(List.of(rider[0]));
+                    double topNow = seat[0].getBoundingBox().maxY;
+                    if (!Double.isNaN(lastTop[0])) {
+                        seen[0]++;
+                        if (lastTop[0] - topNow > rider[0].getGravity()) {
+                            outran[0]++;
+                        }
+                        if (!rider[0].onGround()) {
+                            afloat[0]++;
+                            gapMax2[0] = Math.max(gapMax2[0],
+                                    rider[0].getBoundingBox().minY - topNow);
+                        }
+                    }
+                    lastTop[0] = topNow;
+                })
+                .thenExecute(() -> {
+                    if (!ready[0]) {
+                        return;
+                    }
+                    String shape = String.format(Locale.ROOT,
+                            "the deck outran the %.2f a player falls in a tick on %d of %d ticks,"
+                                    + " and the rider was off the ground on %d, biggest gap %.4f",
+                            rider[0].getGravity(), outran[0], seen[0], afloat[0], gapMax2[0]);
+                    if (outran[0] < GROUND_DIVE_MIN) {
+                        helper.fail("the deck never once sank faster than the rider could fall, so the"
+                                + " branch under test never ran | " + shape);
+                        return;
+                    }
+                    if (afloat[0] > outran[0] / 2) {
+                        helper.fail("a rider standing still lost its footing on a deck that merely sank"
+                                + " faster than gravity, which costs the walk bob and the step sounds: "
+                                + shape);
+                        return;
+                    }
+                    helper.succeed();
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(template = "hullback_deck", timeoutTicks = 400)
+    public static void riderIsThrownWhenTheHullBrakesMidJump(final GameTestHelper helper) {
+        floor(helper);
+        HullbackEntity whale = whale(helper);
+        Player[] rider = new Player[1];
+        double[] hold = new double[3];
+        double[] lastX = {0.0};
+        double[] flew = {0.0};
+        double[] deckRan = {0.0};
+        int[] airborne = {0};
+        int[] tick = {0};
+        boolean[] ready = {false};
+
+        helper.startSequence()
+                .thenIdle(SETTLE_TICKS)
+                .thenExecute(() -> {
+                    List<HullbackWalkableEntity> owned = tiles(helper, whale);
+                    HullbackPartEntity body = whale.getSubEntities()[2];
+                    double top = deckTopOver(owned, body);
+                    if (Double.isNaN(top)) {
+                        helper.fail("no deck over the body part, nothing to jump from");
+                        return;
+                    }
+                    Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+                    player.setPos(body.getX(), top, body.getZ());
+                    double under = deckTopUnderRider(owned, player);
+                    if (Double.isNaN(under)) {
+                        helper.fail("the seat is over no tile at all");
+                        return;
+                    }
+                    player.setPos(player.getX(), under, player.getZ());
+                    player.setDeltaMovement(Vec3.ZERO);
+                    helper.getLevel().addFreshEntity(player);
+                    rider[0] = player;
+                    hold[0] = whale.getX();
+                    hold[1] = whale.getY();
+                    hold[2] = whale.getZ();
+                    ready[0] = true;
+                })
+                .thenExecuteFor(BRAKE_WINDOW, () -> {
+                    if (!ready[0]) {
+                        return;
+                    }
+                    whale.stationaryTicks = 200;
+                    whale.setYRot(0.0F);
+                    whale.yRotO = 0.0F;
+                    whale.setYBodyRot(0.0F);
+                    Vec3 drift = whale.getDeltaMovement();
+                    whale.setDeltaMovement(drift.x, 0.0, drift.z);
+                    int at = tick[0]++;
+                    double run = at < BRAKE_AT ? CRUISE * (at + 1) : CRUISE * BRAKE_AT;
+                    double before = whale.getX();
+                    whale.setPos(hold[0] + run, hold[1], hold[2]);
+                    whale.carryDeckRiders(List.of(rider[0]));
+                    if (at == BRAKE_LEAP) {
+                        leap(rider[0], 0.0, 0.0);
+                    }
+                    if (at == BRAKE_LEAP + 1) {
+                        rider[0].setJumping(false);
+                    }
+                    if (at > BRAKE_AT && !rider[0].onGround()) {
+                        airborne[0]++;
+                        flew[0] += rider[0].getX() - lastX[0];
+                        deckRan[0] += whale.getX() - before;
+                    }
+                    lastX[0] = rider[0].getX();
+                })
+                .thenExecute(() -> {
+                    if (!ready[0]) {
+                        return;
+                    }
+                    String shape = String.format(Locale.ROOT,
+                            "the rider carried %.4f through %d airborne ticks while the deck stood still,"
+                                    + " against %.2f/tick of cruise before the brake",
+                            flew[0], airborne[0], CRUISE);
+                    if (Math.abs(deckRan[0]) > BRAKE_STILL) {
+                        helper.fail(String.format(Locale.ROOT,
+                                "the deck moved %.4f after the brake, so nothing was braked and this"
+                                        + " test proves nothing | %s", deckRan[0], shape));
+                        return;
+                    }
+                    if (airborne[0] < BRAKE_MIN_AIR) {
+                        helper.fail("the rider was airborne on only " + airborne[0]
+                                + " ticks after the brake, so nothing was measured | " + shape);
+                        return;
+                    }
+                    if (flew[0] < CRUISE * airborne[0] * BRAKE_KEEP) {
+                        helper.fail("the hull braked and took the airborne rider with it instead of"
+                                + " letting them fly on: " + shape);
                         return;
                     }
                     helper.succeed();

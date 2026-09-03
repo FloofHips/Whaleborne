@@ -10,7 +10,7 @@ public class PlatformLayout {
     public static final float DEFAULT_WIDTH = 6.5f;
     public static final float DEFAULT_HEIGHT = 0.5f;
     public static final float DEFAULT_X_OFFSET = 0f;
-    public static final float DEFAULT_Y_OFFSET = 4.7f;
+    public static final float DEFAULT_Y_OFFSET = 4.55f;
     public static final float DEFAULT_Z_OFFSET = 0f;
     public static final float DEFAULT_DETECTION_RANGE = 3.0f;
     public static final float DEFAULT_TILE_SIZE = 2.0f;
