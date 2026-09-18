@@ -22,6 +22,9 @@ import java.util.List;
 public class HullbackTryFindWaterGoal extends Goal {
     private final PathfinderMob mob;
     private final boolean isBeached;
+    private static final int SOUND_TICKS = 5;
+    private static final int LUNGE_TICKS = 50;
+    private int activeTicks;
 
     public HullbackTryFindWaterGoal(PathfinderMob mob, boolean isBeached) {
         this.mob = mob;
@@ -64,13 +67,14 @@ public class HullbackTryFindWaterGoal extends Goal {
                 mob.getMoveControl().getWantedZ());
         float targetYRot = (float)Math.toDegrees(Math.atan2(target.z - mob.getZ(), target.x - mob.getX())) - 90;
 
+        int at = ++activeTicks;
         mob.setYRot(Mth.rotLerp(0.01f, mob.getYRot(), targetYRot));
 
 
-        if(mob.tickCount % 10 == 0)
+        if(at % SOUND_TICKS == 0)
             mob.playSound(WBSoundRegistry.HULLBACK_MAD.get());
 
-        if(mob.tickCount % 100 == 0 && !mob.level().getBlockState(mob.blockPosition().below()).isAir()){
+        if(at % LUNGE_TICKS == 0 && !mob.level().getBlockState(mob.blockPosition().below()).isAir()){
 
             if (mob instanceof HullbackEntity) ((HullbackEntity) mob).setMouthTarget(0);
 

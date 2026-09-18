@@ -29,6 +29,9 @@ public class HullbackArmorPlayerGoal extends Goal {
     private Vec3 targetPosition;
     private Vec3 approachDirection; // Fixed direction computed once at start
 
+    private static final int EQUIP_TICKS = 100;
+    private int activeTicks;
+
     public HullbackArmorPlayerGoal(HullbackEntity hullback, float speedModifier) {
         this.hullback = hullback;
         this.speedModifier = speedModifier;
@@ -108,7 +111,8 @@ public class HullbackArmorPlayerGoal extends Goal {
         if (this.targetPlayer == null || this.approachDirection == null) return;
 
         // reapplied delay to allow survival players to equip widgets with ease
-        if (hullback.tickCount % 200 == 0) {
+        int at = ++activeTicks;
+        if (at % EQUIP_TICKS == 0) {
             this.hullback.setMouthTarget(0.6f);
 
             // Use stable offset direction computed at start — does not depend on player look

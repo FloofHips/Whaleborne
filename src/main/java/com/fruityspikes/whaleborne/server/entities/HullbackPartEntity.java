@@ -188,7 +188,7 @@ public class HullbackPartEntity extends PartEntity<HullbackEntity> {
             double dist = clickWorld.distanceToSqr(seatWorldPos);
 
             // Prefer empty seats — add heavy penalty for occupied ones
-            boolean occupied = seatManager.getSeatData(i).isPresent();
+            boolean occupied = seatManager.getPassengerForSeat(i).isPresent();
             double penalty = occupied ? 10000.0 : 0.0;
 
             if (dist + penalty < bestDist) {

@@ -56,6 +56,9 @@ public class HullbackInteractionManager {
 
     /** Riding interaction for a seat; places equipment instead when entityType is non-null. */
     public InteractionResult interactRide(Player player, InteractionHand hand, int seatIndex, @Nullable EntityType<?> entityType) {
+        if (hullback.level().isClientSide) {
+            return InteractionResult.SUCCESS;
+        }
         // Validate seat index
         if (seatIndex < 0 || seatIndex >= hullback.hullbackSeatManager.getActiveSeatCount()) {
             return InteractionResult.FAIL;
@@ -74,9 +77,9 @@ public class HullbackInteractionManager {
         }
 
         // Check if seat is occupied (uses SeatManager which handles both base and overflow seats)
-        Optional<UUID> currentSeatOccupant = hullback.hullbackSeatManager.getSeatData(seatIndex);
+        Optional<Entity> currentSeatOccupant = hullback.hullbackSeatManager.getPassengerForSeat(seatIndex);
         if (currentSeatOccupant.isPresent()) {
-            if (currentSeatOccupant.get().equals(player.getUUID())) {
+            if (currentSeatOccupant.get().getUUID().equals(player.getUUID())) {
                 return InteractionResult.PASS;
             }
             return InteractionResult.FAIL;

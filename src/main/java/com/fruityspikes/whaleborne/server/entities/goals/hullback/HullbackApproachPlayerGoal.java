@@ -32,6 +32,9 @@ public class HullbackApproachPlayerGoal extends Goal {
     private Vec3 lastRepathTarget;
     private Vec3 approachDirection; // Fixed direction computed once at start
 
+    private static final int REPATH_TICKS = 10;
+    private int activeTicks;
+
     public HullbackApproachPlayerGoal(HullbackEntity hullback, float speedModifier) {
         this.hullback = hullback;
         this.speedModifier = speedModifier;
@@ -110,11 +113,11 @@ public class HullbackApproachPlayerGoal extends Goal {
 
         // Throttle pathfinding: repath on this interval, or immediately when the target moves
         // enough, instead of every tick. Rotation below still runs each tick.
-        int repathInterval = 20;
-        if (repathInterval <= 1 || this.lastRepathTarget == null
+        int at = ++activeTicks;
+        if (this.lastRepathTarget == null
                 || this.targetPosition.distanceToSqr(this.lastRepathTarget) > 4.0
                 || this.hullback.getNavigation().isDone()
-                || this.hullback.tickCount % repathInterval == 0) {
+                || at % REPATH_TICKS == 0) {
             this.hullback.getNavigation().moveTo(
                     targetPosition.x, targetPosition.y, targetPosition.z, this.speedModifier);
             this.lastRepathTarget = this.targetPosition;

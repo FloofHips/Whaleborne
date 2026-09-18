@@ -93,6 +93,9 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     private static final int PLAYER_ABOVE_COOLDOWN_TICKS = 20;
     private static final int DIRT_INITIAL_SYNC_TICK = 10;
     private static final int EARLY_TICK_THRESHOLD = 20;
+    private static final int EJECT_GRACE_TICKS = 40;
+    private int ejectConditionTicks = 0;
+    private final java.util.Map<UUID, Integer> legacySeats = new java.util.HashMap<>();
     private static final double SPEED_THRESHOLD_MOUTH_OPEN_SQR = SPEED_THRESHOLD_MOUTH_OPEN * SPEED_THRESHOLD_MOUTH_OPEN;
     private static final double PARTICLE_SPEED_THRESHOLD_SQR = 0.03 * 0.03;
 
@@ -523,7 +526,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         compound.putBoolean("HasMobiusSpawned", hasMobiusSpawned);
         compound.putInt("TicksSinceSpawn", ticksSinceSpawn);
 
-        for (int i = 0; i < hullbackSeatManager.getActiveSeatCount(); i++) {
+        for (int i = 0; i < hullbackSeatManager.getSeatCount(); i++) {
             Optional<UUID> occupant = hullbackSeatManager.getSeatData(i);
             String seatKey = "Seat_" + i;
 
@@ -550,10 +553,12 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         hasMobiusSpawned = compound.getBoolean("HasMobiusSpawned");
         ticksSinceSpawn = compound.getInt("TicksSinceSpawn");
 
+        legacySeats.clear();
         for (int i = 0; i < hullbackSeatManager.getSeatCount(); i++) {
             String seatKey = "Seat_" + i;
             if (compound.hasUUID(seatKey)) {
                 UUID uuid = compound.getUUID(seatKey);
+                legacySeats.put(uuid, i);
                 hullbackSeatManager.setSeatData(i, Optional.of(uuid));
             } else {
                 hullbackSeatManager.setSeatData(i, Optional.empty());
@@ -1094,6 +1099,7 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         if (this.isTamed() && partManager.partPosition != null && partManager.partYRot != null && partManager.partXRot != null) {
             partManager.calculateSeats();
         }
+        positionSkippedPassengers();
     }
 
     private void managePassiveBehaviors() {
@@ -1249,24 +1255,58 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
 
 
     /** Ejects passengers when unsaddled or when armor is too damaged. */
-    private void handlePassengerEjection() {
-        if (!isSaddled() && !level().isClientSide && tickCount > EARLY_TICK_THRESHOLD) {
-            if (!getPassengers().isEmpty()) {
-                if (!getInventory().getItem(INV_SLOT_CROWN).isEmpty()) {
-                    spawnAtLocation(getInventory().getItem(INV_SLOT_CROWN));
-                    getInventory().setItem(INV_SLOT_CROWN, ItemStack.EMPTY);
+    private boolean sweepingPassengers = false;
+
+    private void positionSkippedPassengers() {
+        this.sweepingPassengers = true;
+        try {
+            java.util.List<net.minecraft.world.entity.Entity> riders = getPassengers();
+            for (int i = 0; i < riders.size(); i++) {
+                net.minecraft.world.entity.Entity passenger = riders.get(i);
+                if (!(passenger instanceof WhaleWidgetEntity widget)) {
+                    continue;
                 }
-                ejectPassengers();
-            }
-        } else if (tickCount > EARLY_TICK_THRESHOLD) {
-            if (getArmorProgress() < ARMOR_EJECT_THRESHOLD && getInventory().getItem(INV_SLOT_ARMOR).getCount() < 64 && !level().isClientSide) {
-                if (!getInventory().getItem(INV_SLOT_CROWN).isEmpty()) {
-                    spawnAtLocation(getInventory().getItem(INV_SLOT_CROWN));
-                    getInventory().setItem(INV_SLOT_CROWN, ItemStack.EMPTY);
+                if (widget.getLastPositionedTick() >= this.tickCount - 1) {
+                    continue;
                 }
-                ejectPassengers();
+                passenger.setOldPosAndRot();
+                positionRider(passenger);
             }
+        } finally {
+            this.sweepingPassengers = false;
         }
+    }
+
+    public static void releaseWidget(net.minecraft.world.entity.Entity occupant) {
+        if (occupant instanceof WhaleWidgetEntity widget) {
+            widget.setPersistent(false);
+        }
+    }
+
+    private void handlePassengerEjection() {
+        if (this.level().isClientSide || this.tickCount <= EARLY_TICK_THRESHOLD) {
+            this.ejectConditionTicks = 0;
+            return;
+        }
+        boolean unsaddled = !isSaddled();
+        boolean hullTooThin = getArmorProgress() < ARMOR_EJECT_THRESHOLD
+                && getInventory().getItem(INV_SLOT_ARMOR).getCount() < 64;
+        if (getPassengers().isEmpty() || !(unsaddled || hullTooThin)) {
+            this.ejectConditionTicks = 0;
+            return;
+        }
+        if (++this.ejectConditionTicks < EJECT_GRACE_TICKS) {
+            return;
+        }
+        this.ejectConditionTicks = 0;
+        if (!getInventory().getItem(INV_SLOT_CROWN).isEmpty()) {
+            spawnAtLocation(getInventory().getItem(INV_SLOT_CROWN));
+            getInventory().setItem(INV_SLOT_CROWN, ItemStack.EMPTY);
+        }
+        for (net.minecraft.world.entity.Entity passenger : getPassengers()) {
+            releaseWidget(passenger);
+        }
+        ejectPassengers();
     }
 
     /** Passive healing when the head is submerged in water. */
@@ -1650,14 +1690,19 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
         if (!this.hasPassenger(passenger)) return;
 
-        int seatIndex = getSeatByEntity(passenger);
-        if (seatIndex == -1) {
-            return;
+        if (!this.sweepingPassengers && passenger instanceof WhaleWidgetEntity stamped) {
+            stamped.setLastPositionedTick(this.tickCount);
         }
 
         float yOffset = 0;
         if(this.getArmorProgress() == 0)
             yOffset = 0.5F;
+
+        int seatIndex = getSeatByEntity(passenger);
+        if (seatIndex == -1) {
+            callback.accept(passenger, this.getX(), this.getY() + 5.0 - yOffset, this.getZ());
+            return;
+        }
 
         // Verify if seats were calculated
         if (seatIndex < partManager.seats.length && partManager.seats[seatIndex] != null) {
@@ -1727,6 +1772,11 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         updateModifiers();
     }
     public void assignSeat(int seatIndex, @Nullable Entity passenger) {
+        if (passenger instanceof WhaleWidgetEntity widget) {
+            widget.setSeat(seatIndex);
+            hullbackSeatManager.broadcastPassengers();
+            return;
+        }
         hullbackSeatManager.assignSeat(seatIndex, passenger);
     }
 
@@ -1743,6 +1793,13 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     @Override
     protected void addPassenger(Entity passenger) {
         super.addPassenger(passenger);
+        if (!legacySeats.isEmpty() && passenger instanceof WhaleWidgetEntity widget
+                && widget.getSeat() == -1) {
+            Integer legacy = legacySeats.remove(passenger.getUUID());
+            if (legacy != null) {
+                widget.setSeat(legacy);
+            }
+        }
         // Sync immediately
         if (this.level() instanceof ServerLevel) {
              ((ServerLevel) this.level()).getChunkSource().broadcast(this, new ClientboundSetPassengersPacket(this));
@@ -1757,6 +1814,9 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
         if (dismountSeat != -1) {
             lastDismountSeat = dismountSeat;
             lastDismountUuid = passenger.getUUID();
+        }
+        if (!this.level().isClientSide && passenger instanceof WhaleWidgetEntity widget) {
+            widget.setSeat(-1);
         }
         if (!this.level().isClientSide) {
             for (int i = 0; i < hullbackSeatManager.getActiveSeatCount(); i++) {
@@ -1793,26 +1853,25 @@ public class HullbackEntity extends AbstractWhale implements HasCustomInventoryS
     @Nullable
     @Override
     public LivingEntity getControllingPassenger() {
-        for (int i = 0; i < hullbackSeatManager.getActiveSeatCount(); i++) {
-            Optional<UUID> seatOccupant = hullbackSeatManager.getSeatData(i);
-            if (seatOccupant.isPresent()) {
-                Entity entity = getEntityByUUID(seatOccupant.get());
-
-                if (entity instanceof HelmEntity helm) {
-                    LivingEntity controller = helm.getControllingPassenger();
-                    if (controller != null) {
-                        return controller;
-                    }
-                }
-                if (entity instanceof CannonEntity cannon) {
-                    LivingEntity controller = cannon.getControllingPassenger();
-                    if (controller != null) {
-                        return controller;
-                    }
-                }
+        LivingEntity best = null;
+        int bestSeat = Integer.MAX_VALUE;
+        for (Entity entity : getPassengers()) {
+            LivingEntity controller = null;
+            if (entity instanceof HelmEntity helm) {
+                controller = helm.getControllingPassenger();
+            } else if (entity instanceof CannonEntity cannon) {
+                controller = cannon.getControllingPassenger();
+            }
+            if (controller == null) {
+                continue;
+            }
+            int seat = getSeatByEntity(entity);
+            if (seat >= 0 && seat < bestSeat) {
+                bestSeat = seat;
+                best = controller;
             }
         }
-        return null;
+        return best;
     }
 
     public Entity getEntityByUUID(UUID uuid) {

@@ -24,9 +24,9 @@ import java.util.stream.Collectors;
 public class HullbackSeatManager {
     private static final int BASE_SEAT_COUNT = 7; // seats 0-6 with individual accessors
     private static final int RECOVERY_GRACE_TICKS = 1200;
-    private static final double RECOVERY_MAX_DIST_SQ = 32.0 * 32.0;
-
+    private static final double RECOVERY_MAX_DIST_SQ = 64.0 * 64.0;
     private long graceUntilGameTime = -1L;
+    private static final int RECONCILE_GRACE_TICKS = 40;
 
     private final HullbackEntity whale;
     private final EntityDataAccessor<Optional<UUID>>[] baseAccessors; // seats 0-6
@@ -67,18 +67,27 @@ public class HullbackSeatManager {
         }
     }
 
+    private Entity seatClaimant(int seatIndex) {
+        for (Entity p : whale.getPassengers()) {
+            if (p instanceof WhaleWidgetEntity widget && widget.getSeat() == seatIndex) {
+                return p;
+            }
+        }
+        return getSeatData(seatIndex)
+                .map(uuid -> whale.getEntityByUUID(uuid))
+                .orElse(null);
+    }
+
     private void reseatAbove(int previousCount) {
         if (whale.level().isClientSide) return;
         int upper = Math.min(previousCount, HullbackEntity.MAX_TOTAL_SEATS);
         for (int i = this.activeSeatCount; i < upper; i++) {
-            Optional<UUID> occupant = getSeatData(i);
+            Entity passenger = seatClaimant(i);
             setSeatData(i, Optional.empty());
-            if (occupant.isEmpty()) continue;
-            Entity passenger = whale.getEntityByUUID(occupant.get());
             if (passenger == null) continue;
             int free = findFreeSeat();
             if (free >= 0) {
-                setSeatData(free, Optional.of(passenger.getUUID()));
+                whale.assignSeat(free, passenger);
             } else {
                 passenger.stopRiding();
             }
@@ -137,6 +146,42 @@ public class HullbackSeatManager {
 
     // ─── Validation (runs every tick on server) ────────────────────────
 
+    private void reconcileUnseatedPassengers() {
+        if (whale.level().isClientSide || whale.tickCount <= RECONCILE_GRACE_TICKS) return;
+        int active = Math.min(getActiveSeatCount(), HullbackEntity.MAX_TOTAL_SEATS);
+        java.util.List<net.minecraft.world.entity.Entity> riders = whale.getPassengers();
+        boolean needed = false;
+        for (int i = 0; i < riders.size(); i++) {
+            net.minecraft.world.entity.Entity rider = riders.get(i);
+            if (!(rider instanceof WhaleWidgetEntity)) {
+                continue;
+            }
+            int seat = getSeatByEntity(rider);
+            if (seat < 0 || seat >= active) {
+                needed = true;
+                break;
+            }
+        }
+        if (!needed) {
+            return;
+        }
+        for (net.minecraft.world.entity.Entity passenger : new java.util.ArrayList<>(riders)) {
+            if (!(passenger instanceof WhaleWidgetEntity)) {
+                continue;
+            }
+            int seat = getSeatByEntity(passenger);
+            if (seat >= 0 && seat < active) {
+                continue;
+            }
+            int free = findFreeSeat();
+            if (free >= 0) {
+                whale.assignSeat(free, passenger);
+            } else {
+                passenger.stopRiding();
+            }
+        }
+    }
+
     public void validateAssignments() {
         if (whale.level().isClientSide) return;
 
@@ -183,6 +228,7 @@ public class HullbackSeatManager {
                     || !occupant.isAlive()
                     || (occupant.getVehicle() != null && occupant.getVehicle() != whale)
                     || occupant.distanceToSqr(whale) > RECOVERY_MAX_DIST_SQ) {
+                HullbackEntity.releaseWidget(occupant);
                 setSeatData(seatIndex, Optional.empty());
                 continue;
             }
@@ -192,9 +238,11 @@ public class HullbackSeatManager {
                 occupant.teleportTo(seatPos.x, seatPos.y, seatPos.z);
             }
             if (!occupant.startRiding(whale, true)) {
+                HullbackEntity.releaseWidget(occupant);
                 setSeatData(seatIndex, Optional.empty());
             }
         }
+        reconcileUnseatedPassengers();
     }
 
     // ─── Assignment ────────────────────────────────────────────────────
@@ -212,8 +260,19 @@ public class HullbackSeatManager {
         }
     }
 
+    public void broadcastPassengers() {
+        if (whale.level() instanceof ServerLevel serverLevel) {
+            serverLevel.getChunkSource().broadcast(whale,
+                    new net.minecraft.network.protocol.game.ClientboundSetPassengersPacket(whale));
+        }
+    }
+
     public int getSeatByEntity(Entity entity) {
         if (entity == null) return -1;
+        if (entity instanceof WhaleWidgetEntity widget) {
+            int seat = widget.getSeat();
+            return seat >= 0 && seat < activeSeatCount ? seat : -1;
+        }
         UUID uuid = entity.getUUID();
         for (int i = 0; i < activeSeatCount; i++) {
             Optional<UUID> seat = getSeatData(i);
@@ -226,7 +285,7 @@ public class HullbackSeatManager {
 
     public int findFreeSeat() {
         for (int i = 0; i < activeSeatCount; i++) {
-            if (getSeatData(i).isEmpty()) return i;
+            if (getPassengerForSeat(i).isEmpty()) return i;
         }
         return -1;
     }
@@ -245,12 +304,10 @@ public class HullbackSeatManager {
     public Optional<Entity> getPassengerForSeat(int seatIndex) {
         if (seatIndex < 0 || seatIndex >= activeSeatCount) return Optional.empty();
 
-        Optional<UUID> uuid = getSeatData(seatIndex);
-        if (uuid.isEmpty()) return Optional.empty();
-
-        if (whale.level() instanceof ServerLevel serverLevel) {
-            Entity entity = serverLevel.getEntity(uuid.get());
-            return Optional.ofNullable(entity);
+        for (Entity p : whale.getPassengers()) {
+            if (getSeatByEntity(p) == seatIndex) {
+                return Optional.of(p);
+            }
         }
         return Optional.empty();
     }
