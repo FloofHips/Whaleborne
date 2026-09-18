@@ -42,6 +42,7 @@ public abstract class WhaleWidgetEntity extends Entity {
     private static final EntityDataAccessor<Integer> DATA_ID_HURTDIR = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> DATA_ID_DAMAGE = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> DATA_MANUAL = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> DATA_SEAT = SynchedEntityData.defineId(WhaleWidgetEntity.class, EntityDataSerializers.INT);
     public float prevWidgetYRot;
     public float prevWidgetXRot;
     private float endOfTickWidgetYRot;
@@ -58,20 +59,41 @@ public abstract class WhaleWidgetEntity extends Entity {
         this.entityData.define(DATA_ID_HURTDIR, 1);
         this.entityData.define(DATA_ID_DAMAGE, 0.0F);
         this.entityData.define(DATA_MANUAL, false);
+        this.entityData.define(DATA_SEAT, -1);
     }
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         tag.putBoolean("Persistent", getPersistent());
+        tag.putInt("Seat", getSeat());
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
+        setSeat(tag.contains("Seat") ? tag.getInt("Seat") : -1);
         if (tag.contains("Persistent"))
             setPersistent(tag.getBoolean("Persistent"));
         else {
             setPersistent(false);
         }
+    }
+
+    private int lastPositionedTick = -1;
+
+    public void setLastPositionedTick(int tick) {
+        this.lastPositionedTick = tick;
+    }
+
+    public int getLastPositionedTick() {
+        return this.lastPositionedTick;
+    }
+
+    public int getSeat() {
+        return this.entityData.get(DATA_SEAT);
+    }
+
+    public void setSeat(int seat) {
+        this.entityData.set(DATA_SEAT, seat);
     }
 
     public void setPersistent(boolean persistent) {
