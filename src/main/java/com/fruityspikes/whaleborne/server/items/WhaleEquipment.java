@@ -28,7 +28,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class WhaleEquipment extends Item {
-    private Supplier<EntityType<?>>  entity;
+    private final Supplier<EntityType<?>> entity;
     public WhaleEquipment(Supplier<EntityType<?>> entity, Properties properties) {
         super(properties);
         this.entity = entity;
@@ -37,6 +37,8 @@ public class WhaleEquipment extends Item {
     public EntityType<?> getEntity() {
         return entity.get();
     }
+
+    @Override
     public InteractionResult useOn(UseOnContext context) {
         Direction direction = context.getClickedFace();
         if (!context.getItemInHand().is(WBItemRegistry.ANCHOR.get()))
@@ -51,12 +53,10 @@ public class WhaleEquipment extends Item {
             Vec3 vec3 = Vec3.atBottomCenterOf(blockpos);
             AABB aabb = WBEntityRegistry.ANCHOR_HEAD.get().getDimensions().makeBoundingBox(vec3.x(), vec3.y(), vec3.z());
 
-            if (level.noCollision((Entity)null, aabb) && level.getEntities((Entity)null, aabb).isEmpty()) {
-                if (level instanceof ServerLevel) {
-                    ServerLevel serverlevel = (ServerLevel)level;
-
+            if (level.noCollision(null, aabb) && level.getEntities(null, aabb).isEmpty()) {
+                if (level instanceof ServerLevel serverlevel) {
                     Consumer<AnchorHeadEntity> consumer = EntityType.createDefaultStackConfig(serverlevel, itemstack, context.getPlayer());
-                    AnchorHeadEntity anchorHead = (AnchorHeadEntity) WBEntityRegistry.ANCHOR_HEAD.get().create(serverlevel, consumer, blockpos, MobSpawnType.SPAWN_EGG, true, true);
+                    AnchorHeadEntity anchorHead = WBEntityRegistry.ANCHOR_HEAD.get().create(serverlevel, consumer, blockpos, MobSpawnType.SPAWN_EGG, true, true);
 
                     if (anchorHead == null) {
                         return InteractionResult.FAIL;
@@ -65,7 +65,7 @@ public class WhaleEquipment extends Item {
                     float angle = ((int) (context.getPlayer().getYRot() / 11.25f)) * 11.25f;
                     anchorHead.moveTo(anchorHead.getX(), anchorHead.getY(), anchorHead.getZ(), angle, 0.0F);
                     serverlevel.addFreshEntityWithPassengers(anchorHead);
-                    level.playSound((Player)null, anchorHead.getX(), anchorHead.getY(), anchorHead.getZ(), SoundEvents.ANVIL_PLACE, SoundSource.BLOCKS, 0.75F, 0.4F);
+                    level.playSound(null, anchorHead.getX(), anchorHead.getY(), anchorHead.getZ(), SoundEvents.ANVIL_PLACE, SoundSource.BLOCKS, 0.75F, 0.4F);
                     anchorHead.gameEvent(GameEvent.ENTITY_PLACE, context.getPlayer());
                 }
 

@@ -26,13 +26,13 @@ import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 
-import static com.fruityspikes.whaleborne.Whaleborne.ANCHOR_GUI;
-import static com.fruityspikes.whaleborne.Whaleborne.LOGGER;
 import static com.fruityspikes.whaleborne.Whaleborne.MODID;
 
 @EventBusSubscriber(modid = MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public class ClientModEvents
 {
+    public static final ResourceLocation ANCHOR_GUI = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/gui/anchor.png");
+
     @SubscribeEvent
     public static void registerOverlays(RegisterGuiLayersEvent event) {
         event.registerAboveAll(ResourceLocation.fromNamespaceAndPath(MODID, "anchor_overlay"), (guiGraphics, partialTick) -> {

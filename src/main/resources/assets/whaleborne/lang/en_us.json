@@ -34,5 +34,18 @@
   "subtitles.entity.hullback.tame": "Hullback sings happily",
   "subtitles.entity.hullback.mad": "Hullback groans",
   "subtitles.entity.hullback.swim": "Hullback swims",
-  "subtitles.entity.hullback.breathe": "Hullback breaches"
+  "subtitles.entity.hullback.breathe": "Hullback breaches",
+
+  "whaleborne.configuration.hullbackSpawnChance": "hullbackSpawnChance",
+  "whaleborne.configuration.hullbackSpawnCap": "hullbackSpawnCap",
+  "whaleborne.configuration.hullbackDespawnTimeTicks": "hullbackDespawnTimeTicks",
+  "whaleborne.configuration.hullbackDespawnTimeMultiplier": "hullbackDespawnTimeMultiplier",
+  "whaleborne.configuration.hullbackDespawnGraceRadius": "hullbackDespawnGraceRadius",
+  "whaleborne.configuration.hullbackDepthSailing": "hullbackDepthSailing",
+  "whaleborne.configuration.hullbackDepthBoarding": "hullbackDepthBoarding",
+  "whaleborne.configuration.hullbackDepthWild": "hullbackDepthWild",
+  "whaleborne.configuration.hullbackArmorProgress": "hullbackArmorProgress",
+  "whaleborne.configuration.hullbackSoundDistance": "hullbackSoundDistance",
+  "whaleborne.configuration.hullbackNeatOffset": "hullbackNeatOffset",
+  "whaleborne.configuration.hullbackHealthBarsOffset": "hullbackHealthBarsOffset"
 }

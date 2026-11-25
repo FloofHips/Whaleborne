@@ -4,6 +4,10 @@ import com.fruityspikes.whaleborne.client.ClientProxy;
 import com.fruityspikes.whaleborne.server.entities.HullbackEntity;
 import com.fruityspikes.whaleborne.server.registries.*;
 import com.mojang.logging.LogUtils;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.neoforge.client.gui.ConfigurationScreen;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.event.entity.RegisterSpawnPlacementsEvent;
 import net.minecraft.world.entity.SpawnPlacementTypes;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -28,14 +32,11 @@ public class Whaleborne
     // Define mod id in a common place for everything to reference
     public static final String MODID = "whaleborne";
     public static final Logger LOGGER = LogUtils.getLogger();
-    public static CommonProxy PROXY = FMLLoader.getDist().isClient() ? new ClientProxy() : new CommonProxy();
 
-    public static final ResourceLocation ANCHOR_GUI = ResourceLocation.fromNamespaceAndPath(Whaleborne.MODID, "textures/gui/anchor.png");
+    public static CommonProxy PROXY = new CommonProxy();
+
     public Whaleborne(IEventBus modEventBus, ModContainer modContainer)
     {
-
-        modEventBus.addListener(this::commonSetup);
-
         WBEntityRegistry.ENTITY_TYPES.register(modEventBus);
         WBBlockRegistry.BLOCKS.register(modEventBus);
         WBItemRegistry.ITEMS.register(modEventBus);
@@ -49,15 +50,9 @@ public class Whaleborne
         NeoForge.EVENT_BUS.register(this);
 
         PROXY.init();
-        modEventBus.addListener(this::addCreative);
         modEventBus.addListener(this::registerSpawnPlacements);
-        modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
-        modContainer.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
-    }
-    private void commonSetup(final FMLCommonSetupEvent event) {
-    }
 
-    private void addCreative(BuildCreativeModeTabContentsEvent event) {
+        modContainer.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
     }
 
     public void registerSpawnPlacements(RegisterSpawnPlacementsEvent event) {
@@ -70,17 +65,9 @@ public class Whaleborne
         );
     }
 
-    // You can use SubscribeEvent and let the Event Bus discover methods to call
-    @SubscribeEvent
-    public void onServerStarting(ServerStartingEvent event)
-    {
-        // Do something when the server starts
-        // Server starting hook
-    }
-
-
     @SubscribeEvent
     public void register(AddReloadListenerEvent event) {
         event.addListener(Whaleborne.PROXY.getHullbackDirtManager());
     }
 }
+
